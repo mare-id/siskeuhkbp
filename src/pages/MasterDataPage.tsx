@@ -83,6 +83,8 @@ export const MasterDataPage: React.FC = () => {
     transactions,
     fixedAssets,
     advances,
+    budgets,
+    receivablesPayables,
     settings,
     updateSettings,
     fiscalYears,
@@ -185,6 +187,9 @@ export const MasterDataPage: React.FC = () => {
   // Modal states for Kas
   const [editingKas, setEditingKas] = useState<Partial<Kas> | null>(null);
   const [deletingKas, setDeletingKas] = useState<Kas | null>(null);
+  const [confirmForceDeleteKas, setConfirmForceDeleteKas] = useState(false);
+  const [deleteKasReason, setDeleteKasReason] = useState('');
+  const [isDeletingKasLoading, setIsDeletingKasLoading] = useState(false);
 
   // Modal states for Storage & Category & Balances
   const [editingStorage, setEditingStorage] = useState<Partial<StorageAccount> | null>(null);
@@ -218,10 +223,21 @@ export const MasterDataPage: React.FC = () => {
 
   const handleExecuteDeleteKas = async () => {
     if (!deletingKas) return;
-    const res = await deleteKas(deletingKas.id);
+    if (deletingKasMetrics.hasLinkedData && !confirmForceDeleteKas) {
+      showToast('Centang persetujuan penghapusan data terkait terlebih dahulu.', 'error');
+      return;
+    }
+    setIsDeletingKasLoading(true);
+    const res = await deleteKas(deletingKas.id, {
+      force: true,
+      reason: deleteKasReason.trim() || undefined,
+    });
+    setIsDeletingKasLoading(false);
     if (res.success) {
-      showToast(`Kas "${deletingKas.nama}" berhasil dihapus secara permanen`);
+      showToast(`Kas "${deletingKas.nama}" berhasil dihapus secara permanen dari sistem & Supabase.`);
       setDeletingKas(null);
+      setConfirmForceDeleteKas(false);
+      setDeleteKasReason('');
     } else {
       showToast(res.error || 'Gagal menghapus kas', 'error');
     }
@@ -232,6 +248,8 @@ export const MasterDataPage: React.FC = () => {
     await saveKas({ ...deletingKas, is_active: false });
     showToast(`Kas "${deletingKas.nama}" telah dinonaktifkan`);
     setDeletingKas(null);
+    setConfirmForceDeleteKas(false);
+    setDeleteKasReason('');
   };
 
   // Handlers for Storage
@@ -351,14 +369,29 @@ export const MasterDataPage: React.FC = () => {
 
   // Kas delete integrity metrics
   const deletingKasMetrics = useMemo(() => {
-    if (!deletingKas) return { txCount: 0, obCount: 0, assetCount: 0, advCount: 0, canDelete: true };
+    if (!deletingKas) {
+      return {
+        txCount: 0,
+        obCount: 0,
+        budgetCount: 0,
+        assetCount: 0,
+        advCount: 0,
+        rpCount: 0,
+        accessCount: 0,
+        hasLinkedData: false,
+      };
+    }
     const txCount = transactions.filter((t) => t.kas_id === deletingKas.id).length;
     const obCount = openingBalances.filter((b) => b.kas_id === deletingKas.id).length;
+    const budgetCount = budgets.filter((b) => b.kas_id === deletingKas.id).length;
     const assetCount = fixedAssets.filter((a) => a.kas_id === deletingKas.id).length;
     const advCount = advances.filter((ad) => ad.kas_id === deletingKas.id).length;
-    const canDelete = txCount === 0 && obCount === 0 && assetCount === 0 && advCount === 0;
-    return { txCount, obCount, assetCount, advCount, canDelete };
-  }, [deletingKas, transactions, openingBalances, fixedAssets, advances]);
+    const rpCount = receivablesPayables.filter((rp) => rp.kas_id === deletingKas.id).length;
+    const accessCount = userKasAccessList.filter((u) => u.kas_id === deletingKas.id).length;
+    const hasLinkedData =
+      txCount > 0 || obCount > 0 || budgetCount > 0 || assetCount > 0 || advCount > 0 || rpCount > 0;
+    return { txCount, obCount, budgetCount, assetCount, advCount, rpCount, accessCount, hasLinkedData };
+  }, [deletingKas, transactions, openingBalances, budgets, fixedAssets, advances, receivablesPayables, userKasAccessList]);
 
   return (
     <div className="space-y-6 w-full max-w-7xl mx-auto min-w-0 overflow-hidden">
@@ -567,9 +600,13 @@ export const MasterDataPage: React.FC = () => {
                         <span>Edit</span>
                       </button>
                       <button
-                        onClick={() => setDeletingKas(k)}
+                        onClick={() => {
+                          setConfirmForceDeleteKas(false);
+                          setDeleteKasReason('');
+                          setDeletingKas(k);
+                        }}
                         className="px-2.5 py-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg flex items-center gap-1 transition-colors"
-                        title="Hapus kas"
+                        title="Hapus kas permanen"
                       >
                         <Trash2 className="w-3.5 h-3.5 text-rose-600" />
                         <span>Hapus</span>
@@ -2048,22 +2085,39 @@ export const MasterDataPage: React.FC = () => {
         </div>
       )}
 
-      {/* Modal Hapus Kas (With Data Integrity Check) */}
+      {/* Modal Hapus Kas (Admin Permanen / Nonaktifkan) */}
       {deletingKas && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl p-6 space-y-4">
-            <div className="flex items-center gap-3 text-rose-600 border-b pb-3">
-              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
-              <div>
-                <h3 className="font-bold text-sm text-slate-900">Konfirmasi Hapus Data Kas</h3>
-                <p className="text-xs text-slate-500">{deletingKas.nama} ({deletingKas.kode})</p>
+          <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-3 text-rose-600">
+                <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900">Konfirmasi Hapus Data Kas</h3>
+                  <p className="text-xs text-slate-500">
+                    {deletingKas.nama} ({deletingKas.kode})
+                  </p>
+                </div>
               </div>
+              <button
+                type="button"
+                disabled={isDeletingKasLoading}
+                onClick={() => {
+                  setDeletingKas(null);
+                  setConfirmForceDeleteKas(false);
+                  setDeleteKasReason('');
+                }}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            {deletingKasMetrics.canDelete ? (
+            {!deletingKasMetrics.hasLinkedData ? (
               <div className="space-y-3 text-xs">
-                <p className="text-slate-600">
-                  Kas ini tidak memiliki catatan transaksi, saldo awal, maupun aset terkait. Apakah Anda yakin ingin menghapus data kas ini secara permanen?
+                <p className="text-slate-600 leading-relaxed">
+                  Kas ini belum memiliki catatan transaksi, saldo awal, anggaran, maupun aset terkait. Apakah Anda yakin ingin menghapus Kas{' '}
+                  <strong>{deletingKas.nama}</strong> secara permanen dari sistem dan database Supabase?
                 </p>
                 <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-800 text-[11px]">
                   Pemeriksaan integritas lolos: aman dihapus permanen.
@@ -2071,54 +2125,93 @@ export const MasterDataPage: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-3 text-xs">
-                <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 text-rose-900 space-y-1.5">
-                  <p className="font-bold flex items-center gap-1.5">
-                    <ShieldAlert className="w-4 h-4 text-rose-600" />
-                    <span>Tidak Dapat Dihapus Permanen</span>
+                <div className="p-3.5 bg-rose-50 rounded-xl border border-rose-200 text-rose-950 space-y-2">
+                  <p className="font-bold flex items-center gap-1.5 text-rose-800">
+                    <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>Peringatan Penghapusan Kas Beserta Data Terkait</span>
                   </p>
                   <p className="text-[11px] leading-relaxed">
-                    Kas ini telah memiliki rekam data keuangan aktif dalam sistem:
+                    Kas ini memiliki rekam data terkait di dalam sistem:
                   </p>
-                  <ul className="list-disc list-inside text-[11px] space-y-0.5">
-                    {deletingKasMetrics.txCount > 0 && <li>{deletingKasMetrics.txCount} Catatan Transaksi</li>}
-                    {deletingKasMetrics.obCount > 0 && <li>{deletingKasMetrics.obCount} Saldo Awal Tahun</li>}
-                    {deletingKasMetrics.assetCount > 0 && <li>{deletingKasMetrics.assetCount} Aset Inventaris Huria</li>}
-                    {deletingKasMetrics.advCount > 0 && <li>{deletingKasMetrics.advCount} Panjar Kegiatan</li>}
+                  <ul className="list-disc list-inside text-[11px] space-y-0.5 font-medium">
+                    {deletingKasMetrics.txCount > 0 && <li>{deletingKasMetrics.txCount} Catatan Transaksi Kas</li>}
+                    {deletingKasMetrics.obCount > 0 && <li>{deletingKasMetrics.obCount} Data Saldo Awal Tahun</li>}
+                    {deletingKasMetrics.budgetCount > 0 && <li>{deletingKasMetrics.budgetCount} Dokumen Anggaran (APBG)</li>}
+                    {deletingKasMetrics.assetCount > 0 && <li>{deletingKasMetrics.assetCount} Aset Inventaris Huria (akan dilepas keterkaitannya)</li>}
+                    {deletingKasMetrics.advCount > 0 && <li>{deletingKasMetrics.advCount} Data Panjar Kegiatan</li>}
+                    {deletingKasMetrics.rpCount > 0 && <li>{deletingKasMetrics.rpCount} Data Piutang / Utang</li>}
+                    {deletingKasMetrics.accessCount > 0 && <li>{deletingKasMetrics.accessCount} Penugasan Hak Akses Pengurus</li>}
                   </ul>
-                  <p className="text-[11px] pt-1 text-slate-700">
-                    Menghapus kas ini akan merusak integritas pembukuan dan laporan pertanggungjawaban huria. Sebagai gantinya, Anda dapat <strong>Menonaktifkan Kas</strong> ini agar tidak dapat digunakan untuk transaksi baru.
+                  <p className="text-[11px] pt-1 text-rose-900">
+                    Jika memilih <strong>Hapus Permanen</strong>, seluruh transaksi, saldo awal, dan anggaran milik kas ini ikut terhapus dari Supabase. Jika hanya ingin menyembunyikannya dari transaksi baru tanpa menghapus riwayat, pilih <strong>Nonaktifkan Saja</strong>.
                   </p>
                 </div>
+
+                <label className="flex items-start gap-2.5 p-3 rounded-xl border border-rose-200 bg-rose-50/40 cursor-pointer text-[11px] text-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={confirmForceDeleteKas}
+                    onChange={(e) => setConfirmForceDeleteKas(e.target.checked)}
+                    className="mt-0.5 rounded border-rose-300 text-rose-600 focus:ring-rose-500"
+                  />
+                  <span>
+                    Saya yakin sebagai <strong>Admin</strong> untuk menghapus Kas <strong>{deletingKas.nama}</strong> secara permanen beserta data terikat di atas.
+                  </span>
+                </label>
               </div>
             )}
 
-            <div className="flex justify-end gap-2 pt-3 border-t">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-slate-700">
+                Alasan Penghapusan (Audit Trail, Opsional)
+              </label>
+              <input
+                type="text"
+                value={deleteKasReason}
+                onChange={(e) => setDeleteKasReason(e.target.value)}
+                placeholder="Contoh: Duplikat kas atau restrukturisasi pos kas..."
+                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-rose-300"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-200">
               <button
                 type="button"
-                onClick={() => setDeletingKas(null)}
-                className="px-4 py-2 text-slate-600 hover:text-slate-900 font-semibold text-xs rounded-xl"
+                disabled={isDeletingKasLoading}
+                onClick={() => {
+                  setDeletingKas(null);
+                  setConfirmForceDeleteKas(false);
+                  setDeleteKasReason('');
+                }}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-semibold text-xs rounded-xl border border-slate-200 disabled:opacity-50"
               >
                 Batal
               </button>
 
-              {deletingKasMetrics.canDelete ? (
+              {deletingKas.is_active !== false && (
                 <button
                   type="button"
-                  onClick={handleExecuteDeleteKas}
-                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs rounded-xl shadow-xs"
-                >
-                  Hapus Permanen
-                </button>
-              ) : (
-                <button
-                  type="button"
+                  disabled={isDeletingKasLoading}
                   onClick={handleDeactivateKas}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center gap-1"
+                  className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-semibold text-xs rounded-xl flex items-center gap-1 disabled:opacity-50"
                 >
                   <ToggleLeft className="w-4 h-4" />
-                  <span>Nonaktifkan Kas</span>
+                  <span>Nonaktifkan Saja</span>
                 </button>
               )}
+
+              <button
+                type="button"
+                disabled={
+                  isDeletingKasLoading ||
+                  (deletingKasMetrics.hasLinkedData && !confirmForceDeleteKas)
+                }
+                onClick={handleExecuteDeleteKas}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 disabled:opacity-45 disabled:cursor-not-allowed"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeletingKasLoading ? 'Menghapus...' : 'Hapus Permanen'}</span>
+              </button>
             </div>
           </div>
         </div>

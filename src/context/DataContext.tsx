@@ -247,7 +247,7 @@ interface DataContextType {
 
   // Master Data CRUD
   saveKas: (kasData: Partial<Kas>) => Promise<void>;
-  deleteKas: (id: string) => Promise<{ success: boolean; error?: string }>;
+  deleteKas: (id: string, options?: { force?: boolean; reason?: string }) => Promise<{ success: boolean; error?: string }>;
   saveStorageAccount: (data: Partial<StorageAccount>) => Promise<void>;
   saveCategory: (data: Partial<Category>) => Promise<void>;
   saveOpeningBalance: (data: Partial<OpeningBalance>) => Promise<void>;
@@ -2074,47 +2074,110 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const deleteKas = async (id: string): Promise<{ success: boolean; error?: string }> => {
+  const deleteKas = async (
+    id: string,
+    options?: { force?: boolean; reason?: string }
+  ): Promise<{ success: boolean; error?: string }> => {
     const kas = kasList.find((k) => k.id === id);
     if (!kas) return { success: false, error: 'Data kas tidak ditemukan.' };
 
+    const isUserAdmin = currentUser?.role === 'admin';
+    if (!isUserAdmin) {
+      return {
+        success: false,
+        error: 'Hanya Administrator yang memiliki hak untuk menghapus entitas Kas.',
+      };
+    }
+
     const txCount = transactions.filter((t) => t.kas_id === id).length;
-    if (txCount > 0) {
-      return {
-        success: false,
-        error: `Kas "${kas.nama}" tidak dapat dihapus permanen karena telah memiliki ${txCount} catatan transaksi terkait. Anda dapat menonaktifkan kas ini agar tidak muncul lagi pada pencatatan transaksi baru.`,
-      };
-    }
-
     const obCount = openingBalances.filter((b) => b.kas_id === id).length;
-    if (obCount > 0) {
-      return {
-        success: false,
-        error: `Kas "${kas.nama}" memiliki ${obCount} pencatatan saldo awal tahun. Hapus atau sesuaikan saldo awal terlebih dahulu.`,
-      };
-    }
-
+    const budgetCount = budgets.filter((b) => b.kas_id === id).length;
     const assetCount = fixedAssets.filter((a) => a.kas_id === id).length;
-    if (assetCount > 0) {
+    const advCount = advances.filter((a) => a.kas_id === id).length;
+    const rpCount = receivablesPayables.filter((rp) => rp.kas_id === id).length;
+
+    const hasLinkedData =
+      txCount > 0 || obCount > 0 || budgetCount > 0 || assetCount > 0 || advCount > 0 || rpCount > 0;
+
+    if (hasLinkedData && !options?.force) {
       return {
         success: false,
-        error: `Kas "${kas.nama}" terhubung dengan ${assetCount} aset inventaris huria.`,
+        error: `Kas "${kas.nama}" memiliki data terkait (${txCount} transaksi, ${obCount} saldo awal, ${budgetCount} anggaran, ${assetCount} aset, ${advCount} panjar, ${rpCount} piutang/utang). Konfirmasi penghapusan paksa diperlukan.`,
       };
     }
 
-    const advCount = advances.filter((a) => a.kas_id === id).length;
-    if (advCount > 0) {
-      return {
-        success: false,
-        error: `Kas "${kas.nama}" memiliki ${advCount} data panjar kegiatan.`,
-      };
+    if (isSupabaseConfigured && supabase) {
+      // 1. Bersihkan referensi opsional agar tidak meninggalkan ID yatim
+      await supabase.from('categories').update({ default_kas_id: null }).eq('default_kas_id', id);
+      await supabase.from('transactions').update({ transfer_target_kas_id: null }).eq('transfer_target_kas_id', id);
+      await supabase.from('fixed_assets').update({ kas_id: null }).eq('kas_id', id);
+      await supabase.from('audit_findings').update({ kas_id: null }).eq('kas_id', id);
+
+      // 2. Hapus tabel anak dengan ON DELETE RESTRICT pada kas_id
+      const delRpRes = await supabase.from('receivables_payables').delete().eq('kas_id', id);
+      if (delRpRes.error) {
+        return { success: false, error: `Gagal menghapus piutang/utang terkait Kas: ${delRpRes.error.message}` };
+      }
+
+      const delAdvRes = await supabase.from('advances').delete().eq('kas_id', id);
+      if (delAdvRes.error) {
+        return { success: false, error: `Gagal menghapus panjar terkait Kas: ${delAdvRes.error.message}` };
+      }
+
+      const delTxRes = await supabase.from('transactions').delete().eq('kas_id', id);
+      if (delTxRes.error) {
+        return { success: false, error: `Gagal menghapus transaksi terkait Kas: ${delTxRes.error.message}` };
+      }
+
+      // 3. Hapus Kas dari tabel utama (tabel lain seperti opening_balances, budgets, user_kas_access cascade otomatis)
+      const delKasRes = await syncDelete('kas', 'id', id);
+      if (!delKasRes.success) {
+        return {
+          success: false,
+          error: delKasRes.error || 'Gagal menghapus data Kas dari Supabase.',
+        };
+      }
     }
+
+    // Sinkronkan seluruh state aplikasi
+    const deletedBudgetIds = new Set(budgets.filter((b) => b.kas_id === id).map((b) => b.id));
+    const deletedAdvanceIds = new Set(advances.filter((a) => a.kas_id === id).map((a) => a.id));
 
     setKasList((prev) => prev.filter((k) => k.id !== id));
-    if (isSupabaseConfigured) {
-      await syncDelete('kas', 'id', id);
-    }
-    addAuditLog('kas', id, 'DELETE', kas, null, `Kas ${kas.nama} (${kas.kode}) dihapus oleh Admin`);
+    setTransactions((prev) =>
+      prev
+        .filter((t) => t.kas_id !== id)
+        .map((t) => (t.transfer_target_kas_id === id ? { ...t, transfer_target_kas_id: null } : t))
+    );
+    setOpeningBalances((prev) => prev.filter((ob) => ob.kas_id !== id));
+    setOpeningEntries((prev) => prev.filter((oe) => oe.kas_id !== id));
+    setOpeningAdjustments((prev) => prev.filter((oa) => oa.kas_id !== id));
+    setOpeningOtherPositions((prev) => prev.filter((op) => op.kas_id !== id));
+    setPriorYearSummaries((prev) => prev.filter((ps) => ps.kas_id !== id));
+    setPeriodClosings((prev) => prev.filter((pc) => pc.kas_id !== id));
+    setUserKasAccessList((prev) => prev.filter((u) => u.kas_id !== id));
+    setBudgets((prev) => prev.filter((b) => b.kas_id !== id));
+    setBudgetItems((prev) => prev.filter((bi) => !deletedBudgetIds.has(bi.budget_id)));
+    setBudgetReallocations((prev) => prev.filter((br) => br.kas_id !== id && !deletedBudgetIds.has(br.budget_id)));
+    setAdvances((prev) => prev.filter((a) => a.kas_id !== id));
+    setAdvanceSettlements((prev) => prev.filter((s) => !deletedAdvanceIds.has(s.advance_id)));
+    setReceivablesPayables((prev) => prev.filter((rp) => rp.kas_id !== id));
+    setCashCounts((prev) => prev.filter((cc) => cc.kas_id !== id));
+    setFixedAssets((prev) => prev.map((fa) => (fa.kas_id === id ? { ...fa, kas_id: '' } : fa)));
+    setAuditFindings((prev) => prev.map((af) => (af.kas_id === id ? { ...af, kas_id: null } : af)));
+    setCategories((prev) =>
+      prev.map((c) => (c.default_kas_id === id ? { ...c, default_kas_id: null } : c))
+    );
+
+    const summaryReason = options?.reason?.trim() ? ` | Alasan: ${options.reason.trim()}` : '';
+    addAuditLog(
+      'kas',
+      id,
+      'DELETE',
+      kas,
+      null,
+      `Kas ${kas.nama} (${kas.kode}) dihapus permanen oleh ${currentUser?.full_name || 'Admin'} (${txCount} transaksi, ${obCount} saldo awal, ${budgetCount} anggaran ikut dibersihkan)${summaryReason}`
+    );
     return { success: true };
   };
 

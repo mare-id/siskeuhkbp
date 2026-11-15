@@ -349,13 +349,13 @@ export const HKBP_ROLES: HKBPRoleDefinition[] = [
   // 6. Administrator
   {
     key: 'admin_sistem',
-    label: 'Administrator Sistem SIKU',
+    label: 'Administrator Sistem SISKEU',
     category: 'administrator',
     categoryLabel: 'Administrator Sistem',
     defaultTohonan: 'non_tahbisan',
     tingkat: 'huria',
     systemRole: 'admin',
-    description: 'Pengelola konfigurasi aplikasi SIKU HKBP, manajemen pengguna, master kas, dan integritas data.',
+    description: 'Pengelola konfigurasi aplikasi SISKEU HKBP, manajemen pengguna, master kas, dan integritas data.',
   },
 ];
 

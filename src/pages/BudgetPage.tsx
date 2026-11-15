@@ -45,7 +45,7 @@ import { exportToExcel, generateAnggaranRealisasiPDF } from '../lib/exportUtils'
 import { generateMonthlyDistribution } from '../lib/demoData';
 
 export default function BudgetPage() {
-  const { currentUser, canInputKas, canApproveKas, isAdmin, isLeader } = useAuth();
+  const { currentUser, userKasAccess, canInputKas, canApproveKas, isAdmin, isLeader, isPendeta, isSekretaris } = useAuth();
   const {
     kasList,
     categories,
@@ -72,16 +72,33 @@ export default function BudgetPage() {
   // Active Tab
   const [activeTab, setActiveTab] = useState<'apbg' | 'pergeseran' | 'realisasi'>('apbg');
 
+  const isSeksiUser = !isLeader && !isAdmin && currentUser?.role === 'pengurus_kas';
+  const myAssignedKasIds = useMemo(() => userKasAccess.map((a) => a.kas_id), [userKasAccess]);
+  const viewableKas = useMemo(
+    () => (isSeksiUser ? kasList.filter((k) => myAssignedKasIds.includes(k.id)) : kasList),
+    [isSeksiUser, kasList, myAssignedKasIds]
+  );
+
   // Filter States
   const [selectedKasId, setSelectedKasId] = useState<string>(
-    kasList[0]?.id || '11111111-1111-1111-1111-111111111101'
+    viewableKas[0]?.id || kasList[0]?.id || '11111111-1111-1111-1111-111111111101'
   );
   const [selectedTahun, setSelectedTahun] = useState<number>(activeYear || 2026);
   const [selectedVersion, setSelectedVersion] = useState<number>(1);
 
   // Realisasi Filter States
-  const [realisasiKasId, setRealisasiKasId] = useState<string>('all'); // 'all' or specific kas_id
+  const [realisasiKasId, setRealisasiKasId] = useState<string>(isSeksiUser ? viewableKas[0]?.id || 'all' : 'all'); // 'all' or specific kas_id
   const [realisasiMonth, setRealisasiMonth] = useState<number>(new Date().getMonth() + 1);
+
+  React.useEffect(() => {
+    if (viewableKas.length > 0 && !viewableKas.some((k) => k.id === selectedKasId)) {
+      setSelectedKasId(viewableKas[0].id);
+      setSelectedVersion(1);
+    }
+    if (isSeksiUser && viewableKas.length > 0 && (realisasiKasId === 'all' || !viewableKas.some((k) => k.id === realisasiKasId))) {
+      setRealisasiKasId(viewableKas[0].id);
+    }
+  }, [viewableKas, selectedKasId, isSeksiUser, realisasiKasId]);
 
   // Modals & Popovers
   const [showItemModal, setShowItemModal] = useState(false);
@@ -190,17 +207,12 @@ export default function BudgetPage() {
   }, [canInputKas, selectedKasId, isAdmin]);
 
   const isKasKetua = useMemo(() => {
-    return canApproveKas(selectedKasId) || isLeader || isAdmin;
-  }, [canApproveKas, selectedKasId, isLeader, isAdmin]);
+    return canApproveKas(selectedKasId) || isAdmin;
+  }, [canApproveKas, selectedKasId, isAdmin]);
 
   const isSekretarisOrPendeta = useMemo(() => {
-    return (
-      isLeader ||
-      isAdmin ||
-      currentUser?.role === 'sekretaris' ||
-      currentUser?.role === 'pendeta_ressort'
-    );
-  }, [isLeader, isAdmin, currentUser]);
+    return isAdmin || isSekretaris || isPendeta;
+  }, [isAdmin, isSekretaris, isPendeta]);
 
   // Is Creator
   const isBudgetCreator = useMemo(() => {
@@ -602,7 +614,7 @@ export default function BudgetPage() {
                   }}
                   className="px-3.5 py-2 rounded-xl border border-gray-200 bg-gray-50/50 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
                 >
-                  {kasList.map((k) => (
+                  {viewableKas.map((k) => (
                     <option key={k.id} value={k.id}>
                       {k.nama} ({k.kode})
                     </option>
@@ -1215,7 +1227,7 @@ export default function BudgetPage() {
                   onChange={(e) => setSelectedKasId(e.target.value)}
                   className="px-3.5 py-2 rounded-xl border border-gray-200 bg-gray-50/50 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
                 >
-                  {kasList.map((k) => (
+                  {viewableKas.map((k) => (
                     <option key={k.id} value={k.id}>
                       {k.nama}
                     </option>
@@ -1247,22 +1259,24 @@ export default function BudgetPage() {
               </div>
             </div>
 
-            <div>
-              <button
-                onClick={() => {
-                  if (!currentBudget || currentBudget.status !== 'approved') {
-                    alert('Pergeseran pos hanya dapat dilakukan pada anggaran yang telah Disahkan.');
-                    return;
-                  }
-                  setShowReallocationModal(true);
-                }}
-                disabled={!currentBudget || currentBudget.status !== 'approved'}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 transition-colors shadow-sm disabled:opacity-50"
-              >
-                <ArrowRightLeft className="w-4 h-4" />
-                Ajukan Pergeseran Pos
-              </button>
-            </div>
+            {isKasBendahara && (
+              <div>
+                <button
+                  onClick={() => {
+                    if (!currentBudget || currentBudget.status !== 'approved') {
+                      alert('Pergeseran pos hanya dapat dilakukan pada anggaran yang telah Disahkan.');
+                      return;
+                    }
+                    setShowReallocationModal(true);
+                  }}
+                  disabled={!currentBudget || currentBudget.status !== 'approved'}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 transition-colors shadow-sm disabled:opacity-50"
+                >
+                  <ArrowRightLeft className="w-4 h-4" />
+                  Ajukan Pergeseran Pos
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Reallocation Log Table */}
@@ -1348,8 +1362,8 @@ export default function BudgetPage() {
                   onChange={(e) => setRealisasiKasId(e.target.value)}
                   className="px-3.5 py-2 rounded-xl border border-gray-200 bg-gray-50/50 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
                 >
-                  <option value="all">Semua Kas (Konsolidasian Huria & Seksi)</option>
-                  {kasList.map((k) => (
+                  {!isSeksiUser && <option value="all">Semua Kas (Konsolidasian Huria & Seksi)</option>}
+                  {viewableKas.map((k) => (
                     <option key={k.id} value={k.id}>
                       {k.nama}
                     </option>

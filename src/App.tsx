@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
 import { ToastProvider } from './context/ToastContext';
 import { AppLayout } from './components/layout/AppLayout';
@@ -25,6 +25,23 @@ import { ProfilePage } from './pages/ProfilePage';
 import { UserGuidePage } from './pages/UserGuidePage';
 import { LoginPage } from './pages/LoginPage';
 
+type PermissionKey =
+  | 'canManageBudget'
+  | 'canManageOpeningBook'
+  | 'canApprove'
+  | 'canViewAuditModule'
+  | 'canClosePeriod'
+  | 'canManageMasterData'
+  | 'canViewAuditTrail'
+  | 'canManageSettings';
+
+const RoleGuard: React.FC<{ allow: PermissionKey; children: React.ReactElement }> = ({ allow, children }) => {
+  const auth = useAuth();
+  if (auth.loading) return null;
+  if (auth.isAdmin || auth[allow]) return children;
+  return <Navigate to="/" replace />;
+};
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -37,16 +54,16 @@ export default function App() {
               <Route path="/" element={<AppLayout />}>
                 <Route index element={<DashboardPage />} />
                 <Route path="transactions" element={<TransactionsPage />} />
-                <Route path="budget" element={<BudgetPage />} />
-                <Route path="opening-balance" element={<OpeningBalancePage />} />
-                <Route path="approvals" element={<ApprovalQueuePage />} />
+                <Route path="budget" element={<RoleGuard allow="canManageBudget"><BudgetPage /></RoleGuard>} />
+                <Route path="opening-balance" element={<RoleGuard allow="canManageOpeningBook"><OpeningBalancePage /></RoleGuard>} />
+                <Route path="approvals" element={<RoleGuard allow="canApprove"><ApprovalQueuePage /></RoleGuard>} />
                 <Route path="reports" element={<ReportsPage />} />
-                <Route path="audit" element={<AuditPage />} />
+                <Route path="audit" element={<RoleGuard allow="canViewAuditModule"><AuditPage /></RoleGuard>} />
                 <Route path="lpj-data" element={<LpjDataPage />} />
-                <Route path="closing" element={<PeriodClosingPage />} />
-                <Route path="master" element={<MasterDataPage />} />
-                <Route path="audit-logs" element={<AuditLogsPage />} />
-                <Route path="settings" element={<SettingsPage />} />
+                <Route path="closing" element={<RoleGuard allow="canClosePeriod"><PeriodClosingPage /></RoleGuard>} />
+                <Route path="master" element={<RoleGuard allow="canManageMasterData"><MasterDataPage /></RoleGuard>} />
+                <Route path="audit-logs" element={<RoleGuard allow="canViewAuditTrail"><AuditLogsPage /></RoleGuard>} />
+                <Route path="settings" element={<RoleGuard allow="canManageSettings"><SettingsPage /></RoleGuard>} />
                 <Route path="guide" element={<UserGuidePage />} />
                 <Route path="profile" element={<ProfilePage />} />
               </Route>

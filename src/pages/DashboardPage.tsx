@@ -66,6 +66,13 @@ export const DashboardPage: React.FC = () => {
     userKasAccess,
     canApproveKas,
     canRecordTransactions,
+    canApprove,
+    canViewBpsk,
+    canViewAuditModule,
+    canViewWarta,
+    canViewConsolidatedLpj,
+    canManageOpeningBook,
+    canManageLpjData,
   } = useAuth();
   const {
     kasList,
@@ -91,7 +98,32 @@ export const DashboardPage: React.FC = () => {
   } = useData();
 
   const todayStr = new Date().toISOString().split('T')[0];
-  const activeAdvances = advances.filter((a) => a.status === 'active');
+
+  // Find kas assigned to current user & whether user is scoped to section kas only
+  const myAssignedKasIds = userKasAccess.map((a) => a.kas_id);
+  const isSeksiUser = !isLeader && currentUser?.role === 'pengurus_kas';
+
+  const visibleKasList = isSeksiUser
+    ? kasList.filter((k) => myAssignedKasIds.includes(k.id))
+    : kasList;
+
+  const visibleTransactions = isSeksiUser
+    ? transactions.filter((tx) => myAssignedKasIds.includes(tx.kas_id))
+    : transactions;
+
+  const visibleAdvances = isSeksiUser
+    ? advances.filter((a) => myAssignedKasIds.includes(a.kas_id))
+    : advances;
+
+  const visibleFixedAssets = isSeksiUser
+    ? fixedAssets.filter((a) => myAssignedKasIds.includes(a.kas_id))
+    : fixedAssets;
+
+  const visibleReceivablesPayables = isSeksiUser
+    ? receivablesPayables.filter((r) => myAssignedKasIds.includes(r.kas_id))
+    : receivablesPayables;
+
+  const activeAdvances = visibleAdvances.filter((a) => a.status === 'active');
   const overdueAdvances = activeAdvances.filter((a) => a.due_date < todayStr);
   const latestFinalOpinion = auditFinalOpinions[0];
   const pendingAuditFindings = auditFindings.filter((f) => f.severity === 'wajib_diperbaiki' && f.status !== 'selesai' && f.status !== 'diterima');
@@ -99,26 +131,22 @@ export const DashboardPage: React.FC = () => {
   const currentYearLocked = isYearLockedByLpj(settings.active_year || 2026);
   const totalOverdueAdvanceAmount = overdueAdvances.reduce((sum, a) => sum + Number(a.amount), 0);
   const totalActiveAdvanceAmount = activeAdvances.reduce((sum, a) => sum + Number(a.amount), 0);
-  const totalFixedAssetsAmount = fixedAssets.filter((a) => a.status === 'aktif').reduce((sum, a) => sum + Number(a.nilai_perolehan), 0);
-  const totalActiveReceivablesAmount = receivablesPayables.filter((r) => r.type === 'receivable' && r.status !== 'paid').reduce((sum, r) => sum + Number(r.remaining_amount), 0);
-  const totalActivePayablesAmount = receivablesPayables.filter((r) => r.type === 'payable' && r.status !== 'paid').reduce((sum, r) => sum + Number(r.remaining_amount), 0);
+  const totalFixedAssetsAmount = visibleFixedAssets.filter((a) => a.status === 'aktif').reduce((sum, a) => sum + Number(a.nilai_perolehan), 0);
+  const totalActiveReceivablesAmount = visibleReceivablesPayables.filter((r) => r.type === 'receivable' && r.status !== 'paid').reduce((sum, r) => sum + Number(r.remaining_amount), 0);
+  const totalActivePayablesAmount = visibleReceivablesPayables.filter((r) => r.type === 'payable' && r.status !== 'paid').reduce((sum, r) => sum + Number(r.remaining_amount), 0);
 
-  const totalKasCount = kasList.length;
-  const lockedKasCount = kasList.filter((k) => isKasOpeningLocked(k.id)).length;
+  const totalKasCount = visibleKasList.length;
+  const lockedKasCount = visibleKasList.filter((k) => isKasOpeningLocked(k.id)).length;
   const lockedPercentage = totalKasCount > 0 ? Math.round((lockedKasCount / totalKasCount) * 100) : 0;
   const isOpeningIncomplete = lockedKasCount < totalKasCount;
 
-  const [selectedKasFilter, setSelectedKasFilter] = useState<string>('all');
-  const [chartView, setChartView] = useState<'trend' | 'donut'>('trend');
-
-  const kasBalances = getKasBalances();
+  const allKasBalances = getKasBalances();
+  const kasBalances = isSeksiUser
+    ? allKasBalances.filter((kb) => myAssignedKasIds.includes(kb.kas_id))
+    : allKasBalances;
   const storageBalances = getStorageBalances();
 
-  // Find kas assigned to current user
-  const myAssignedKasIds = userKasAccess.map((a) => a.kas_id);
-  const isSeksiUser = !isLeader && currentUser?.role === 'pengurus_kas';
-
-  // Total balance of all kas
+  // Total balance of visible kas
   const totalSaldoResmi = kasBalances.reduce((sum, k) => sum + k.saldo_resmi, 0);
   const totalSaldoProyeksi = kasBalances.reduce((sum, k) => sum + k.saldo_proyeksi, 0);
 
@@ -128,7 +156,7 @@ export const DashboardPage: React.FC = () => {
   const sentralisasiSummary = getSentralisasiSummary(currentYear);
   const bpskCompliance = evaluateBpskRemittanceCompliance(transactions, categories, todayStr);
 
-  const currentMonthTx = transactions.filter((tx) => {
+  const currentMonthTx = visibleTransactions.filter((tx) => {
     const d = new Date(tx.tanggal);
     return d.getFullYear() === currentYear && d.getMonth() + 1 === currentMonth && tx.status === 'approved';
   });
@@ -146,7 +174,7 @@ export const DashboardPage: React.FC = () => {
   const myPendingApprovals = pendingApprovals.filter((tx) => canApproveKas(tx.kas_id));
 
   // Drafts or rejected items created by current user needing action
-  const myActionNeeded = transactions.filter(
+  const myActionNeeded = visibleTransactions.filter(
     (tx) => tx.created_by === currentUser?.id && (tx.status === 'draft' || tx.status === 'rejected')
   );
 
@@ -154,7 +182,7 @@ export const DashboardPage: React.FC = () => {
   const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   const trendData = monthNamesShort.map((bulan, idx) => {
     const m = idx + 1;
-    const mTx = transactions.filter((tx) => {
+    const mTx = visibleTransactions.filter((tx) => {
       const d = new Date(tx.tanggal);
       return d.getFullYear() === currentYear && d.getMonth() + 1 === m && tx.status === 'approved';
     });
@@ -164,7 +192,7 @@ export const DashboardPage: React.FC = () => {
   });
 
   // Income distribution computed dynamically from actual approved income transactions
-  const approvedIncomeTx = transactions.filter((tx) => (tx.type === 'income' || tx.type === 'transfer_in') && tx.status === 'approved');
+  const approvedIncomeTx = visibleTransactions.filter((tx) => (tx.type === 'income' || tx.type === 'transfer_in') && tx.status === 'approved');
   const donutData = categories
     .filter((c) => c.tipe === 'income')
     .map((c) => {
@@ -176,12 +204,7 @@ export const DashboardPage: React.FC = () => {
     .filter((item) => item.value > 0);
 
   // Recent 8 transactions
-  const recentTransactions = transactions.slice(0, 8);
-
-  // Kas card style mapper: clean executive white surface with subtle distinction
-  const getKasThemeClass = (_index: number) => {
-    return 'card-executive';
-  };
+  const recentTransactions = visibleTransactions.slice(0, 8);
 
   return (
     <div className="space-y-6 w-full max-w-7xl mx-auto min-w-0 overflow-hidden">
@@ -199,7 +222,7 @@ export const DashboardPage: React.FC = () => {
             </h1>
 
             <p className="text-xs md:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
-              Sistem Informasi Keuangan Huria (SIKU HKBP) mengimplementasikan Panduan Pengelolaan Keuangan Umum (PPKU Sentralisasi 55/45) dan Basis Kas Dimodifikasi (ISAK 35).
+              Sistem Informasi Keuangan Huria (SISKEU HKBP) mengimplementasikan Panduan Pengelolaan Keuangan Umum (PPKU Sentralisasi 55/45) dan Basis Kas Dimodifikasi (ISAK 35).
             </p>
 
             <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
@@ -217,7 +240,36 @@ export const DashboardPage: React.FC = () => {
 
           {/* Quick Action Button & Alerts tailored by Role */}
           <div className="flex flex-col sm:flex-row lg:flex-col items-start lg:items-end gap-3 shrink-0">
-            {isAuditor ? (
+            {isAdmin ? (
+              <>
+                {myPendingApprovals.length > 0 && (
+                  <NavLink
+                    to="/approvals"
+                    className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-bold rounded-2xl shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 transition-all active:scale-98"
+                  >
+                    <Clock className="w-4 h-4 animate-spin-slow" />
+                    <span>{myPendingApprovals.length} Transaksi Menunggu Persetujuan</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </NavLink>
+                )}
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                  <NavLink
+                    to="/transactions"
+                    className="flex-1 sm:flex-initial px-4 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-semibold rounded-2xl shadow-md shadow-indigo-500/30 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Receipt className="w-4 h-4" />
+                    <span>Kelola Transaksi</span>
+                  </NavLink>
+                  <NavLink
+                    to="/reports?tab=semester"
+                    className="flex-1 sm:flex-initial px-4 py-2.5 bg-white/10 hover:bg-white/15 backdrop-blur-md text-white text-xs font-semibold rounded-2xl border border-white/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <FileText className="w-4 h-4 text-indigo-300" />
+                    <span>Laporan & LPJ</span>
+                  </NavLink>
+                </div>
+              </>
+            ) : isAuditor ? (
               <>
                 {pendingAuditFindings.length > 0 && (
                   <NavLink
@@ -267,7 +319,7 @@ export const DashboardPage: React.FC = () => {
                     <span>Otorisasi Kas</span>
                   </NavLink>
                   <NavLink
-                    to="/reports"
+                    to="/reports?tab=semester"
                     className="flex-1 sm:flex-initial px-4 py-2.5 bg-white/10 hover:bg-white/15 backdrop-blur-md text-white text-xs font-semibold rounded-2xl border border-white/20 transition-all flex items-center justify-center gap-2"
                   >
                     <FileText className="w-4 h-4 text-indigo-300" />
@@ -276,23 +328,6 @@ export const DashboardPage: React.FC = () => {
                 </div>
               </>
             ) : isSekretaris ? (
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <NavLink
-                  to="/reports"
-                  className="flex-1 sm:flex-initial px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold rounded-2xl shadow-md shadow-sky-600/30 transition-all flex items-center justify-center gap-2"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>Materi Warta & LPJ</span>
-                </NavLink>
-                <NavLink
-                  to="/budget"
-                  className="flex-1 sm:flex-initial px-4 py-2.5 bg-white/10 hover:bg-white/15 backdrop-blur-md text-white text-xs font-semibold rounded-2xl border border-white/20 transition-all flex items-center justify-center gap-2"
-                >
-                  <Calendar className="w-4 h-4 text-indigo-300" />
-                  <span>Dokumen APBG</span>
-                </NavLink>
-              </div>
-            ) : canRecordTransactions ? (
               <>
                 {myPendingApprovals.length > 0 && (
                   <NavLink
@@ -300,7 +335,65 @@ export const DashboardPage: React.FC = () => {
                     className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-bold rounded-2xl shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 transition-all active:scale-98"
                   >
                     <Clock className="w-4 h-4 animate-spin-slow" />
-                    <span>{myPendingApprovals.length} Transaksi Menunggu Persetujuan</span>
+                    <span>{myPendingApprovals.length} Antrean Persetujuan Parartaon</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </NavLink>
+                )}
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <NavLink
+                    to="/reports?tab=warta"
+                    className="flex-1 sm:flex-initial px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold rounded-2xl shadow-md shadow-sky-600/30 transition-all flex items-center justify-center gap-2"
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span>Materi Warta Mingguan</span>
+                  </NavLink>
+                  <NavLink
+                    to="/budget"
+                    className="flex-1 sm:flex-initial px-4 py-2.5 bg-white/10 hover:bg-white/15 backdrop-blur-md text-white text-xs font-semibold rounded-2xl border border-white/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Calendar className="w-4 h-4 text-indigo-300" />
+                    <span>Dokumen APBG</span>
+                  </NavLink>
+                </div>
+              </>
+            ) : canApprove && !canRecordTransactions ? (
+              <>
+                {myPendingApprovals.length > 0 && (
+                  <NavLink
+                    to="/approvals"
+                    className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-bold rounded-2xl shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 transition-all active:scale-98"
+                  >
+                    <Clock className="w-4 h-4 animate-spin-slow" />
+                    <span>{myPendingApprovals.length} Transaksi Kas Menunggu Persetujuan</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </NavLink>
+                )}
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <NavLink
+                    to="/approvals"
+                    className="flex-1 sm:flex-initial px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-2xl shadow-md shadow-amber-600/30 transition-all flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Persetujuan Ketua</span>
+                  </NavLink>
+                  <NavLink
+                    to="/budget"
+                    className="flex-1 sm:flex-initial px-4 py-2.5 bg-white/10 hover:bg-white/15 backdrop-blur-md text-white text-xs font-semibold rounded-2xl border border-white/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Calendar className="w-4 h-4 text-indigo-300" />
+                    <span>Realisasi APBG</span>
+                  </NavLink>
+                </div>
+              </>
+            ) : canRecordTransactions ? (
+              <>
+                {myActionNeeded.length > 0 && (
+                  <NavLink
+                    to="/transactions"
+                    className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold rounded-2xl shadow-lg flex items-center justify-center gap-2 transition-all active:scale-98"
+                  >
+                    <Clock className="w-4 h-4" />
+                    <span>{myActionNeeded.length} Draf / Revisi Perlu Tindak Lanjut</span>
                     <ChevronRight className="w-4 h-4" />
                   </NavLink>
                 )}
@@ -313,18 +406,18 @@ export const DashboardPage: React.FC = () => {
                     <span>Kelola Transaksi</span>
                   </NavLink>
                   <NavLink
-                    to="/reports"
+                    to={isBendaharaUmum ? '/reports?tab=semester' : '/reports?tab=warta'}
                     className="flex-1 sm:flex-initial px-4 py-2.5 bg-white/10 hover:bg-white/15 backdrop-blur-md text-white text-xs font-semibold rounded-2xl border border-white/20 transition-all flex items-center justify-center gap-2"
                   >
                     <FileText className="w-4 h-4 text-indigo-300" />
-                    <span>Buka LPJ ISAK 35</span>
+                    <span>{isBendaharaUmum ? 'Buka LPJ ISAK 35' : 'Buku Kas & Warta'}</span>
                   </NavLink>
                 </div>
               </>
             ) : (
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <NavLink
-                  to="/reports"
+                  to="/reports?tab=semester"
                   className="flex-1 sm:flex-initial px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-2xl shadow-md transition-all flex items-center justify-center gap-2"
                 >
                   <FileText className="w-4 h-4" />
@@ -424,7 +517,7 @@ export const DashboardPage: React.FC = () => {
       {/* ---------------- PPKU Pasal 4(2)a H+3 BPSK Remittance Alert ---------------- */}
       {bpskCompliance.outstandingBpsk > 0 &&
         (bpskCompliance.status === 'terlambat_h3' || bpskCompliance.status === 'batas_hari_ini') &&
-        (isBendaharaUmum || isAdmin || isPendeta || isSekretaris || isAuditor) && (
+        canViewBpsk && (
           <div
             className={`card-hover p-4 md:p-5 rounded-2xl border shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4 ${
               bpskCompliance.status === 'terlambat_h3'
@@ -457,7 +550,7 @@ export const DashboardPage: React.FC = () => {
               </div>
             </div>
             <NavLink
-              to="/reports"
+              to="/reports?tab=bpsk"
               className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 flex items-center gap-1.5"
             >
               <span>Periksa Tab BPSK</span>
@@ -497,7 +590,7 @@ export const DashboardPage: React.FC = () => {
               </div>
             </div>
 
-            {!isAuditor && !isMajelis && (
+            {canManageOpeningBook && (
               <NavLink
                 to="/opening-balance"
                 className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all shrink-0 active:scale-98"
@@ -522,7 +615,7 @@ export const DashboardPage: React.FC = () => {
               />
             </div>
             <div className="flex flex-wrap gap-1.5 pt-1">
-              {kasList.map((k) => {
+              {visibleKasList.map((k) => {
                 const status = getOpeningStatusForKas(k.id);
                 const isLocked = status === 'locked';
                 return (
@@ -556,7 +649,7 @@ export const DashboardPage: React.FC = () => {
               <span className="font-bold text-emerald-950">Pembukaan Buku Tuntas:</span> Seluruh {totalKasCount} kas telah dikunci per {formatDateIndo(openingSetup.go_live_date)}. Saldo awal aktif menjadi dasar pembukuan resmi.
             </div>
           </div>
-          {!isAuditor && !isMajelis && (
+          {canManageOpeningBook && (
             <NavLink
               to="/opening-balance"
               className="text-emerald-800 hover:text-emerald-950 font-bold underline shrink-0 ml-3"
@@ -657,11 +750,11 @@ export const DashboardPage: React.FC = () => {
             </div>
             <div className="space-y-1">
               <div className="text-2xl md:text-3xl font-extrabold text-slate-900 font-mono tabular-nums tracking-tight">
-                Semester I <span className="text-sm font-semibold text-slate-500">Siap</span>
+                Mingguan <span className="text-sm font-semibold text-slate-500">Siap</span>
               </div>
               <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between pt-1 border-t border-slate-100">
                 <span>Transparansi Mimbar:</span>
-                <NavLink to="/reports" className="font-bold underline text-blue-800 hover:text-blue-950">
+                <NavLink to="/reports?tab=warta" className="font-bold underline text-blue-800 hover:text-blue-950">
                   Lihat Warta Huria
                 </NavLink>
               </div>
@@ -677,7 +770,7 @@ export const DashboardPage: React.FC = () => {
             </div>
             <div className="space-y-1">
               <div className="text-2xl md:text-3xl font-extrabold text-slate-900 font-mono tabular-nums tracking-tight">
-                {kasList.length} <span className="text-sm font-semibold text-slate-500">Kas Terpantau</span>
+                {visibleKasList.length} <span className="text-sm font-semibold text-slate-500">Kas Terpantau</span>
               </div>
               <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between pt-1 border-t border-slate-100">
                 <span>Monitoring Realisasi:</span>
@@ -687,7 +780,27 @@ export const DashboardPage: React.FC = () => {
               </div>
             </div>
           </div>
-        ) : (
+        ) : isBendaharaUmum ? (
+          <div className="card-hover p-5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Kewajiban BPSK (55%)</span>
+              <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100/80 text-blue-800 flex items-center justify-center shrink-0">
+                <Landmark className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-xl md:text-2xl font-extrabold text-blue-900 font-mono tabular-nums tracking-tight">
+                {formatRupiah(bpskCompliance.outstandingBpsk)}
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between pt-1 border-t border-slate-100">
+                <span>Sisa Wajib Setor Pusat:</span>
+                <NavLink to="/reports?tab=bpsk" className="font-bold underline text-blue-800 hover:text-blue-950">
+                  Kelola BPSK
+                </NavLink>
+              </div>
+            </div>
+          </div>
+        ) : isAdmin || canApprove ? (
           <div className="card-hover p-5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Persetujuan Transaksi</span>
@@ -697,12 +810,32 @@ export const DashboardPage: React.FC = () => {
             </div>
             <div className="space-y-1">
               <div className="text-2xl md:text-3xl font-extrabold text-slate-900 font-mono tabular-nums tracking-tight">
-                {pendingApprovals.length} <span className="text-sm font-semibold text-slate-500">Menunggu</span>
+                {myPendingApprovals.length} <span className="text-sm font-semibold text-slate-500">Menunggu</span>
               </div>
               <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between pt-1 border-t border-slate-100">
                 <span>Perlu Verifikasi Ketua:</span>
                 <NavLink to="/approvals" className="font-bold underline text-amber-800 hover:text-amber-950">
                   Lihat Antrean
+                </NavLink>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="card-hover p-5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Draf & Revisi Saya</span>
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100/80 text-indigo-700 flex items-center justify-center shrink-0">
+                <Receipt className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-2xl md:text-3xl font-extrabold text-slate-900 font-mono tabular-nums tracking-tight">
+                {myActionNeeded.length} <span className="text-sm font-semibold text-slate-500">Item</span>
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between pt-1 border-t border-slate-100">
+                <span>Perlu Diajukan ke Ketua:</span>
+                <NavLink to="/transactions" className="font-bold underline text-indigo-800 hover:text-indigo-950">
+                  Buka Transaksi
                 </NavLink>
               </div>
             </div>
@@ -770,7 +903,7 @@ export const DashboardPage: React.FC = () => {
               </div>
             </div>
             <span className="text-[10px] font-mono font-bold px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md border border-slate-200">
-              {fixedAssets.filter((a) => a.status === 'aktif').length} Unit
+              {visibleFixedAssets.filter((a) => a.status === 'aktif').length} Unit
             </span>
           </div>
 
@@ -826,7 +959,7 @@ export const DashboardPage: React.FC = () => {
                 to="/lpj-data"
                 className="text-xs font-semibold text-blue-700 hover:text-blue-900 flex items-center gap-1"
               >
-                <span>Kelola Utang/Piutang</span>
+                <span>{canManageLpjData ? 'Kelola Utang/Piutang' : 'Lihat Utang/Piutang'}</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </NavLink>
             </div>
@@ -834,217 +967,225 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ---------------- SENTRALISASI KEUANGAN PPKU HKBP WIDGET ---------------- */}
-      <div className="card-hover p-6 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-[#0B132B] text-amber-400 border border-slate-800 flex items-center justify-center shrink-0 shadow-2xs">
-              <Landmark className="w-5 h-5" />
+      {/* ---------------- SENTRALISASI KEUANGAN PPKU HKBP WIDGET (Huria-Wide Roles) ---------------- */}
+      {canViewBpsk && (
+        <div className="card-hover p-6 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-[#0B132B] text-amber-400 border border-slate-800 flex items-center justify-center shrink-0 shadow-2xs">
+                <Landmark className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="font-bold text-slate-900 text-base">Sentralisasi Keuangan PPKU HKBP</h4>
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-800 border border-blue-200/70">
+                    55% BPSK Pusat : 45% Huria
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Alokasi resmi persembahan berdasarkan Pedoman Pengelolaan Keuangan Umum HKBP (Tahun {currentYear})
+                </p>
+              </div>
             </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h4 className="font-bold text-slate-900 text-base">Sentralisasi Keuangan PPKU HKBP</h4>
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-800 border border-blue-200/70">
-                  55% BPSK Pusat : 45% Huria
+            <NavLink
+              to="/reports?tab=bpsk"
+              className="px-3.5 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-semibold rounded-xl shadow-2xs transition-colors flex items-center gap-1.5 self-start sm:self-auto shrink-0"
+            >
+              <span>Rekapitulasi Setoran BPSK</span>
+              <ChevronRight className="w-4 h-4" />
+            </NavLink>
+          </div>
+
+          {/* 4 Clean Executive Metric Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+            {/* 1. Objek Sentralisasi */}
+            <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200/80 space-y-1">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                Penerimaan Objek Sentralisasi
+              </span>
+              <div className="text-xl font-bold font-mono text-slate-900 tabular-nums">
+                {formatRupiah(sentralisasiSummary.totalObjekSentralisasi)}
+              </div>
+              <p className="text-[10px] text-slate-400 leading-tight">
+                Pelean I-II, Namarboho, Partangiangan, Kategorial, Syukur, Badan Usaha
+              </p>
+            </div>
+
+            {/* 2. 55% Kas Pusat BPSK */}
+            <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200/80 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-blue-900 uppercase tracking-wider">
+                  55% Kas Pusat (BPSK)
+                </span>
+                <span className="text-[9px] font-semibold bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded">
+                  Wajib Setor
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Alokasi resmi persembahan berdasarkan Pedoman Pengelolaan Keuangan Umum HKBP (Tahun {currentYear})
+              <div className="text-xl font-bold font-mono text-blue-900 tabular-nums">
+                {formatRupiah(sentralisasiSummary.totalBpskObligation)}
+              </div>
+              <div className="text-[10px] text-slate-500 flex items-center justify-between pt-0.5">
+                <span>Disetor: {formatRupiah(sentralisasiSummary.totalBpskRemitted)}</span>
+                <span className={`font-semibold ${sentralisasiSummary.outstandingBpsk > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                  {sentralisasiSummary.outstandingBpsk > 0 ? `Kurang: ${formatRupiah(sentralisasiSummary.outstandingBpsk)}` : 'Lunas'}
+                </span>
+              </div>
+            </div>
+
+            {/* 3. 45% Kas Huria */}
+            <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200/80 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wider">
+                  45% Kas Huria (Lokal)
+                </span>
+                <span className="text-[9px] font-semibold bg-slate-200 text-slate-800 px-1.5 py-0.2 rounded">
+                  Operasional
+                </span>
+              </div>
+              <div className="text-xl font-bold font-mono text-slate-900 tabular-nums">
+                {formatRupiah(sentralisasiSummary.totalHuriaShare)}
+              </div>
+              <p className="text-[10px] text-slate-400 leading-tight">
+                Operasional rutin gereja, pelayanan ibadah, seksi & dewan lokal
+              </p>
+            </div>
+
+            {/* 4. Pos Dikecualikan (100% Huria) */}
+            <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200/80 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
+                  Bebas Sentralisasi (100%)
+                </span>
+                <span className="text-[9px] font-semibold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded">
+                  Khusus Lokal
+                </span>
+              </div>
+              <div className="text-xl font-bold font-mono text-emerald-800 tabular-nums">
+                {formatRupiah(sentralisasiSummary.totalDikecualikan)}
+              </div>
+              <p className="text-[10px] text-slate-500 leading-tight">
+                Sosial/Duka ({formatRupiah(sentralisasiSummary.totalSosialDuka)}), Beasiswa ({formatRupiah(sentralisasiSummary.totalBeasiswa)}), Pembangunan ({formatRupiah(sentralisasiSummary.totalPembangunanLokal)})
               </p>
             </div>
           </div>
-          <NavLink
-            to="/reports?tab=bpsk"
-            className="px-3.5 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-semibold rounded-xl shadow-2xs transition-colors flex items-center gap-1.5 self-start sm:self-auto shrink-0"
-          >
-            <span>Rekapitulasi Setoran BPSK</span>
-            <ChevronRight className="w-4 h-4" />
-          </NavLink>
         </div>
-
-        {/* 4 Clean Executive Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
-          {/* 1. Objek Sentralisasi */}
-          <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200/80 space-y-1">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-              Penerimaan Objek Sentralisasi
-            </span>
-            <div className="text-xl font-bold font-mono text-slate-900 tabular-nums">
-              {formatRupiah(sentralisasiSummary.totalObjekSentralisasi)}
-            </div>
-            <p className="text-[10px] text-slate-400 leading-tight">
-              Pelean I-II, Namarboho, Partangiangan, Kategorial, Syukur, Badan Usaha
-            </p>
-          </div>
-
-          {/* 2. 55% Kas Pusat BPSK */}
-          <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200/80 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-blue-900 uppercase tracking-wider">
-                55% Kas Pusat (BPSK)
-              </span>
-              <span className="text-[9px] font-semibold bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded">
-                Wajib Setor
-              </span>
-            </div>
-            <div className="text-xl font-bold font-mono text-blue-900 tabular-nums">
-              {formatRupiah(sentralisasiSummary.totalBpskObligation)}
-            </div>
-            <div className="text-[10px] text-slate-500 flex items-center justify-between pt-0.5">
-              <span>Disetor: {formatRupiah(sentralisasiSummary.totalBpskRemitted)}</span>
-              <span className={`font-semibold ${sentralisasiSummary.outstandingBpsk > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
-                {sentralisasiSummary.outstandingBpsk > 0 ? `Kurang: ${formatRupiah(sentralisasiSummary.outstandingBpsk)}` : 'Lunas'}
-              </span>
-            </div>
-          </div>
-
-          {/* 3. 45% Kas Huria */}
-          <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200/80 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wider">
-                45% Kas Huria (Lokal)
-              </span>
-              <span className="text-[9px] font-semibold bg-slate-200 text-slate-800 px-1.5 py-0.2 rounded">
-                Operasional
-              </span>
-            </div>
-            <div className="text-xl font-bold font-mono text-slate-900 tabular-nums">
-              {formatRupiah(sentralisasiSummary.totalHuriaShare)}
-            </div>
-            <p className="text-[10px] text-slate-400 leading-tight">
-              Operasional rutin gereja, pelayanan ibadah, seksi & dewan lokal
-            </p>
-          </div>
-
-          {/* 4. Pos Dikecualikan (100% Huria) */}
-          <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200/80 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
-                Bebas Sentralisasi (100%)
-              </span>
-              <span className="text-[9px] font-semibold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded">
-                Khusus Lokal
-              </span>
-            </div>
-            <div className="text-xl font-bold font-mono text-emerald-800 tabular-nums">
-              {formatRupiah(sentralisasiSummary.totalDikecualikan)}
-            </div>
-            <p className="text-[10px] text-slate-500 leading-tight">
-              Sosial/Duka ({formatRupiah(sentralisasiSummary.totalSosialDuka)}), Beasiswa ({formatRupiah(sentralisasiSummary.totalBeasiswa)}), Pembangunan ({formatRupiah(sentralisasiSummary.totalPembangunanLokal)})
-            </p>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* ---------------- DUAL MASTER WIDGETS: LPJ & AUDIT HURIA ---------------- */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Widget 1: Kesiapan Laporan Keuangan */}
-        <div className="card-hover p-6 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center">
-                <FileText className="w-5 h-5" />
+      {(canViewConsolidatedLpj || canViewAuditModule) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Widget 1: Kesiapan Laporan Keuangan */}
+          {canViewConsolidatedLpj && (
+            <div className="card-hover p-6 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-sm">Kesiapan Laporan & LPJ ISAK 35</h4>
+                    <p className="text-[11px] text-slate-500">Tata kelola semesteran & penutupan tahunan</p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-200">
+                  {currentSemesterRep?.status === 'announced' ? 'Warta Disiarkan' : 'Penyusunan'}
+                </span>
               </div>
-              <div>
-                <h4 className="font-bold text-slate-900 text-sm">Kesiapan Laporan & LPJ ISAK 35</h4>
-                <p className="text-[11px] text-slate-500">Tata kelola semesteran & penutupan tahunan</p>
+
+              <div className="space-y-2 text-xs bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/70">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Status Semester I ({settings.active_year || 2026}):</span>
+                  <span className="font-semibold text-emerald-800 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    Diwartakan di Warta Jemaat
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Kunci Permanen LPJ Tahun Ini:</span>
+                  <span className={`font-semibold flex items-center gap-1.5 ${currentYearLocked ? 'text-purple-800' : 'text-slate-600'}`}>
+                    {currentYearLocked ? <Lock className="w-3.5 h-3.5 text-purple-600" /> : <Clock className="w-3.5 h-3.5 text-slate-400" />}
+                    {currentYearLocked ? 'Terkunci Permanen (Disahkan)' : 'Terbuka (Draf Persiapan)'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-1 flex items-center justify-between">
+                <span className="text-[11px] text-slate-400 font-medium">Format Neraca & Arus Kas Langsung</span>
+                <NavLink
+                  to="/reports?tab=semester"
+                  className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl shadow-2xs transition-colors flex items-center gap-1.5"
+                >
+                  <span>Buka Modul Laporan</span>
+                  <ChevronRight className="w-4 h-4" />
+                </NavLink>
               </div>
             </div>
-            <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-200">
-              {currentSemesterRep?.status === 'announced' ? 'Warta Disiarkan' : 'Penyusunan'}
-            </span>
-          </div>
+          )}
 
-          <div className="space-y-2 text-xs bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/70">
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">Status Semester I ({settings.active_year || 2026}):</span>
-              <span className="font-semibold text-emerald-800 flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                Diwartakan di Warta Jemaat
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">Kunci Permanen LPJ Tahun Ini:</span>
-              <span className={`font-semibold flex items-center gap-1.5 ${currentYearLocked ? 'text-purple-800' : 'text-slate-600'}`}>
-                {currentYearLocked ? <Lock className="w-3.5 h-3.5 text-purple-600" /> : <Clock className="w-3.5 h-3.5 text-slate-400" />}
-                {currentYearLocked ? 'Terkunci Permanen (Disahkan)' : 'Terbuka (Draf Persiapan)'}
-              </span>
-            </div>
-          </div>
+          {/* Widget 2: Badan Audit Huria (Khusus Auditor & Admin) */}
+          {canViewAuditModule && (
+            <div className="card-hover p-6 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-900 text-white flex items-center justify-center">
+                    <ShieldCheck className="w-5 h-5 text-amber-300" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-sm">Badan Audit Huria (Independen)</h4>
+                    <p className="text-[11px] text-slate-500">Hasil pemeriksaan 3 auditor kolegial</p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-md bg-purple-50 text-purple-900 border border-purple-200">
+                  3 Auditor Aktif
+                </span>
+              </div>
 
-          <div className="pt-1 flex items-center justify-between">
-            <span className="text-[11px] text-slate-400 font-medium">Format Neraca & Arus Kas Langsung</span>
-            <NavLink
-              to="/reports"
-              className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl shadow-2xs transition-colors flex items-center gap-1.5"
-            >
-              <span>Buka Modul Laporan</span>
-              <ChevronRight className="w-4 h-4" />
-            </NavLink>
-          </div>
+              <div className="space-y-2 text-xs bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/70">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Opini Terakhir Badan Audit:</span>
+                  <span className="font-bold text-emerald-800 font-mono text-xs">
+                    {latestFinalOpinion?.final_opinion === 'sesuai' ? 'Wajar Tanpa Pengecualian' : 'Wajar Dengan Catatan'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Temuan Wajib Perbaiki Tertunda:</span>
+                  <span className={`font-semibold ${pendingAuditFindings.length > 0 ? 'text-amber-800' : 'text-emerald-800'}`}>
+                    {pendingAuditFindings.length > 0 ? `${pendingAuditFindings.length} Temuan Tertunda` : 'Nihil (Semua Dituntaskan)'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-1 flex items-center justify-between">
+                <span className="text-[11px] text-slate-400 font-medium">Sistem Voting Mayoritas 2/3</span>
+                <NavLink
+                  to="/audit"
+                  className="px-3.5 py-1.5 bg-purple-900 hover:bg-purple-800 text-white text-xs font-semibold rounded-xl shadow-2xs transition-colors flex items-center gap-1.5"
+                >
+                  <span>Buka Modul Audit</span>
+                  <ChevronRight className="w-4 h-4" />
+                </NavLink>
+              </div>
+            </div>
+          )}
         </div>
-
-        {/* Widget 2: Badan Audit Huria */}
-        <div className="card-hover p-6 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-900 text-white flex items-center justify-center">
-                <ShieldCheck className="w-5 h-5 text-amber-300" />
-              </div>
-              <div>
-                <h4 className="font-bold text-slate-900 text-sm">Badan Audit Huria (Independen)</h4>
-                <p className="text-[11px] text-slate-500">Hasil pemeriksaan 3 auditor kolegial</p>
-              </div>
-            </div>
-            <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-md bg-purple-50 text-purple-900 border border-purple-200">
-              3 Auditor Aktif
-            </span>
-          </div>
-
-          <div className="space-y-2 text-xs bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/70">
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">Opini Terakhir Badan Audit:</span>
-              <span className="font-bold text-emerald-800 font-mono text-xs">
-                {latestFinalOpinion?.final_opinion === 'sesuai' ? 'Wajar Tanpa Pengecualian' : 'Wajar Dengan Catatan'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">Temuan Wajib Perbaiki Tertunda:</span>
-              <span className={`font-semibold ${pendingAuditFindings.length > 0 ? 'text-amber-800' : 'text-emerald-800'}`}>
-                {pendingAuditFindings.length > 0 ? `${pendingAuditFindings.length} Temuan Tertunda` : 'Nihil (Semua Dituntaskan)'}
-              </span>
-            </div>
-          </div>
-
-          <div className="pt-1 flex items-center justify-between">
-            <span className="text-[11px] text-slate-400 font-medium">Sistem Voting Mayoritas 2/3</span>
-            <NavLink
-              to="/audit"
-              className="px-3.5 py-1.5 bg-purple-900 hover:bg-purple-800 text-white text-xs font-semibold rounded-xl shadow-2xs transition-colors flex items-center gap-1.5"
-            >
-              <span>Buka Modul Audit</span>
-              <ChevronRight className="w-4 h-4" />
-            </NavLink>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* ---------------- SALDO PER KAS SEKSI (EXECUTIVE CLEAN CARDS) ---------------- */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h3 className="text-base font-bold text-slate-900 tracking-tight">
-              Buku Kas Seksi Kategorial & Umum
+              {isSeksiUser ? 'Buku Kas Seksi Ditugaskan' : 'Buku Kas Seksi Kategorial & Umum'}
             </h3>
             <p className="text-xs text-slate-500">
               Buku kas per seksi dengan saldo awal, mutasi riil, dan saldo akhir terpisah.
             </p>
           </div>
           <NavLink
-            to="/reports"
+            to={canViewConsolidatedLpj ? '/reports?tab=semester' : canViewWarta ? '/reports?tab=warta' : '/transactions'}
             className="text-xs font-semibold text-blue-700 hover:text-blue-900 flex items-center gap-1 self-start sm:self-auto"
           >
-            <span>Lihat Buku Kas Konsolidasi</span>
+            <span>{canViewConsolidatedLpj ? 'Lihat Buku Kas Konsolidasi' : 'Lihat Buku Kas & Warta'}</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </NavLink>
         </div>
@@ -1120,67 +1261,69 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ---------------- DIGITAL BANKING & STORAGE ACCOUNTS CARDS ---------------- */}
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-base font-bold text-slate-900 tracking-tight">
-            Tempat Penyimpanan Dana (Brankas Fisik & Rekening Bank)
-          </h3>
-          <p className="text-xs text-slate-500">
-            Diverifikasi melalui Berita Acara Rekonsiliasi fisik & rekening koran bank.
-          </p>
-        </div>
+      {/* ---------------- DIGITAL BANKING & STORAGE ACCOUNTS CARDS (Huria-Wide Roles) ---------------- */}
+      {!isSeksiUser && (
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 tracking-tight">
+              Tempat Penyimpanan Dana (Brankas Fisik & Rekening Bank)
+            </h3>
+            <p className="text-xs text-slate-500">
+              Diverifikasi melalui Berita Acara Rekonsiliasi fisik & rekening koran bank.
+            </p>
+          </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {storageBalances.map((sb, idx) => {
-            const isCash = sb.tipe === 'cash';
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {storageBalances.map((sb, idx) => {
+              const isCash = sb.tipe === 'cash';
 
-            return (
-              <div
-                key={sb.storage_account_id}
-                className={`card-hover p-5 rounded-2xl shadow-sm flex flex-col justify-between space-y-4 ${
-                  isCash
-                    ? 'bg-slate-950 text-white border border-slate-800'
-                    : idx === 1
-                    ? 'bg-[#0B132B] text-white border border-slate-800'
-                    : 'bg-[#0F172A] text-white border border-slate-800'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center text-amber-300">
-                      {isCash ? <Coins className="w-5 h-5" /> : <Building2 className="w-5 h-5" />}
+              return (
+                <div
+                  key={sb.storage_account_id}
+                  className={`card-hover p-5 rounded-2xl shadow-sm flex flex-col justify-between space-y-4 ${
+                    isCash
+                      ? 'bg-slate-950 text-white border border-slate-800'
+                      : idx === 1
+                      ? 'bg-[#0B132B] text-white border border-slate-800'
+                      : 'bg-[#0F172A] text-white border border-slate-800'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center text-amber-300">
+                        {isCash ? <Coins className="w-5 h-5" /> : <Building2 className="w-5 h-5" />}
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-white block">{sb.nama}</span>
+                        <span className="text-[10px] text-slate-300">
+                          {isCash ? 'Uang Tunai Brankas Huria' : `A/N: ${sb.atas_nama || 'HKBP Ressort Hutaraja'}`}
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-xs font-bold text-white block">{sb.nama}</span>
-                      <span className="text-[10px] text-slate-300">
-                        {isCash ? 'Uang Tunai Brankas Huria' : `A/N: ${sb.atas_nama || 'HKBP Ressort Hutaraja'}`}
-                      </span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-white/10 text-slate-300">
+                      {isCash ? 'Fisik' : 'Bank'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-slate-400 block font-mono">
+                      {isCash ? 'LOKASI: KANTOR RESORT' : `NO REK: ${sb.nomor_rekening || '0123-01-000456-50-8'}`}
+                    </span>
+                    <div className="text-2xl font-bold font-mono text-white tabular-nums tracking-tight">
+                      {formatRupiah(sb.saldo_saat_ini)}
                     </div>
                   </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-white/10 text-slate-300">
-                    {isCash ? 'Fisik' : 'Bank'}
-                  </span>
-                </div>
 
-                <div className="space-y-1">
-                  <span className="text-[10px] text-slate-400 block font-mono">
-                    {isCash ? 'LOKASI: KANTOR RESORT' : `NO REK: ${sb.nomor_rekening || '0123-01-000456-50-8'}`}
-                  </span>
-                  <div className="text-2xl font-bold font-mono text-white tabular-nums tracking-tight">
-                    {formatRupiah(sb.saldo_saat_ini)}
+                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-300">
+                    <span>Status: Terverifikasi</span>
+                    <span className="font-semibold text-emerald-400">Aktif & Sinkron</span>
                   </div>
                 </div>
-
-                <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-300">
-                  <span>Status: Terverifikasi</span>
-                  <span className="font-semibold text-emerald-400">Aktif & Sinkron</span>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ---------------- CHARTS SECTION: TREND & COMPOSITION ---------------- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-w-0">

@@ -57,7 +57,7 @@ import { exportToExcel } from '../lib/exportUtils';
 import { PPKU_PANJAR_DEADLINE_DAYS } from '../lib/ppkuRules';
 
 export default function LpjDataPage() {
-  const { currentUser, isAdmin, isBendaharaUmum, isLeader, canInputKas, canApproveKas } = useAuth();
+  const { currentUser, isAdmin, isBendaharaUmum, isLeader, userKasAccess, canInputKas, canApproveKas, canManageLpjData } = useAuth();
   const {
     kasList,
     storageAccounts,
@@ -120,15 +120,43 @@ export default function LpjDataPage() {
   const [calkForm, setCalkForm] = useState(lpjNotes);
   const [calkSavedToast, setCalkSavedToast] = useState(false);
 
+  const isSeksiUser = !isLeader && currentUser?.role === 'pengurus_kas';
+  const myAssignedKasIds = useMemo(() => userKasAccess.map((a) => a.kas_id), [userKasAccess]);
+
+  const visibleKasList = useMemo(
+    () => (isSeksiUser ? kasList.filter((k) => myAssignedKasIds.includes(k.id)) : kasList),
+    [isSeksiUser, kasList, myAssignedKasIds]
+  );
+
+  const editableKasList = useMemo(
+    () => (isAdmin ? kasList : kasList.filter((k) => canInputKas(k.id))),
+    [isAdmin, kasList, canInputKas]
+  );
+
+  const scopedAssets = useMemo(
+    () => (isSeksiUser ? fixedAssets.filter((a) => myAssignedKasIds.includes(a.kas_id)) : fixedAssets),
+    [isSeksiUser, fixedAssets, myAssignedKasIds]
+  );
+
+  const scopedAdvances = useMemo(
+    () => (isSeksiUser ? advances.filter((a) => myAssignedKasIds.includes(a.kas_id)) : advances),
+    [isSeksiUser, advances, myAssignedKasIds]
+  );
+
+  const scopedRp = useMemo(
+    () => (isSeksiUser ? receivablesPayables.filter((r) => myAssignedKasIds.includes(r.kas_id)) : receivablesPayables),
+    [isSeksiUser, receivablesPayables, myAssignedKasIds]
+  );
+
   // ---------------- Check Overdue Advances ----------------
   const todayStr = new Date().toISOString().split('T')[0];
-  const overdueAdvances = advances.filter(
+  const overdueAdvances = scopedAdvances.filter(
     (a) => a.status === 'active' && a.due_date < todayStr
   );
 
   // ---------------- Filtered Data ----------------
   const filteredAssets = useMemo(() => {
-    return fixedAssets.filter((a) => {
+    return scopedAssets.filter((a) => {
       const matchKas = selectedKasFilter === 'all' || a.kas_id === selectedKasFilter;
       const matchSearch =
         a.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -136,10 +164,10 @@ export default function LpjDataPage() {
         a.lokasi.toLowerCase().includes(searchQuery.toLowerCase());
       return matchKas && matchSearch;
     });
-  }, [fixedAssets, selectedKasFilter, searchQuery]);
+  }, [scopedAssets, selectedKasFilter, searchQuery]);
 
   const filteredAdvances = useMemo(() => {
-    return advances.filter((a) => {
+    return scopedAdvances.filter((a) => {
       const matchKas = selectedKasFilter === 'all' || a.kas_id === selectedKasFilter;
       const matchSearch =
         a.recipient_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -147,10 +175,10 @@ export default function LpjDataPage() {
         a.kode.toLowerCase().includes(searchQuery.toLowerCase());
       return matchKas && matchSearch;
     });
-  }, [advances, selectedKasFilter, searchQuery]);
+  }, [scopedAdvances, selectedKasFilter, searchQuery]);
 
   const filteredRp = useMemo(() => {
-    return receivablesPayables.filter((rp) => {
+    return scopedRp.filter((rp) => {
       const matchKas = selectedKasFilter === 'all' || rp.kas_id === selectedKasFilter;
       const matchSearch =
         rp.counterparty_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -158,26 +186,26 @@ export default function LpjDataPage() {
         rp.kode.toLowerCase().includes(searchQuery.toLowerCase());
       return matchKas && matchSearch;
     });
-  }, [receivablesPayables, selectedKasFilter, searchQuery]);
+  }, [scopedRp, selectedKasFilter, searchQuery]);
 
   // ---------------- Metrics ----------------
-  const totalNilaiPerolehanAset = fixedAssets
+  const totalNilaiPerolehanAset = scopedAssets
     .filter((a) => a.status === 'aktif')
     .reduce((sum, a) => sum + Number(a.nilai_perolehan), 0);
 
-  const totalNilaiBukuAset = fixedAssets
+  const totalNilaiBukuAset = scopedAssets
     .filter((a) => a.status === 'aktif')
     .reduce((sum, a) => sum + calculateDepreciation(a, 2026).bookValue, 0);
 
-  const totalPanjarAktif = advances
+  const totalPanjarAktif = scopedAdvances
     .filter((a) => a.status !== 'settled')
     .reduce((sum, a) => sum + Number(a.amount), 0);
 
-  const totalPiutangAktif = receivablesPayables
+  const totalPiutangAktif = scopedRp
     .filter((rp) => rp.type === 'receivable' && rp.status !== 'paid')
     .reduce((sum, rp) => sum + Number(rp.remaining_amount), 0);
 
-  const totalUtangAktif = receivablesPayables
+  const totalUtangAktif = scopedRp
     .filter((rp) => rp.type === 'payable' && rp.status !== 'paid')
     .reduce((sum, rp) => sum + Number(rp.remaining_amount), 0);
 
@@ -207,7 +235,7 @@ export default function LpjDataPage() {
           </p>
         </div>
 
-        {unmigratedCount > 0 && (
+        {canManageLpjData && unmigratedCount > 0 && (
           <button
             onClick={async () => {
               const res = await migrateOpeningPositionsToLpj();
@@ -261,7 +289,7 @@ export default function LpjDataPage() {
             {formatRupiah(totalNilaiPerolehanAset)}
           </div>
           <div className="text-[11px] font-medium text-purple-800/70 mt-0.5">
-            {fixedAssets.filter((a) => a.status === 'aktif').length} unit aktif
+            {scopedAssets.filter((a) => a.status === 'aktif').length} unit aktif
             {lpjSettings.enable_depreciation && ` · Buku: ${formatRupiah(totalNilaiBukuAset)}`}
           </div>
         </div>
@@ -275,7 +303,7 @@ export default function LpjDataPage() {
             {formatRupiah(totalPanjarAktif)}
           </div>
           <div className="text-[11px] font-medium text-amber-800/70 mt-0.5">
-            {advances.filter((a) => a.status === 'active').length} panjar belum SPJ
+            {scopedAdvances.filter((a) => a.status === 'active').length} panjar belum SPJ
             {overdueAdvances.length > 0 && <span className="text-rose-600 font-bold ml-1">({overdueAdvances.length} overdue)</span>}
           </div>
         </div>
@@ -289,7 +317,7 @@ export default function LpjDataPage() {
             {formatRupiah(totalPiutangAktif)}
           </div>
           <div className="text-[11px] font-medium text-emerald-800/70 mt-0.5">
-            {receivablesPayables.filter((r) => r.type === 'receivable' && r.status !== 'paid').length} tagihan belum lunas
+            {scopedRp.filter((r) => r.type === 'receivable' && r.status !== 'paid').length} tagihan belum lunas
           </div>
         </div>
 
@@ -302,7 +330,7 @@ export default function LpjDataPage() {
             {formatRupiah(totalUtangAktif)}
           </div>
           <div className="text-[11px] font-medium text-rose-800/70 mt-0.5">
-            {receivablesPayables.filter((r) => r.type === 'payable' && r.status !== 'paid').length} kewajiban berjalan
+            {scopedRp.filter((r) => r.type === 'payable' && r.status !== 'paid').length} kewajiban berjalan
           </div>
         </div>
       </div>
@@ -320,7 +348,7 @@ export default function LpjDataPage() {
           <Package className="w-4 h-4" />
           <span>Inventaris & Aset Tetap</span>
           <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-600 font-mono">
-            {fixedAssets.length}
+            {scopedAssets.length}
           </span>
         </button>
 
@@ -338,7 +366,7 @@ export default function LpjDataPage() {
             <span className="w-2 h-2 rounded-full bg-rose-500" />
           )}
           <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-600 font-mono">
-            {advances.length}
+            {scopedAdvances.length}
           </span>
         </button>
 
@@ -353,7 +381,7 @@ export default function LpjDataPage() {
           <CreditCard className="w-4 h-4" />
           <span>Piutang & Utang</span>
           <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-600 font-mono">
-            {receivablesPayables.length}
+            {scopedRp.length}
           </span>
         </button>
 
@@ -369,17 +397,19 @@ export default function LpjDataPage() {
           <span>Catatan Laporan Keuangan (CaLK)</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('settings')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap ${
-            activeTab === 'settings'
-              ? 'bg-white border-t-2 border-primary text-primary shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-          }`}
-        >
-          <Layers className="w-4 h-4" />
-          <span>Pengaturan LPJ & Klasifikasi Dana</span>
-        </button>
+        {(isAdmin || isBendaharaUmum) && (
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap ${
+              activeTab === 'settings'
+                ? 'bg-white border-t-2 border-primary text-primary shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Pengaturan LPJ & Klasifikasi Dana</span>
+          </button>
+        )}
       </div>
 
       {/* ---------------- Filter & Search Toolbar (Tabs 1-3) ---------------- */}
@@ -402,8 +432,8 @@ export default function LpjDataPage() {
               onChange={(e) => setSelectedKasFilter(e.target.value)}
               className="text-xs py-1.5 px-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
             >
-              <option value="all">Semua Kas Seksi</option>
-              {kasList.map((k) => (
+              <option value="all">{isSeksiUser ? 'Semua Kas Seksi Saya' : 'Semua Kas Seksi'}</option>
+              {visibleKasList.map((k) => (
                 <option key={k.id} value={k.id}>
                   {k.nama} ({k.kode})
                 </option>
@@ -443,24 +473,26 @@ export default function LpjDataPage() {
                   <Download className="w-3.5 h-3.5" />
                   <span>Ekspor Excel</span>
                 </button>
-                <button
-                  onClick={() => {
-                    setEditingAsset({
-                      kategori: 'elektronik',
-                      kondisi: 'baik',
-                      status: 'aktif',
-                      tanggal_perolehan: new Date().toISOString().split('T')[0],
-                      useful_life_years: 5,
-                      salvage_value: 0,
-                      kas_id: kasList[0]?.id,
-                    });
-                    setIsAssetModalOpen(true);
-                  }}
-                  className="px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary-dark rounded-xl flex items-center gap-1.5 shadow-xs transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ Tambah Aset</span>
-                </button>
+                {canManageLpjData && (
+                  <button
+                    onClick={() => {
+                      setEditingAsset({
+                        kategori: 'elektronik',
+                        kondisi: 'baik',
+                        status: 'aktif',
+                        tanggal_perolehan: new Date().toISOString().split('T')[0],
+                        useful_life_years: 5,
+                        salvage_value: 0,
+                        kas_id: (editableKasList[0] || visibleKasList[0] || kasList[0])?.id,
+                      });
+                      setIsAssetModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary-dark rounded-xl flex items-center gap-1.5 shadow-xs transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Tambah Aset</span>
+                  </button>
+                )}
               </>
             )}
 
@@ -489,22 +521,24 @@ export default function LpjDataPage() {
                   <Download className="w-3.5 h-3.5" />
                   <span>Ekspor Excel</span>
                 </button>
-                <button
-                  onClick={() => {
-                    const due = new Date();
-                    due.setDate(due.getDate() + (lpjSettings.default_advance_days || 14));
-                    setEditingAdvance({
-                      advance_date: new Date().toISOString().split('T')[0],
-                      due_date: due.toISOString().split('T')[0],
-                      kas_id: kasList[0]?.id,
-                    });
-                    setIsAdvanceModalOpen(true);
-                  }}
-                  className="px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary-dark rounded-xl flex items-center gap-1.5 shadow-xs transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ Catat Panjar</span>
-                </button>
+                {canManageLpjData && (
+                  <button
+                    onClick={() => {
+                      const due = new Date();
+                      due.setDate(due.getDate() + (lpjSettings.default_advance_days || 14));
+                      setEditingAdvance({
+                        advance_date: new Date().toISOString().split('T')[0],
+                        due_date: due.toISOString().split('T')[0],
+                        kas_id: (editableKasList[0] || visibleKasList[0] || kasList[0])?.id,
+                      });
+                      setIsAdvanceModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary-dark rounded-xl flex items-center gap-1.5 shadow-xs transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Catat Panjar</span>
+                  </button>
+                )}
               </>
             )}
 
@@ -535,20 +569,22 @@ export default function LpjDataPage() {
                   <Download className="w-3.5 h-3.5" />
                   <span>Ekspor Excel</span>
                 </button>
-                <button
-                  onClick={() => {
-                    setEditingRp({
-                      type: 'receivable',
-                      issue_date: new Date().toISOString().split('T')[0],
-                      kas_id: kasList[0]?.id,
-                    });
-                    setIsRpModalOpen(true);
-                  }}
-                  className="px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary-dark rounded-xl flex items-center gap-1.5 shadow-xs transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ Catat Piutang/Utang</span>
-                </button>
+                {canManageLpjData && (
+                  <button
+                    onClick={() => {
+                      setEditingRp({
+                        type: 'receivable',
+                        issue_date: new Date().toISOString().split('T')[0],
+                        kas_id: (editableKasList[0] || visibleKasList[0] || kasList[0])?.id,
+                      });
+                      setIsRpModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary-dark rounded-xl flex items-center gap-1.5 shadow-xs transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Catat Piutang/Utang</span>
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -587,7 +623,8 @@ export default function LpjDataPage() {
                     const dep = calculateDepreciation(asset, 2026);
                     const isPendingApproval =
                       asset.status === 'diajukan_penghapusan' || asset.status === 'diajukan_hibah';
-                    const canUserApprove = canApproveKas(asset.kas_id) || isLeader || isAdmin;
+                    const canUserApprove = canApproveKas(asset.kas_id) || isAdmin;
+                    const canUserEditAsset = isAdmin || canInputKas(asset.kas_id);
 
                     return (
                       <tr key={asset.id} className="hover:bg-slate-50/50 transition-colors">
@@ -670,7 +707,7 @@ export default function LpjDataPage() {
                             ) : (
                               <span className="text-[10px] text-slate-400">Menunggu Ketua</span>
                             )
-                          ) : (
+                          ) : canUserEditAsset ? (
                             <>
                               <button
                                 onClick={() => {
@@ -695,6 +732,8 @@ export default function LpjDataPage() {
                                 </button>
                               )}
                             </>
+                          ) : (
+                            <span className="text-[10px] text-slate-400">Tercatat</span>
                           )}
                         </td>
                       </tr>
@@ -744,7 +783,8 @@ export default function LpjDataPage() {
                     const kas = kasList.find((k) => k.id === adv.kas_id);
                     const isOverdue = adv.status === 'active' && adv.due_date < todayStr;
                     const st = advanceSettlements.find((s) => s.advance_id === adv.id);
-                    const canUserApprove = canApproveKas(adv.kas_id) || isLeader || isAdmin;
+                    const canUserApprove = canApproveKas(adv.kas_id) || isAdmin;
+                    const canUserSubmitSpj = isAdmin || canInputKas(adv.kas_id);
 
                     return (
                       <tr key={adv.id} className="hover:bg-slate-50/50 transition-colors">
@@ -829,7 +869,7 @@ export default function LpjDataPage() {
                             ) : (
                               <span className="text-[11px] text-slate-400">Menunggu Ketua</span>
                             )
-                          ) : (
+                          ) : canUserSubmitSpj ? (
                             <button
                               onClick={() => {
                                 setSettlementModalAdvance(adv);
@@ -841,6 +881,8 @@ export default function LpjDataPage() {
                             >
                               Buat SPJ Realisasi
                             </button>
+                          ) : (
+                            <span className="text-[11px] text-slate-400">Menunggu SPJ</span>
                           )}
                         </td>
                       </tr>
@@ -950,18 +992,22 @@ export default function LpjDataPage() {
                         </td>
                         <td className="py-3 px-4 text-center whitespace-nowrap space-x-1">
                           {rp.status !== 'paid' ? (
-                            <button
-                              onClick={() => {
-                                setPaymentModalRp(rp);
-                                setPaymentAmountInput(String(rp.remaining_amount));
-                                setPaymentDateInput(new Date().toISOString().split('T')[0]);
-                                setPaymentStorageId(storageAccounts[0]?.id || '');
-                                setPaymentNotesInput('');
-                              }}
-                              className="px-2.5 py-1 bg-primary hover:bg-primary-dark text-white text-xs font-semibold rounded-lg shadow-xs transition-colors"
-                            >
-                              Catat Pelunasan
-                            </button>
+                            isAdmin || canInputKas(rp.kas_id) ? (
+                              <button
+                                onClick={() => {
+                                  setPaymentModalRp(rp);
+                                  setPaymentAmountInput(String(rp.remaining_amount));
+                                  setPaymentDateInput(new Date().toISOString().split('T')[0]);
+                                  setPaymentStorageId(storageAccounts[0]?.id || '');
+                                  setPaymentNotesInput('');
+                                }}
+                                className="px-2.5 py-1 bg-primary hover:bg-primary-dark text-white text-xs font-semibold rounded-lg shadow-xs transition-colors"
+                              >
+                                Catat Pelunasan
+                              </button>
+                            ) : (
+                              <span className="text-[11px] text-slate-400">Belum Lunas</span>
+                            )
                           ) : (
                             <span className="text-[11px] text-emerald-600 font-medium">Lunas</span>
                           )}
@@ -1002,9 +1048,10 @@ export default function LpjDataPage() {
               </label>
               <textarea
                 rows={3}
+                readOnly={!canManageLpjData}
                 value={calkForm.accounting_basis}
                 onChange={(e) => setCalkForm({ ...calkForm, accounting_basis: e.target.value })}
-                className="w-full p-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
+                className="w-full p-3 text-xs bg-slate-50 read-only:bg-slate-100/70 read-only:text-slate-600 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
               />
             </div>
 
@@ -1014,9 +1061,10 @@ export default function LpjDataPage() {
               </label>
               <textarea
                 rows={3}
+                readOnly={!canManageLpjData}
                 value={calkForm.accounting_policies}
                 onChange={(e) => setCalkForm({ ...calkForm, accounting_policies: e.target.value })}
-                className="w-full p-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
+                className="w-full p-3 text-xs bg-slate-50 read-only:bg-slate-100/70 read-only:text-slate-600 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
               />
             </div>
 
@@ -1026,10 +1074,11 @@ export default function LpjDataPage() {
               </label>
               <textarea
                 rows={3}
+                readOnly={!canManageLpjData}
                 value={calkForm.significant_items_notes || ''}
                 onChange={(e) => setCalkForm({ ...calkForm, significant_items_notes: e.target.value })}
                 placeholder="Rincian pos persembahan perpuluhan, pelean perjamuan, rekening penyimpanan kas..."
-                className="w-full p-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
+                className="w-full p-3 text-xs bg-slate-50 read-only:bg-slate-100/70 read-only:text-slate-600 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
               />
             </div>
 
@@ -1039,10 +1088,11 @@ export default function LpjDataPage() {
               </label>
               <textarea
                 rows={3}
+                readOnly={!canManageLpjData}
                 value={calkForm.budget_variance_notes || ''}
                 onChange={(e) => setCalkForm({ ...calkForm, budget_variance_notes: e.target.value })}
                 placeholder="Penjelasan pos penerimaan atau pos belanja yang realisasinya melenceng jauh dari APBG..."
-                className="w-full p-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
+                className="w-full p-3 text-xs bg-slate-50 read-only:bg-slate-100/70 read-only:text-slate-600 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
               />
             </div>
 
@@ -1052,10 +1102,11 @@ export default function LpjDataPage() {
               </label>
               <textarea
                 rows={2}
+                readOnly={!canManageLpjData}
                 value={calkForm.significant_events || ''}
                 onChange={(e) => setCalkForm({ ...calkForm, significant_events: e.target.value })}
                 placeholder="Peristiwa jubileum, renovasi besar, pergantian pengurus ressort..."
-                className="w-full p-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
+                className="w-full p-3 text-xs bg-slate-50 read-only:bg-slate-100/70 read-only:text-slate-600 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
               />
             </div>
 
@@ -1065,10 +1116,11 @@ export default function LpjDataPage() {
               </label>
               <textarea
                 rows={2}
+                readOnly={!canManageLpjData}
                 value={calkForm.restricted_funds_notes || ''}
                 onChange={(e) => setCalkForm({ ...calkForm, restricted_funds_notes: e.target.value })}
                 placeholder="Penjelasan amanah peruntukan dana Diakonia, Kas Pembangunan, atau titipan beasiswa..."
-                className="w-full p-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
+                className="w-full p-3 text-xs bg-slate-50 read-only:bg-slate-100/70 read-only:text-slate-600 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
               />
             </div>
 
@@ -1078,31 +1130,34 @@ export default function LpjDataPage() {
               </label>
               <textarea
                 rows={2}
+                readOnly={!canManageLpjData}
                 value={calkForm.post_reporting_events || ''}
                 onChange={(e) => setCalkForm({ ...calkForm, post_reporting_events: e.target.value })}
                 placeholder="Kejadian material setelah tanggal penutupan pembukuan yang perlu diketahui jemaat..."
-                className="w-full p-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
+                className="w-full p-3 text-xs bg-slate-50 read-only:bg-slate-100/70 read-only:text-slate-600 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
               />
             </div>
           </div>
 
-          <div className="flex justify-end pt-4 border-t border-slate-100">
-            <button
-              onClick={async () => {
-                await saveLpjNotes(calkForm);
-                setCalkSavedToast(true);
-                setTimeout(() => setCalkSavedToast(false), 3000);
-              }}
-              className="px-5 py-2.5 bg-primary hover:bg-primary-dark text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
-            >
-              Simpan Perubahan CaLK
-            </button>
-          </div>
+          {canManageLpjData && (
+            <div className="flex justify-end pt-4 border-t border-slate-100">
+              <button
+                onClick={async () => {
+                  await saveLpjNotes(calkForm);
+                  setCalkSavedToast(true);
+                  setTimeout(() => setCalkSavedToast(false), 3000);
+                }}
+                className="px-5 py-2.5 bg-primary hover:bg-primary-dark text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
+              >
+                Simpan Perubahan CaLK
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {/* ---------------- TAB 5: PENGATURAN LPJ & KLASIFIKASI DANA ---------------- */}
-      {activeTab === 'settings' && (
+      {activeTab === 'settings' && (isAdmin || isBendaharaUmum) && (
         <div className="space-y-6">
           {/* Klasifikasi Dana per Kas */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
@@ -1286,11 +1341,11 @@ export default function LpjDataPage() {
                 <div>
                   <label className="block text-slate-600 font-semibold mb-1">Kas Seksi Pengelola *</label>
                   <select
-                    value={editingAsset.kas_id || kasList[0]?.id}
+                    value={editingAsset.kas_id || (editableKasList[0] || visibleKasList[0] || kasList[0])?.id}
                     onChange={(e) => setEditingAsset({ ...editingAsset, kas_id: e.target.value })}
                     className="w-full py-2 px-3 border border-slate-200 rounded-xl focus:outline-hidden"
                   >
-                    {kasList.map((k) => (
+                    {(editableKasList.length > 0 ? editableKasList : visibleKasList).map((k) => (
                       <option key={k.id} value={k.id}>
                         {k.nama}
                       </option>
@@ -1497,11 +1552,11 @@ export default function LpjDataPage() {
               <div>
                 <label className="block text-slate-600 font-semibold mb-1">Kas Seksi Sumber Dana *</label>
                 <select
-                  value={editingAdvance.kas_id || kasList[0]?.id}
+                  value={editingAdvance.kas_id || (editableKasList[0] || visibleKasList[0] || kasList[0])?.id}
                   onChange={(e) => setEditingAdvance({ ...editingAdvance, kas_id: e.target.value })}
                   className="w-full py-2 px-3 border border-slate-200 rounded-xl"
                 >
-                  {kasList.map((k) => (
+                  {(editableKasList.length > 0 ? editableKasList : visibleKasList).map((k) => (
                     <option key={k.id} value={k.id}>
                       {k.nama}
                     </option>
@@ -1748,11 +1803,11 @@ export default function LpjDataPage() {
               <div>
                 <label className="block text-slate-600 font-semibold mb-1">Kas Seksi Terkait *</label>
                 <select
-                  value={editingRp.kas_id || kasList[0]?.id}
+                  value={editingRp.kas_id || (editableKasList[0] || visibleKasList[0] || kasList[0])?.id}
                   onChange={(e) => setEditingRp({ ...editingRp, kas_id: e.target.value })}
                   className="w-full py-2 px-3 border border-slate-200 rounded-xl"
                 >
-                  {kasList.map((k) => (
+                  {(editableKasList.length > 0 ? editableKasList : visibleKasList).map((k) => (
                     <option key={k.id} value={k.id}>
                       {k.nama}
                     </option>

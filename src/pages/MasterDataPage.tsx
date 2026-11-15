@@ -379,7 +379,7 @@ export const MasterDataPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-1">
             <Database className="w-4 h-4 text-primary" />
-            <span>Pengaturan Organisasi & Hak Akses SIKU HKBP</span>
+            <span>Pengaturan Organisasi & Hak Akses SISKEU HKBP</span>
           </div>
           <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
             Kelola Data Master HKBP Hutaraja
@@ -714,7 +714,7 @@ export const MasterDataPage: React.FC = () => {
               <div>
                 <h4 className="font-bold text-sm text-slate-900">Daftar Periode Tahun Anggaran Huria</h4>
                 <p className="text-xs text-slate-500">
-                  Arsip dan rencana tahun anggaran yang terdaftar pada sistem SIKU HKBP
+                  Arsip dan rencana tahun anggaran yang terdaftar pada sistem SISKEU HKBP
                 </p>
               </div>
               <span className="text-xs font-mono text-slate-500 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200/60">

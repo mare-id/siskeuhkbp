@@ -97,27 +97,40 @@ export const ReportsPage: React.FC = () => {
     fiscalYears,
   } = useData();
 
-  const { currentUser, isLeader, userKasAccess, isAdmin } = useAuth();
+  const {
+    currentUser,
+    isLeader,
+    userKasAccess,
+    isAdmin,
+    isAuditor,
+    canViewWarta,
+    canViewConsolidatedLpj,
+    canViewBpsk,
+  } = useAuth();
   const isPastor = currentUser?.role === 'pendeta_ressort';
   const isSecretary = currentUser?.role === 'sekretaris';
+  const isSeksiOnly = !isLeader && !isAuditor && !isAdmin && currentUser?.role === 'pengurus_kas';
 
   const [searchParams] = useSearchParams();
 
   // Main Tabs
-  const [activeTab, setActiveTab] = useState<'warta' | 'semester' | 'lpj' | 'pelaporan' | 'buku_kas' | 'gabungan' | 'rekonsiliasi' | 'bpsk'>('warta');
+  const defaultAllowedTab = canViewWarta ? 'warta' : canViewConsolidatedLpj ? 'semester' : 'buku_kas';
+  const [activeTab, setActiveTab] = useState<'warta' | 'semester' | 'lpj' | 'pelaporan' | 'buku_kas' | 'gabungan' | 'rekonsiliasi' | 'bpsk'>(defaultAllowedTab);
 
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'bpsk') {
+    if (tabParam === 'bpsk' && canViewBpsk) {
       setActiveTab('bpsk');
-    } else if (tabParam === 'warta') {
+    } else if (tabParam === 'warta' && canViewWarta) {
       setActiveTab('warta');
-    } else if (tabParam === 'semester') {
+    } else if (tabParam === 'semester' && canViewConsolidatedLpj) {
       setActiveTab('semester');
-    } else if (tabParam === 'lpj') {
+    } else if (tabParam === 'lpj' && canViewConsolidatedLpj) {
       setActiveTab('lpj');
+    } else {
+      setActiveTab(defaultAllowedTab);
     }
-  }, [searchParams]);
+  }, [searchParams, canViewBpsk, canViewWarta, canViewConsolidatedLpj, defaultAllowedTab]);
 
   // Sub-navigation for LPJ 12 sections
   const [activeLpjSection, setActiveLpjSection] = useState<number>(3); // Default to Posisi Keuangan (Neraca)
@@ -163,11 +176,17 @@ export const ReportsPage: React.FC = () => {
   );
 
   // Available kas based on role
-  const viewableKas = isLeader
-    ? kasList
-    : kasList.filter((k) => userKasAccess.some((a) => a.kas_id === k.id));
+  const viewableKas = isSeksiOnly
+    ? kasList.filter((k) => userKasAccess.some((a) => a.kas_id === k.id))
+    : kasList;
 
-  const currentKas = kasList.find((k) => k.id === selectedKasId) || kasList[0];
+  useEffect(() => {
+    if (viewableKas.length > 0 && !viewableKas.some((k) => k.id === selectedKasId)) {
+      setSelectedKasId(viewableKas[0].id);
+    }
+  }, [viewableKas, selectedKasId]);
+
+  const currentKas = viewableKas.find((k) => k.id === selectedKasId) || viewableKas[0] || kasList[0];
 
   // Calculated Financial Statements (ISAK 35)
   const posisiKeuanganData = useMemo(() => getPosisiKeuangan(selectedYear), [getPosisiKeuangan, selectedYear]);
@@ -306,7 +325,7 @@ export const ReportsPage: React.FC = () => {
     const weekYear = parseInt(weekStartStr.slice(0, 4), 10);
     const yearStartStr = `${weekYear}-01-01`;
 
-    const activeKas = kasList.filter((k) => k.is_active !== false);
+    const activeKas = (isSeksiOnly ? viewableKas : kasList).filter((k) => k.is_active !== false);
 
     const reports: KasWeeklyReportData[] = activeKas.map((k) => {
       const openingYearAmount = openingBalances
@@ -377,13 +396,14 @@ export const ReportsPage: React.FC = () => {
 
     const pendingInWeek = transactions.filter(
       (tx) =>
+        activeKas.some((k) => k.id === tx.kas_id) &&
         (tx.status === 'draft' || tx.status === 'submitted') &&
         tx.tanggal >= weekStartStr &&
         tx.tanggal <= weekEndStr
     );
 
     return { reports, totals, pendingInWeek };
-  }, [kasList, openingBalances, transactions, wartaRange]);
+  }, [kasList, viewableKas, isSeksiOnly, openingBalances, transactions, wartaRange]);
 
   const handleCopyWeeklyWartaText = () => {
     const { weekStartStr, weekEndStr, announcementSundayStr } = wartaRange;
@@ -532,53 +552,59 @@ export const ReportsPage: React.FC = () => {
 
       {/* Main Tabs Segmented Bar */}
       <div className="flex items-center gap-1.5 p-1.5 bg-slate-100/90 rounded-xl border border-slate-200/90 overflow-x-auto scrollbar-none">
-        <button
-          onClick={() => setActiveTab('warta')}
-          className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
-            activeTab === 'warta'
-              ? 'bg-[#0B132B] text-white shadow-2xs border border-slate-800 font-bold'
-              : 'text-slate-700 hover:text-slate-900 hover:bg-white/70'
-          }`}
-        >
-          <Calendar className="w-4 h-4 text-amber-400" />
-          <span>Warta Keuangan (Minggu–Sabtu)</span>
-        </button>
+        {canViewWarta && (
+          <button
+            onClick={() => setActiveTab('warta')}
+            className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+              activeTab === 'warta'
+                ? 'bg-[#0B132B] text-white shadow-2xs border border-slate-800 font-bold'
+                : 'text-slate-700 hover:text-slate-900 hover:bg-white/70'
+            }`}
+          >
+            <Calendar className="w-4 h-4 text-amber-400" />
+            <span>Warta Keuangan (Minggu–Sabtu)</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('semester')}
-          className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
-            activeTab === 'semester'
-              ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          <span>Laporan Semester</span>
-        </button>
+        {canViewConsolidatedLpj && (
+          <>
+            <button
+              onClick={() => setActiveTab('semester')}
+              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+                activeTab === 'semester'
+                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span>Laporan Semester</span>
+            </button>
 
-        <button
-          onClick={() => setActiveTab('lpj')}
-          className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
-            activeTab === 'lpj'
-              ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Award className="w-4 h-4" />
-          <span>LPJ Tahunan (ISAK 35)</span>
-        </button>
+            <button
+              onClick={() => setActiveTab('lpj')}
+              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+                activeTab === 'lpj'
+                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Award className="w-4 h-4" />
+              <span>LPJ Tahunan (ISAK 35)</span>
+            </button>
 
-        <button
-          onClick={() => setActiveTab('pelaporan')}
-          className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
-            activeTab === 'pelaporan'
-              ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <BookmarkCheck className="w-4 h-4" />
-          <span>Pelaporan Semester</span>
-        </button>
+            <button
+              onClick={() => setActiveTab('pelaporan')}
+              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+                activeTab === 'pelaporan'
+                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <BookmarkCheck className="w-4 h-4" />
+              <span>Pelaporan Semester</span>
+            </button>
+          </>
+        )}
 
         <button
           onClick={() => setActiveTab('buku_kas')}
@@ -592,41 +618,47 @@ export const ReportsPage: React.FC = () => {
           <span>Buku Kas Seksi</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('gabungan')}
-          className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
-            activeTab === 'gabungan'
-              ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Scale className="w-4 h-4" />
-          <span>Konsolidasi Kas</span>
-        </button>
+        {canViewConsolidatedLpj && (
+          <>
+            <button
+              onClick={() => setActiveTab('gabungan')}
+              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+                activeTab === 'gabungan'
+                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Scale className="w-4 h-4" />
+              <span>Konsolidasi Kas</span>
+            </button>
 
-        <button
-          onClick={() => setActiveTab('rekonsiliasi')}
-          className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
-            activeTab === 'rekonsiliasi'
-              ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <FileCheck className="w-4 h-4" />
-          <span>Rekonsiliasi Bank & Kas</span>
-        </button>
+            <button
+              onClick={() => setActiveTab('rekonsiliasi')}
+              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+                activeTab === 'rekonsiliasi'
+                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <FileCheck className="w-4 h-4" />
+              <span>Rekonsiliasi Bank & Kas</span>
+            </button>
+          </>
+        )}
 
-        <button
-          onClick={() => setActiveTab('bpsk')}
-          className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
-            activeTab === 'bpsk'
-              ? 'bg-blue-900 text-white shadow-2xs border border-blue-800 font-bold'
-              : 'text-blue-900 hover:bg-blue-50 font-bold'
-          }`}
-        >
-          <Landmark className="w-4 h-4" />
-          <span>Sentralisasi BPSK HKBP (55% / 45%)</span>
-        </button>
+        {canViewBpsk && (
+          <button
+            onClick={() => setActiveTab('bpsk')}
+            className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+              activeTab === 'bpsk'
+                ? 'bg-blue-900 text-white shadow-2xs border border-blue-800 font-bold'
+                : 'text-blue-900 hover:bg-blue-50 font-bold'
+            }`}
+          >
+            <Landmark className="w-4 h-4" />
+            <span>Sentralisasi BPSK HKBP (55% / 45%)</span>
+          </button>
+        )}
       </div>
 
       {/* ========================================================================= */}

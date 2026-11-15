@@ -1,5 +1,5 @@
 -- =============================================================================
--- SIKU HKBP HUTARAJA - COMPLETE FULL DATABASE SCHEMA FOR SUPABASE (PostgreSQL)
+-- SISKEU HKBP HUTARAJA - COMPLETE FULL DATABASE SCHEMA FOR SUPABASE (PostgreSQL)
 -- =============================================================================
 -- Skrip SQL ini bersifat IDEMPOTENT (aman dijalankan ulang berkali-kali).
 -- Mencakup seluruh 38 tabel, tipe data, enum HKBP, upgrade kolom otomatis,
@@ -1086,7 +1086,7 @@ on conflict (id) do nothing;
 
 -- Audit Engagements Awal
 insert into public.audit_engagements (id, tahun, jenis, judul, deskripsi, semester_report_id, lpj_id, status, dibuka_pada, batas_waktu, combined_with_lpj, created_by) values
-('eng-opening', 2026, 'opening', 'Pemeriksaan Saldo Awal & Pembukaan Buku SIKU 2026', 'Audit independen atas migrasi saldo pindahan buku manual ke sistem digital per 1 Januari 2026', null, null, 'completed', '2026-01-02', '2026-01-10', false, 'user-audit-ketua'),
+('eng-opening', 2026, 'opening', 'Pemeriksaan Saldo Awal & Pembukaan Buku SISKEU 2026', 'Audit independen atas migrasi saldo pindahan buku manual ke sistem digital per 1 Januari 2026', null, null, 'completed', '2026-01-02', '2026-01-10', false, 'user-audit-ketua'),
 ('eng-sem1', 2026, 'semester_1', 'Pemeriksaan Keuangan Semester I Tahun 2026', 'Audit berkala realisasi pendapatan, belanja, kas fisik, dan panjar periode Januari - Juni 2026', 'sem-rep-1', null, 'completed', '2026-07-01', '2026-07-15', false, 'user-audit-ketua'),
 ('eng-tahunan', 2026, 'tahunan', 'Pemeriksaan Laporan Pertanggungjawaban (LPJ) Tahunan ISAK 35 Tahun 2026', 'Audit menyeluruh laporan keuangan tahunan huria dan ressort sebelum diajukan ke Rapat Huria', null, 'lpj-rep-2026', 'in_progress', '2026-12-15', '2027-01-15', true, 'user-audit-ketua')
 on conflict (id) do nothing;

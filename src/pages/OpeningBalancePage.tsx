@@ -49,7 +49,7 @@ import { formatRupiah, formatDateIndo } from '../lib/formatters';
 import { generateBeritaAcaraPembukaanPDF } from '../lib/exportUtils';
 
 export default function OpeningBalancePage() {
-  const { currentUser, canInputKas, canApproveKas, isAdmin, isBendaharaUmum, isLeader } = useAuth();
+  const { currentUser, userKasAccess, canInputKas, canApproveKas, isAdmin, isBendaharaUmum, isLeader, canRecordTransactions } = useAuth();
   const {
     kasList,
     storageAccounts,
@@ -117,14 +117,25 @@ export default function OpeningBalancePage() {
     errorRows: { rawRow: any; error: string }[];
   } | null>(null);
 
+  const isSeksiUser = !isLeader && !isAdmin && currentUser?.role === 'pengurus_kas';
+  const myAssignedKasIds = useMemo(() => userKasAccess.map((a) => a.kas_id), [userKasAccess]);
+  const visibleKasList = useMemo(
+    () => (isSeksiUser ? kasList.filter((k) => myAssignedKasIds.includes(k.id)) : kasList),
+    [isSeksiUser, kasList, myAssignedKasIds]
+  );
+  const editableKasList = useMemo(
+    () => (isAdmin ? kasList : kasList.filter((k) => canInputKas(k.id))),
+    [isAdmin, kasList, canInputKas]
+  );
+
   // Prior Year Input State
-  const [priorYearKasId, setPriorYearKasId] = useState(kasList[0]?.id || '');
+  const [priorYearKasId, setPriorYearKasId] = useState(visibleKasList[0]?.id || kasList[0]?.id || '');
 
   // Progress Calculations
-  const totalKasCount = kasList.length;
+  const totalKasCount = visibleKasList.length;
   const lockedKasCount = useMemo(() => {
-    return kasList.filter((k) => isKasOpeningLocked(k.id)).length;
-  }, [kasList, isKasOpeningLocked]);
+    return visibleKasList.filter((k) => isKasOpeningLocked(k.id)).length;
+  }, [visibleKasList, isKasOpeningLocked]);
   const progressPct = totalKasCount > 0 ? Math.round((lockedKasCount / totalKasCount) * 100) : 0;
 
   // Selected Wizard Kas
@@ -458,15 +469,17 @@ export default function OpeningBalancePage() {
           <Layers className="w-4 h-4 text-[#7C9CF5]" />
           Status Pembukaan per Kas
         </button>
-        <button
-          onClick={() => setActiveTab('excel')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-            activeTab === 'excel' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-          Impor dari Excel
-        </button>
+        {canRecordTransactions && (
+          <button
+            onClick={() => setActiveTab('excel')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+              activeTab === 'excel' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            Impor dari Excel
+          </button>
+        )}
         <button
           onClick={() => setActiveTab('adjustments')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
@@ -515,7 +528,7 @@ export default function OpeningBalancePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-gray-700">
-                  {kasList.map((k) => {
+                  {visibleKasList.map((k) => {
                     const status = getOpeningStatusForKas(k.id);
                     const isLocked = status === 'locked';
                     const entries = openingEntries.filter((e) => e.kas_id === k.id);
@@ -523,7 +536,7 @@ export default function OpeningBalancePage() {
                     const hasDiscrepancy = entries.some((e) => e.difference !== 0);
 
                     const canInput = canInputKas(k.id) || isAdmin;
-                    const canApprove = canApproveKas(k.id) || isLeader || isAdmin;
+                    const canApprove = canApproveKas(k.id) || isAdmin;
 
                     return (
                       <tr key={k.id} className="hover:bg-gray-50/50 transition-colors">
@@ -743,20 +756,22 @@ export default function OpeningBalancePage() {
               <p className="text-xs text-gray-500">Koreksi audit saldo awal tahun {openingSetup.first_year}</p>
             </div>
 
-            <button
-              onClick={() => {
-                setAdjKasId(kasList[0]?.id || '');
-                setAdjStorageId(storageAccounts[0]?.id || '');
-                setAdjAmount(0);
-                setAdjReason('');
-                setAdjDocName('');
-                setShowAdjModal(true);
-              }}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Ajukan Penyesuaian
-            </button>
+            {canRecordTransactions && (
+              <button
+                onClick={() => {
+                  setAdjKasId((editableKasList[0] || visibleKasList[0] || kasList[0])?.id || '');
+                  setAdjStorageId(storageAccounts[0]?.id || '');
+                  setAdjAmount(0);
+                  setAdjReason('');
+                  setAdjDocName('');
+                  setShowAdjModal(true);
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Ajukan Penyesuaian
+              </button>
+            )}
           </div>
 
           {/* Adjustments Table */}
@@ -879,7 +894,7 @@ export default function OpeningBalancePage() {
                   onChange={(e) => setPriorYearKasId(e.target.value)}
                   className="px-3.5 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm font-semibold text-gray-800"
                 >
-                  {kasList.map((k) => (
+                  {visibleKasList.map((k) => (
                     <option key={k.id} value={k.id}>
                       {k.nama}
                     </option>
@@ -1475,7 +1490,7 @@ export default function OpeningBalancePage() {
                   onChange={(e) => setAdjKasId(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-gray-200"
                 >
-                  {kasList.map((k) => (
+                  {(editableKasList.length > 0 ? editableKasList : visibleKasList).map((k) => (
                     <option key={k.id} value={k.id}>
                       {k.nama}
                     </option>

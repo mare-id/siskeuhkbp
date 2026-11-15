@@ -668,7 +668,7 @@ export function generateBeritaAcaraPembukaanPDF(params: {
   // Preamble narrative
   doc.setFontSize(8.5);
   doc.setTextColor(50, 55, 75);
-  const narrative = `Pada tanggal ${formatDateIndo(goLiveDate)}, bertempat di Kantor HKBP Ressort Hutaraja, telah dilakukan rekonsiliasi dan verifikasi saldo akhir buku kas manual per 31 Desember ${tahun - 1} untuk ditetapkan sebagai Saldo Pindahan (Saldo Awal) resmi pembukuan komputerisasi SIKU HKBP Ressort Hutaraja dengan rincian sebagai berikut:`;
+  const narrative = `Pada tanggal ${formatDateIndo(goLiveDate)}, bertempat di Kantor HKBP Ressort Hutaraja, telah dilakukan rekonsiliasi dan verifikasi saldo akhir buku kas manual per 31 Desember ${tahun - 1} untuk ditetapkan sebagai Saldo Pindahan (Saldo Awal) resmi pembukuan komputerisasi SISKEU HKBP Ressort Hutaraja dengan rincian sebagai berikut:`;
   const splitNarrative = doc.splitTextToSize(narrative, 180);
   doc.text(splitNarrative, 15, afterHeaderY + 13);
 

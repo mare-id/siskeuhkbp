@@ -59,6 +59,13 @@ export const AppLayout: React.FC = () => {
     canClosePeriod,
     canManageSettings,
     canManageMasterData,
+    canViewBpsk,
+    canViewAuditModule,
+    canViewAuditTrail,
+    canViewWarta,
+    canViewConsolidatedLpj,
+    canManageBudget,
+    canManageOpeningBook,
   } = useAuth();
   const { getPendingTransactionsCount, settings, auditFindings } = useData();
   const navigate = useNavigate();
@@ -90,7 +97,7 @@ export const AppLayout: React.FC = () => {
     },
     {
       to: '/transactions',
-      label: 'Transaksi Kas',
+      label: isAuditor ? 'Uji Bukti Transaksi' : 'Transaksi Kas',
       icon: ReceiptText,
       allowed: true,
     },
@@ -98,69 +105,69 @@ export const AppLayout: React.FC = () => {
       to: '/budget',
       label: 'Anggaran (APBG)',
       icon: Calculator,
-      allowed: true,
+      allowed: canManageBudget,
     },
     {
       to: '/opening-balance',
       label: 'Pembukaan Buku',
       icon: BookOpen,
-      allowed: !isAuditor && !isMajelis,
+      allowed: canManageOpeningBook,
     },
     {
       to: '/approvals',
       label: 'Persetujuan Ketua',
       icon: CheckSquare,
       badge: pendingCount > 0 ? pendingCount : null,
-      allowed: canApprove || isAdmin,
+      allowed: isAdmin || canApprove,
     },
     {
       to: '/reports?tab=warta',
       label: 'Warta Keuangan Mingguan',
       icon: FileText,
-      allowed: true,
+      allowed: canViewWarta,
     },
     {
       to: '/reports?tab=semester',
       label: 'Laporan & LPJ ISAK 35',
       icon: FileSpreadsheet,
-      allowed: true,
+      allowed: canViewConsolidatedLpj,
     },
     {
       to: '/reports?tab=bpsk',
       label: 'Sentralisasi BPSK (55/45)',
       icon: Landmark,
-      allowed: true,
+      allowed: canViewBpsk,
     },
     {
       to: '/lpj-data',
       label: 'Data Pendukung LPJ',
       icon: FolderArchive,
-      allowed: true,
+      allowed: isAdmin || isBendaharaUmum || isPengurusKas || isPendeta || isSekretaris || isMajelis || isAuditor,
     },
     {
       to: '/audit',
       label: 'Badan Audit Huria',
       icon: Shield,
       badge: openFindingsCount > 0 ? openFindingsCount : null,
-      allowed: isAuditor || isAdmin || isLeader,
+      allowed: canViewAuditModule,
     },
     {
       to: '/closing',
       label: 'Tutup Buku',
       icon: Lock,
-      allowed: canClosePeriod || isAdmin,
+      allowed: canClosePeriod,
     },
     {
       to: '/master',
       label: 'Data Master',
       icon: Database,
-      allowed: canManageMasterData || isAdmin,
+      allowed: canManageMasterData,
     },
     {
       to: '/audit-logs',
       label: 'Audit Trail',
       icon: History,
-      allowed: isAdmin || isBendaharaUmum || isPendeta || isSekretaris || isAuditor,
+      allowed: canViewAuditTrail,
     },
     {
       to: '/settings',
@@ -189,7 +196,7 @@ export const AppLayout: React.FC = () => {
             <h1 className="font-bold text-white text-sm leading-tight truncate">
               {settings.church_name}
             </h1>
-            <p className="text-[11px] font-medium text-slate-400 truncate">SIKU HKBP Hutaraja · PPKU</p>
+            <p className="text-[11px] font-medium text-slate-400 truncate">SISKEU HKBP Hutaraja · PPKU</p>
           </div>
         </div>
 
@@ -251,23 +258,40 @@ export const AppLayout: React.FC = () => {
           ) : isSekretaris ? (
             <>
               <NavLink
-                to="/reports"
+                to="/reports?tab=warta"
                 className="w-full py-2.5 px-4 bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98 text-center"
               >
                 <FileSpreadsheet className="w-4 h-4" />
                 <span>Materi Warta & LPJ</span>
               </NavLink>
               <NavLink
+                to="/approvals"
+                className="w-full py-2 px-4 bg-slate-900/90 hover:bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 border border-slate-800 transition-colors text-center"
+              >
+                <CheckSquare className="w-3.5 h-3.5 text-amber-400" />
+                <span>Persetujuan {pendingCount > 0 ? `(${pendingCount})` : ''}</span>
+              </NavLink>
+            </>
+          ) : canApprove ? (
+            <>
+              <NavLink
+                to="/approvals"
+                className="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98 text-center"
+              >
+                <CheckSquare className="w-4 h-4" />
+                <span>Persetujuan Kas {pendingCount > 0 ? `(${pendingCount})` : ''}</span>
+              </NavLink>
+              <NavLink
                 to="/budget"
                 className="w-full py-2 px-4 bg-slate-900/90 hover:bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 border border-slate-800 transition-colors text-center"
               >
                 <Calculator className="w-3.5 h-3.5 text-blue-400" />
-                <span>Dokumen APBG Tahunan</span>
+                <span>Tinjau APBG Seksi</span>
               </NavLink>
             </>
           ) : (
             <NavLink
-              to="/reports"
+              to="/reports?tab=semester"
               className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98 text-center"
             >
               <FileSpreadsheet className="w-4 h-4 text-blue-400" />
@@ -401,7 +425,7 @@ export const AppLayout: React.FC = () => {
         <header className="hidden md:flex items-center justify-between gap-6 px-8 py-3.5 bg-white/90 backdrop-blur-md border-b border-slate-200/90 sticky top-0 z-20 shadow-2xs">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-400">SIKU HKBP Hutaraja</span>
+              <span className="text-xs font-semibold text-slate-400">SISKEU HKBP Hutaraja</span>
               <span className="text-slate-300">/</span>
               <h2 className="text-sm font-bold text-slate-900 tracking-tight">
                 {(
@@ -462,7 +486,7 @@ export const AppLayout: React.FC = () => {
               </button>
             )}
 
-            {isAuditor && (
+            {(isAuditor || isAdmin) && (
               <NavLink
                 to="/audit"
                 className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 shadow-xs transition-all flex items-center gap-1.5 active:scale-98"
@@ -472,7 +496,7 @@ export const AppLayout: React.FC = () => {
               </NavLink>
             )}
 
-            {isPendeta && (
+            {(isPendeta || (canApprove && !canRecordTransactions && !isSekretaris)) && (
               <NavLink
                 to="/approvals"
                 className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-xs transition-all flex items-center gap-1.5 active:scale-98"
@@ -484,7 +508,7 @@ export const AppLayout: React.FC = () => {
 
             {isSekretaris && (
               <NavLink
-                to="/reports"
+                to="/reports?tab=warta"
                 className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-blue-700 hover:bg-blue-800 shadow-xs transition-all flex items-center gap-1.5 active:scale-98"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5" />
@@ -545,7 +569,7 @@ export const AppLayout: React.FC = () => {
           </div>
           <div>
             <h1 className="font-bold text-xs text-slate-900 leading-tight">HKBP Hutaraja</h1>
-            <p className="text-[10px] text-slate-500">SIKU Keuangan</p>
+            <p className="text-[10px] text-slate-500">SISKEU Keuangan</p>
           </div>
         </div>
 
@@ -654,7 +678,7 @@ export const AppLayout: React.FC = () => {
                   <span>Persetujuan {pendingCount > 0 ? `(${pendingCount})` : ''}</span>
                 </NavLink>
                 <NavLink
-                  to="/reports"
+                  to="/reports?tab=semester"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="p-3 bg-amber-50 text-amber-900 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-amber-200 text-center"
                 >
@@ -662,10 +686,29 @@ export const AppLayout: React.FC = () => {
                   <span>LPJ Huria</span>
                 </NavLink>
               </>
+            ) : canApprove ? (
+              <>
+                <NavLink
+                  to="/approvals"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="p-3 bg-amber-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm text-center"
+                >
+                  <CheckSquare className="w-4 h-4" />
+                  <span>Persetujuan {pendingCount > 0 ? `(${pendingCount})` : ''}</span>
+                </NavLink>
+                <NavLink
+                  to="/budget"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="p-3 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-indigo-200 text-center"
+                >
+                  <Calculator className="w-4 h-4" />
+                  <span>APBG</span>
+                </NavLink>
+              </>
             ) : (
               <>
                 <NavLink
-                  to="/reports"
+                  to="/reports?tab=semester"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="p-3 bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm text-center"
                 >
@@ -795,7 +838,7 @@ export const AppLayout: React.FC = () => {
           >
             <ShieldCheck className="w-6 h-6" />
           </NavLink>
-        ) : isPendeta ? (
+        ) : canApprove ? (
           <NavLink
             to="/approvals"
             className="w-12 h-12 -mt-5 rounded-full bg-amber-600 hover:bg-amber-700 text-white flex items-center justify-center shadow-lg active:scale-95 transition-transform"
@@ -805,7 +848,7 @@ export const AppLayout: React.FC = () => {
           </NavLink>
         ) : (
           <NavLink
-            to="/reports"
+            to="/reports?tab=semester"
             className="w-12 h-12 -mt-5 rounded-full bg-slate-800 hover:bg-slate-900 text-white flex items-center justify-center shadow-lg active:scale-95 transition-transform"
             title="Laporan Keuangan"
           >
@@ -867,7 +910,7 @@ export const AppLayout: React.FC = () => {
         )}
 
         <NavLink
-          to="/reports"
+          to={canViewConsolidatedLpj ? '/reports?tab=semester' : '/reports?tab=warta'}
           className={({ isActive }) =>
             `flex flex-col items-center gap-1 text-[10px] min-w-[50px] ${
               isActive ? 'text-primary font-semibold' : 'text-slate-500'
@@ -875,7 +918,7 @@ export const AppLayout: React.FC = () => {
           }
         >
           <FileSpreadsheet className="w-5 h-5" />
-          <span>Laporan</span>
+          <span>{canViewConsolidatedLpj ? 'Laporan' : 'Warta'}</span>
         </NavLink>
       </nav>
 

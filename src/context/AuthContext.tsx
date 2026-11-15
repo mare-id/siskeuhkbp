@@ -34,6 +34,16 @@ interface AuthContextType {
   canClosePeriod: boolean;
   canManageSettings: boolean;
   canManageMasterData: boolean;
+  hasBendaharaKasAccess: boolean;
+  hasKetuaKasAccess: boolean;
+  canViewBpsk: boolean;
+  canViewAuditModule: boolean;
+  canViewAuditTrail: boolean;
+  canViewWarta: boolean;
+  canViewConsolidatedLpj: boolean;
+  canManageBudget: boolean;
+  canManageOpeningBook: boolean;
+  canManageLpjData: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -267,25 +277,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ['admin', 'bendahara_umum', 'pendeta_ressort', 'sekretaris', 'majelis'].includes(currentUser.role)
   );
 
+  const hasBendaharaKasAccess = userKasAccess.some((a) => a.access_level === 'bendahara');
+  const hasKetuaKasAccess = userKasAccess.some((a) => a.access_level === 'ketua');
+
   const canRecordTransactions = Boolean(
     currentUser &&
-    (isAdmin || isBendaharaUmum || (isPengurusKas && userKasAccess.some((a) => a.access_level === 'bendahara')))
+    (isAdmin || isBendaharaUmum || (isPengurusKas && hasBendaharaKasAccess))
   );
 
   const canTransfer = Boolean(
     currentUser &&
-    (isAdmin || isBendaharaUmum || (isPengurusKas && userKasAccess.some((a) => a.access_level === 'bendahara')))
+    (isAdmin || isBendaharaUmum || (isPengurusKas && hasBendaharaKasAccess))
   );
 
   const canApprove = Boolean(
     currentUser &&
-    (isAdmin || isPendeta || isSekretaris || userKasAccess.some((a) => a.access_level === 'ketua'))
+    (isAdmin || isPendeta || isSekretaris || hasKetuaKasAccess)
   );
 
   const canAudit = Boolean(currentUser && (isAdmin || isAuditor));
   const canClosePeriod = Boolean(currentUser && (isAdmin || isBendaharaUmum));
   const canManageSettings = Boolean(currentUser && isAdmin);
   const canManageMasterData = Boolean(currentUser && (isAdmin || isBendaharaUmum));
+
+  // Granular module visibility flags (Admin sees everything)
+  const canViewBpsk = Boolean(
+    currentUser && (isAdmin || isBendaharaUmum || isPendeta || isSekretaris || isMajelis || isAuditor)
+  );
+  const canViewAuditModule = Boolean(currentUser && (isAdmin || isAuditor));
+  const canViewAuditTrail = Boolean(currentUser && (isAdmin || isAuditor));
+  const canViewWarta = Boolean(
+    currentUser && (isAdmin || isBendaharaUmum || isPendeta || isSekretaris || isMajelis || isPengurusKas)
+  );
+  const canViewConsolidatedLpj = Boolean(
+    currentUser && (isAdmin || isBendaharaUmum || isPendeta || isSekretaris || isMajelis || isAuditor)
+  );
+  const canManageBudget = Boolean(
+    currentUser && (isAdmin || isBendaharaUmum || isPendeta || isSekretaris || isMajelis || isPengurusKas)
+  );
+  const canManageOpeningBook = Boolean(
+    currentUser && (isAdmin || isBendaharaUmum || isPendeta || isSekretaris || isPengurusKas)
+  );
+  const canManageLpjData = Boolean(
+    currentUser && (isAdmin || isBendaharaUmum || (isPengurusKas && hasBendaharaKasAccess))
+  );
 
   const BENDUM_KAS_IDS = ['kas-1', 'kas-2', 'kas-7', 'kas-8', 'kas-9'];
 
@@ -343,6 +378,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         canClosePeriod,
         canManageSettings,
         canManageMasterData,
+        hasBendaharaKasAccess,
+        hasKetuaKasAccess,
+        canViewBpsk,
+        canViewAuditModule,
+        canViewAuditTrail,
+        canViewWarta,
+        canViewConsolidatedLpj,
+        canManageBudget,
+        canManageOpeningBook,
+        canManageLpjData,
       }}
     >
       {children}

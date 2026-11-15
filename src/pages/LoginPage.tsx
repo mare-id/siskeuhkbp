@@ -45,7 +45,7 @@ export const LoginPage: React.FC = () => {
           <Church className="w-9 h-9" />
         </div>
         <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-          SIKU HKBP Hutaraja
+          SISKEU HKBP Hutaraja
         </h2>
         <p className="mt-1 text-xs text-slate-500 font-medium">
           Sistem Informasi Keuangan HKBP Ressort Hutaraja

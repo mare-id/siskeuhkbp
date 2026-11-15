@@ -943,7 +943,7 @@ export const DEMO_LPJ_NOTES: LpjNotes = {
   budget_variance_notes:
     'Varians anggaran di atas 10% dievaluasi berkala. Pos pemeliharaan sarana ibadah mengalami penyesuaian karena perbaikan mendesak kebocoran plafon pastori pada awal tahun.',
   significant_events:
-    'Tahun Anggaran 2026 merupakan tonggak dimulainya sistem informasi keuangan digital SIKU HKBP Hutaraja guna meningkatkan transparansi dan akuntabilitas jemaat.',
+    'Tahun Anggaran 2026 merupakan tonggak dimulainya sistem informasi keuangan digital SISKEU HKBP Hutaraja guna meningkatkan transparansi dan akuntabilitas jemaat.',
   restricted_funds_notes:
     'Dana Terikat meliputi Kas Diakonia (khusus pelayanan kasih kedukaan dan orang sakit) serta Kas Pembangunan (khusus fisik sarana ibadah). Dana ini tidak dapat dialihkan tanpa persetujuan Rapat Huria.',
   post_reporting_events:
@@ -1012,7 +1012,7 @@ export const DEMO_AUDIT_ENGAGEMENTS: AuditEngagement[] = [
     id: 'eng-opening',
     tahun: 2026,
     jenis: 'opening',
-    judul: 'Pemeriksaan Saldo Awal & Pembukaan Buku SIKU 2026',
+    judul: 'Pemeriksaan Saldo Awal & Pembukaan Buku SISKEU 2026',
     deskripsi: 'Audit independen atas migrasi saldo pindahan buku manual ke sistem digital per 1 Januari 2026',
     status: 'completed',
     dibuka_pada: '2026-01-02',

@@ -196,7 +196,7 @@ export const SettingsPage: React.FC = () => {
           <Server className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
           <div className="leading-relaxed">
             <span className="font-bold">Ketentuan Penyimpanan: </span>
-            Saat Supabase terhubung, sistem SIKU HKBP secara ketat <strong>menonaktifkan penyimpanan lokal browser (localStorage)</strong>.
+            Saat Supabase terhubung, sistem SISKEU HKBP secara ketat <strong>menonaktifkan penyimpanan lokal browser (localStorage)</strong>.
             Semua penambahan kas, verifikasi audit, anggaran APBG, dan mutasi kas disinkronkan secara real-time langsung ke tabel PostgreSQL di Supabase.
           </div>
         </div>
@@ -324,7 +324,7 @@ export const SettingsPage: React.FC = () => {
                 Buka proyek Supabase Anda, lalu klik menu <strong>SQL Editor</strong> pada bilah sisi kiri.
               </li>
               <li>
-                Klik tombol <strong>New Query</strong> (+), lalu beri nama query (misal: <code>SIKU_HKBP_SCHEMA</code>).
+                Klik tombol <strong>New Query</strong> (+), lalu beri nama query (misal: <code>SISKEU_HKBP_SCHEMA</code>).
               </li>
               <li>
                 Klik tombol <strong>&quot;Salin Skrip SQL&quot;</strong> di atas, lalu tempelkan (Paste) seluruh isinya ke dalam editor query Supabase.

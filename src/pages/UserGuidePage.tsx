@@ -74,7 +74,7 @@ export const UserGuidePage: React.FC = () => {
               <span>Visi dan Filosofi Pelayanan Perbendaharaan Huria</span>
             </h4>
             <p className="text-xs text-indigo-900 leading-relaxed">
-              Pengelolaan perbendaharaan HKBP Hutaraja didasarkan pada prinsip teologis penatalayanan yang jujur, transparan, tertib, dan akuntabel di hadapan Tuhan dan jemaat (1 Korintus 4:2, 2 Korintus 8:20-21). Aplikasi SIKU (Sistem Informasi Keuangan Huria) dirancang khusus untuk memadukan ketetapan gerejawi HKBP dengan standar akuntansi modern tanpa menghilangkan kemudahan bagi para pelayan (Parhalado).
+              Pengelolaan perbendaharaan HKBP Hutaraja didasarkan pada prinsip teologis penatalayanan yang jujur, transparan, tertib, dan akuntabel di hadapan Tuhan dan jemaat (1 Korintus 4:2, 2 Korintus 8:20-21). Aplikasi SISKEU (Sistem Informasi Keuangan Huria) dirancang khusus untuk memadukan ketetapan gerejawi HKBP dengan standar akuntansi modern tanpa menghilangkan kemudahan bagi para pelayan (Parhalado).
             </p>
           </div>
 
@@ -144,7 +144,7 @@ export const UserGuidePage: React.FC = () => {
       content: (
         <div className="space-y-6 text-sm text-slate-700 leading-relaxed">
           <p className="text-xs text-slate-600">
-            SIKU menerapkan pembagian peran yang ketat sesuai hukum gereja HKBP untuk menjamin keamanan kas dan mencegah konflik kepentingan.
+            SISKEU menerapkan pembagian peran yang ketat sesuai hukum gereja HKBP untuk menjamin keamanan kas dan mencegah konflik kepentingan.
           </p>
 
           <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
@@ -662,7 +662,7 @@ export const UserGuidePage: React.FC = () => {
                 Bandingkan saldo di buku kas Bank BRI/Mandiri aplikasi dengan <em>Rekening Koran</em> fisik bank:
               </p>
               <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 font-mono text-xs space-y-1 text-slate-700">
-                <p>Saldo Buku Kas SIKU + Bunga Bank - Biaya Administrasi Bank = Saldo Rekening Koran Bank</p>
+                <p>Saldo Buku Kas SISKEU + Bunga Bank - Biaya Administrasi Bank = Saldo Rekening Koran Bank</p>
               </div>
               <p className="text-xs text-slate-600">
                 Catat pendapatan bunga bank dan beban administrasi bulanan lewat menu Transaksi agar saldo buku kas dan saldo rekening bank 100% klop (selisih = Rp 0).
@@ -811,7 +811,7 @@ export const UserGuidePage: React.FC = () => {
                 <span>Dokumentasi Resmi & Panduan Operasional Parhalado</span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-                Buku Panduan Lengkap SIKU HKBP Hutaraja
+                Buku Panduan Lengkap SISKEU HKBP Hutaraja
               </h1>
               <p className="text-xs sm:text-sm text-indigo-200 max-w-2xl leading-relaxed">
                 Panduan komprehensif penatalayanan perbendaharaan huria berbasis kas yang dimodifikasi, standar ISAK 35, dan Aturan Peraturan HKBP 2002 Amandemen Keempat. Disertai contoh kasus praktis dan langkah operasional terperinci.

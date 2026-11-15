@@ -29,6 +29,8 @@ interface ConfirmActionModalProps {
   reasonLabel?: string;
   reasonPlaceholder?: string;
   initialReason?: string;
+  expectedConfirmText?: string;
+  confirmTextLabel?: string;
 }
 
 export const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
@@ -47,14 +49,18 @@ export const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
   reasonLabel = 'Catatan / Alasan (Audit Trail)',
   reasonPlaceholder = 'Tuliskan alasan tindakan ini...',
   initialReason = '',
+  expectedConfirmText,
+  confirmTextLabel,
 }) => {
   const [reason, setReason] = useState(initialReason);
+  const [typedText, setTypedText] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setReason(initialReason);
+      setTypedText('');
       setError('');
       setSubmitting(false);
     }
@@ -64,6 +70,7 @@ export const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
 
   const isDanger = variant === 'danger';
   const isWarning = variant === 'warning';
+  const isTypedConfirmMatched = !expectedConfirmText || typedText.trim() === expectedConfirmText;
 
   const headerBg = isDanger
     ? 'bg-rose-50 border-rose-100 text-rose-900'
@@ -84,6 +91,10 @@ export const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
     : 'bg-blue-600 hover:bg-blue-700 text-white';
 
   const handleConfirmClick = async () => {
+    if (expectedConfirmText && typedText.trim() !== expectedConfirmText) {
+      setError(`Ketik "${expectedConfirmText}" dengan persis untuk melanjutkan.`);
+      return;
+    }
     if (requireReason && !reason.trim()) {
       setError('Alasan wajib diisi sebelum melanjutkan.');
       return;
@@ -188,9 +199,41 @@ export const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
                 placeholder={reasonPlaceholder}
                 className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 bg-white"
               />
-              {error && <p className="text-xs text-rose-600 mt-1 font-medium">{error}</p>}
             </div>
           )}
+
+          {expectedConfirmText && (
+            <div className="p-3.5 rounded-xl border border-rose-200 bg-rose-50/40 space-y-2">
+              <label className="block text-xs font-semibold text-slate-800">
+                {confirmTextLabel || 'Ketik teks konfirmasi berikut persis seperti yang tertera:'}{' '}
+                <code className="px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 font-mono font-bold select-all">
+                  {expectedConfirmText}
+                </code>
+              </label>
+              <input
+                type="text"
+                value={typedText}
+                onChange={(e) => {
+                  setTypedText(e.target.value);
+                  if (error) setError('');
+                }}
+                placeholder={`Ketik: ${expectedConfirmText}`}
+                autoFocus
+                className={`w-full text-xs md:text-sm p-2.5 rounded-xl border font-mono font-semibold bg-white focus:outline-hidden focus:ring-2 ${
+                  typedText.length > 0 && isTypedConfirmMatched
+                    ? 'border-emerald-400 focus:ring-emerald-300 text-emerald-800'
+                    : 'border-rose-300 focus:ring-rose-300 text-slate-900'
+                }`}
+              />
+              <p className="text-[11px] text-slate-500">
+                {isTypedConfirmMatched
+                  ? 'Teks konfirmasi cocok. Tombol konfirmasi sekarang aktif.'
+                  : `Harus sama persis (huruf besar/kecil): ${expectedConfirmText}`}
+              </p>
+            </div>
+          )}
+
+          {error && <p className="text-xs text-rose-600 font-medium">{error}</p>}
         </div>
 
         {/* Footer */}
@@ -205,9 +248,9 @@ export const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
           </button>
           <button
             type="button"
-            disabled={submitting}
+            disabled={submitting || !isTypedConfirmMatched}
             onClick={handleConfirmClick}
-            className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors shadow-xs flex items-center gap-1.5 disabled:opacity-60 ${confirmBtnClass}`}
+            className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors shadow-xs flex items-center gap-1.5 disabled:opacity-45 disabled:cursor-not-allowed ${confirmBtnClass}`}
           >
             {submitting ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />

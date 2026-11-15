@@ -40,6 +40,9 @@ import {
   CalendarRange,
   RotateCw,
   ArrowRight,
+  KeyRound,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -201,6 +204,13 @@ export const MasterDataPage: React.FC = () => {
 
   // User Management state
   const [editingProfile, setEditingProfile] = useState<Partial<Profile> | null>(null);
+  const [profilePassword, setProfilePassword] = useState<string>('');
+  const [profileConfirmPassword, setProfileConfirmPassword] = useState<string>('');
+  const [showProfilePassword, setShowProfilePassword] = useState<boolean>(false);
+  const [resetPasswordUser, setResetPasswordUser] = useState<Profile | null>(null);
+  const [resetNewPassword, setResetNewPassword] = useState<string>('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState<string>('');
+  const [showResetPassword, setShowResetPassword] = useState<boolean>(false);
   const [deletingProfile, setDeletingProfile] = useState<Profile | null>(null);
   const [userCategoryFilter, setUserCategoryFilter] = useState<string>('all');
   const [userSearch, setUserSearch] = useState<string>('');
@@ -294,11 +304,34 @@ export const MasterDataPage: React.FC = () => {
   };
 
   // Handlers for Profile (User Management)
+  const openProfileModal = (profile: Partial<Profile>) => {
+    setEditingProfile(profile);
+    setProfilePassword('');
+    setProfileConfirmPassword('');
+    setShowProfilePassword(false);
+  };
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProfile?.full_name || !editingProfile?.email) {
       showToast('Nama dan email wajib diisi', 'error');
       return;
+    }
+
+    const isNewUser = !editingProfile.id;
+    if (isNewUser && (!profilePassword || profilePassword.length < 6)) {
+      showToast('Kata sandi awal pengguna baru minimal 6 karakter', 'error');
+      return;
+    }
+    if (profilePassword) {
+      if (profilePassword.length < 6) {
+        showToast('Kata sandi baru minimal 6 karakter', 'error');
+        return;
+      }
+      if (profilePassword !== profileConfirmPassword) {
+        showToast('Konfirmasi kata sandi tidak cocok', 'error');
+        return;
+      }
     }
 
     // Determine system role automatically from ecclesiastical role if set
@@ -308,17 +341,47 @@ export const MasterDataPage: React.FC = () => {
       if (match) sysRole = match.systemRole;
     }
 
-    const payload: Partial<Profile> = {
+    const payload: Partial<Profile> & { password?: string } = {
       ...editingProfile,
       role: sysRole,
+      ...(profilePassword ? { password: profilePassword } : {}),
     };
 
     const res = await saveProfile(payload);
     if (res.success) {
-      showToast(editingProfile.id ? 'Profil pengguna berhasil diperbarui' : 'Pengguna baru berhasil ditambahkan');
+      showToast(editingProfile.id ? 'Profil & kata sandi pengguna berhasil diperbarui' : 'Pengguna baru berhasil didaftarkan');
       setEditingProfile(null);
+      setProfilePassword('');
+      setProfileConfirmPassword('');
     } else {
       showToast(res.error || 'Gagal menyimpan data pengguna', 'error');
+    }
+  };
+
+  const handleExecuteResetUserPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPasswordUser) return;
+    if (!resetNewPassword || resetNewPassword.length < 6) {
+      showToast('Kata sandi baru minimal 6 karakter', 'error');
+      return;
+    }
+    if (resetNewPassword !== resetConfirmPassword) {
+      showToast('Konfirmasi kata sandi tidak cocok', 'error');
+      return;
+    }
+
+    const res = await saveProfile({
+      ...resetPasswordUser,
+      password: resetNewPassword,
+    });
+    if (res.success) {
+      showToast(`Kata sandi untuk ${resetPasswordUser.full_name} berhasil diatur`);
+      setResetPasswordUser(null);
+      setResetNewPassword('');
+      setResetConfirmPassword('');
+      setShowResetPassword(false);
+    } else {
+      showToast(res.error || 'Gagal memperbarui kata sandi pengguna', 'error');
     }
   };
 
@@ -931,7 +994,7 @@ export const MasterDataPage: React.FC = () => {
               {isAdmin && (
                 <button
                   onClick={() =>
-                    setEditingProfile({
+                    openProfileModal({
                       full_name: '',
                       email: '',
                       phone: '',
@@ -1109,12 +1172,25 @@ export const MasterDataPage: React.FC = () => {
                           <span>{u.phone}</span>
                         </div>
                       )}
+
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${
+                            u.password_hash
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}
+                        >
+                          <KeyRound className="w-3 h-3" />
+                          <span>{u.password_hash ? 'Password Terpasang' : 'Password Belum Diatur'}</span>
+                        </span>
+                      </div>
                     </div>
                   </div>
 
                   {/* Actions for Admin */}
                   {isAdmin && (
-                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs gap-2">
                       <button
                         onClick={() => handleToggleUserStatus(u)}
                         className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg transition-colors ${
@@ -1138,7 +1214,20 @@ export const MasterDataPage: React.FC = () => {
 
                       <div className="flex items-center gap-1.5">
                         <button
-                          onClick={() => setEditingProfile(u)}
+                          onClick={() => {
+                            setResetPasswordUser(u);
+                            setResetNewPassword('');
+                            setResetConfirmPassword('');
+                            setShowResetPassword(false);
+                          }}
+                          className="px-2.5 py-1 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg flex items-center gap-1 transition-colors"
+                          title="Atur atau ubah password akun ini"
+                        >
+                          <KeyRound className="w-3.5 h-3.5" />
+                          <span>Password</span>
+                        </button>
+                        <button
+                          onClick={() => openProfileModal(u)}
                           className="px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition-colors"
                         >
                           <Edit2 className="w-3.5 h-3.5 text-blue-600" />
@@ -2378,6 +2467,66 @@ export const MasterDataPage: React.FC = () => {
                 </div>
               )}
 
+              {/* Password Section inside Add/Edit User Modal */}
+              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                    <KeyRound className="w-3.5 h-3.5 text-primary" />
+                    <span>
+                      {editingProfile.id
+                        ? 'Atur / Ubah Kata Sandi Akun (Opsional)'
+                        : 'Kata Sandi Login Akun Baru'}
+                    </span>
+                    {!editingProfile.id && <span className="text-rose-500">*</span>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowProfilePassword((prev) => !prev)}
+                    className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1"
+                  >
+                    {showProfilePassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    <span>{showProfilePassword ? 'Sembunyikan' : 'Tampilkan'}</span>
+                  </button>
+                </div>
+
+                {editingProfile.id && (
+                  <p className="text-[11px] text-slate-500">
+                    Kosongkan kolom di bawah jika tidak ingin mengubah kata sandi pengguna saat ini.
+                  </p>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      {editingProfile.id ? 'Kata Sandi Baru' : 'Kata Sandi'}
+                    </label>
+                    <input
+                      type={showProfilePassword ? 'text' : 'password'}
+                      value={profilePassword}
+                      onChange={(e) => setProfilePassword(e.target.value)}
+                      placeholder={editingProfile.id ? 'Kosongkan jika tetap' : 'Minimal 6 karakter'}
+                      autoComplete="new-password"
+                      className="w-full p-2 rounded-xl border border-slate-200 bg-white"
+                      required={!editingProfile.id}
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Konfirmasi Kata Sandi
+                    </label>
+                    <input
+                      type={showProfilePassword ? 'text' : 'password'}
+                      value={profileConfirmPassword}
+                      onChange={(e) => setProfileConfirmPassword(e.target.value)}
+                      placeholder="Ulangi kata sandi"
+                      autoComplete="new-password"
+                      className="w-full p-2 rounded-xl border border-slate-200 bg-white"
+                      required={!editingProfile.id || profilePassword.length > 0}
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Active Toggle */}
               <div className="flex items-center gap-2 pt-1">
                 <input
@@ -2405,6 +2554,90 @@ export const MasterDataPage: React.FC = () => {
                   className="px-5 py-2 bg-primary hover:bg-primary/90 text-white font-semibold rounded-xl shadow-xs"
                 >
                   Simpan Data Pengguna
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Atur / Reset Password Khusus Pengguna */}
+      {resetPasswordUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl p-6 space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-primary" />
+                  <span>Atur Kata Sandi Akun</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {resetPasswordUser.full_name} ({resetPasswordUser.email})
+                </p>
+              </div>
+              <button
+                onClick={() => setResetPasswordUser(null)}
+                className="p-1 text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleExecuteResetUserPassword} className="space-y-3 text-xs">
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowResetPassword((prev) => !prev)}
+                  className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1"
+                >
+                  {showResetPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  <span>{showResetPassword ? 'Sembunyikan' : 'Tampilkan'}</span>
+                </button>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Kata Sandi Baru <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type={showResetPassword ? 'text' : 'password'}
+                  value={resetNewPassword}
+                  onChange={(e) => setResetNewPassword(e.target.value)}
+                  placeholder="Minimal 6 karakter"
+                  autoComplete="new-password"
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Konfirmasi Kata Sandi Baru <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type={showResetPassword ? 'text' : 'password'}
+                  value={resetConfirmPassword}
+                  onChange={(e) => setResetConfirmPassword(e.target.value)}
+                  placeholder="Ulangi kata sandi baru"
+                  autoComplete="new-password"
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setResetPasswordUser(null)}
+                  className="px-4 py-2 text-slate-600 hover:text-slate-900 rounded-xl font-semibold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-primary hover:bg-primary/90 text-white font-semibold rounded-xl shadow-xs"
+                >
+                  Simpan Kata Sandi
                 </button>
               </div>
             </form>

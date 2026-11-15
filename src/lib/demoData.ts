@@ -40,6 +40,9 @@ import {
   AuditPeriodVerification,
   FiscalYear,
 } from '../types/database';
+import { DEFAULT_INITIAL_PASSWORD, hashUserPassword } from './passwordUtils';
+
+const INITIAL_PASSWORD_HASH = hashUserPassword(DEFAULT_INITIAL_PASSWORD);
 
 export const DEMO_SETTINGS: AppSettings = {
   id: 'main',
@@ -59,7 +62,7 @@ export const DEMO_SETTINGS: AppSettings = {
   budget_reallocation_max_pct: 15, // Max 15% pergeseran anggaran antar baris
 };
 
-export const DEMO_PROFILES: Profile[] = [
+const BASE_PROFILES: Profile[] = [
   {
     id: 'user-admin',
     email: 'admin@hkbp-hutaraja.org',
@@ -302,6 +305,11 @@ export const DEMO_PROFILES: Profile[] = [
     is_active: true,
   },
 ];
+
+export const DEMO_PROFILES: Profile[] = BASE_PROFILES.map((profile) => ({
+  ...profile,
+  password_hash: profile.password_hash || INITIAL_PASSWORD_HASH,
+}));
 
 export const DEMO_KAS: Kas[] = [
   {

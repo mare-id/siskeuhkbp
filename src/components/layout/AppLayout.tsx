@@ -18,12 +18,10 @@ import {
   LogOut,
   Plus,
   ArrowRightLeft,
-  ChevronDown,
   Menu,
   X,
   Church,
   Shield,
-  Sparkles,
   Calculator,
   BookOpen,
   FolderArchive,
@@ -42,8 +40,6 @@ import { TransferModal } from '../transactions/TransferModal';
 export const AppLayout: React.FC = () => {
   const {
     currentUser,
-    switchDemoUser,
-    availableDemoUsers,
     logout,
     isLeader,
     isAdmin,
@@ -75,8 +71,6 @@ export const AppLayout: React.FC = () => {
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isRolePickerOpen, setIsRolePickerOpen] = useState(false);
-  const [isDesktopRolePickerOpen, setIsDesktopRolePickerOpen] = useState(false);
 
   const pendingCount = getPendingTransactionsCount();
   const openFindingsCount = auditFindings.filter(
@@ -351,54 +345,25 @@ export const AppLayout: React.FC = () => {
             })}
         </nav>
 
-        {/* User Card & Demo Switcher in Desktop Sidebar */}
+        {/* User Card in Desktop Sidebar */}
         <div className="p-3 border-t border-slate-800/80 bg-slate-950/80">
-          <div className="relative">
-            <button
-              onClick={() => setIsRolePickerOpen(!isRolePickerOpen)}
-              className="w-full p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 flex items-center justify-between transition-colors shadow-2xs text-left"
-            >
-              <div className="flex items-center gap-2.5 overflow-hidden">
-                <div className="w-8 h-8 rounded-lg bg-blue-950 border border-blue-800 text-blue-200 font-bold text-xs flex items-center justify-center shrink-0">
-                  {currentUser?.full_name.substring(0, 2).toUpperCase()}
-                </div>
-                <div className="overflow-hidden">
-                  <div className="text-xs font-semibold text-slate-200 truncate">
-                    {currentUser?.full_name}
-                  </div>
-                  <div className="text-[10px] text-slate-400 font-medium capitalize truncate flex items-center gap-1">
-                    <Shield className="w-3 h-3 text-blue-400" />
-                    <span>{currentUser?.role.replace('_', ' ')}</span>
-                  </div>
-                </div>
+          <NavLink
+            to="/profile"
+            className="w-full p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 flex items-center gap-2.5 transition-colors shadow-2xs text-left"
+          >
+            <div className="w-8 h-8 rounded-lg bg-blue-950 border border-blue-800 text-blue-200 font-bold text-xs flex items-center justify-center shrink-0">
+              {currentUser?.full_name.substring(0, 2).toUpperCase()}
+            </div>
+            <div className="overflow-hidden">
+              <div className="text-xs font-semibold text-slate-200 truncate">
+                {currentUser?.full_name}
               </div>
-              <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-            </button>
-
-            {/* Quick Demo Switcher Popup */}
-            {isRolePickerOpen && (
-              <div className="absolute bottom-full left-0 mb-2 w-full bg-slate-900 rounded-xl shadow-2xl border border-slate-800 p-2 z-40 max-h-72 overflow-y-auto space-y-1">
-                <div className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Ganti Peran Uji Coba:
-                </div>
-                {availableDemoUsers.map((u) => (
-                  <button
-                    key={u.id}
-                    onClick={() => {
-                      switchDemoUser(u.id);
-                      setIsRolePickerOpen(false);
-                    }}
-                    className={`w-full text-left p-2 rounded-lg text-xs transition-colors flex flex-col ${
-                      currentUser?.id === u.id ? 'bg-blue-950 text-blue-200 font-bold border border-blue-800' : 'hover:bg-slate-800 text-slate-300'
-                    }`}
-                  >
-                    <span className="truncate">{u.full_name}</span>
-                    <span className="text-[10px] text-slate-400 capitalize">{u.role.replace('_', ' ')}</span>
-                  </button>
-                ))}
+              <div className="text-[10px] text-slate-400 font-medium capitalize truncate flex items-center gap-1">
+                <Shield className="w-3 h-3 text-blue-400" />
+                <span>{currentUser?.role.replace('_', ' ')}</span>
               </div>
-            )}
-          </div>
+            </div>
+          </NavLink>
 
           <div className="mt-2 flex items-center justify-between pt-1">
             <NavLink
@@ -525,45 +490,26 @@ export const AppLayout: React.FC = () => {
 
             <div className="h-4 w-px bg-slate-200 mx-1" />
 
-            {/* Quick Role Switcher Button & Dropdown on Desktop Top Bar */}
-            <div className="relative">
-              <button
-                onClick={() => setIsDesktopRolePickerOpen(!isDesktopRolePickerOpen)}
+            {/* Logged-in User Profile Chip & Logout on Desktop Top Bar */}
+            <div className="flex items-center gap-2">
+              <NavLink
+                to="/profile"
                 className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700 transition-colors shadow-2xs"
-                title="Ganti Peran Uji Coba"
+                title="Lihat Profil & Ubah Password"
               >
                 <div className="w-5 h-5 rounded-md bg-slate-800 text-white text-[10px] font-bold flex items-center justify-center shadow-xs">
                   {currentUser?.full_name.substring(0, 1)}
                 </div>
-                <span className="max-w-[130px] truncate">{currentUser?.full_name}</span>
-                <ChevronDown className="w-3 h-3 text-slate-400" />
+                <span className="max-w-[140px] truncate">{currentUser?.full_name}</span>
+              </NavLink>
+              <button
+                type="button"
+                onClick={handleLogout}
+                title="Keluar dari SISKEU"
+                className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 border border-slate-200 transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
               </button>
-
-              {isDesktopRolePickerOpen && (
-                <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 p-2 z-50 max-h-80 overflow-y-auto space-y-1 animate-in fade-in zoom-in-95">
-                  <div className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    Pilih Akun Simulasi Peran:
-                  </div>
-                  {availableDemoUsers.map((u) => (
-                    <button
-                      key={u.id}
-                      onClick={() => {
-                        switchDemoUser(u.id);
-                        setIsDesktopRolePickerOpen(false);
-                      }}
-                      className={`w-full text-left p-2 rounded-lg text-xs transition-colors flex justify-between items-center ${
-                        currentUser?.id === u.id ? 'bg-slate-100 text-slate-900 font-bold border border-slate-300' : 'hover:bg-slate-50 text-slate-700'
-                      }`}
-                    >
-                      <div>
-                        <span className="block font-medium truncate">{u.full_name}</span>
-                        <span className="text-[10px] text-slate-400 capitalize">{u.role.replace('_', ' ')}</span>
-                      </div>
-                      {currentUser?.id === u.id && <Sparkles className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </header>
@@ -581,14 +527,12 @@ export const AppLayout: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Quick role badge button on mobile */}
-          <button
-            onClick={() => setIsRolePickerOpen(!isRolePickerOpen)}
-            className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center gap-1"
+          <NavLink
+            to="/profile"
+            className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 capitalize"
           >
-            <span>{currentUser?.role.replace('_', ' ')}</span>
-            <ChevronDown className="w-3 h-3" />
-          </button>
+            {currentUser?.role.replace('_', ' ')}
+          </NavLink>
 
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -597,33 +541,6 @@ export const AppLayout: React.FC = () => {
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
-
-        {/* Mobile Role Picker Dropdown */}
-        {isRolePickerOpen && (
-          <div className="absolute top-full left-0 right-0 bg-white border-b border-slate-200 p-3 shadow-lg z-40 max-h-80 overflow-y-auto space-y-1">
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-              Pilih Akun Simulasi Peran:
-            </div>
-            {availableDemoUsers.map((u) => (
-              <button
-                key={u.id}
-                onClick={() => {
-                  switchDemoUser(u.id);
-                  setIsRolePickerOpen(false);
-                }}
-                className={`w-full text-left p-2.5 rounded-lg text-xs flex justify-between items-center ${
-                  currentUser?.id === u.id ? 'bg-primary/10 text-primary font-semibold' : 'hover:bg-slate-50'
-                }`}
-              >
-                <div>
-                  <span className="block">{u.full_name}</span>
-                  <span className="text-[10px] text-slate-400 capitalize">{u.role.replace('_', ' ')}</span>
-                </div>
-                {currentUser?.id === u.id && <Sparkles className="w-3.5 h-3.5 text-primary" />}
-              </button>
-            ))}
-          </div>
-        )}
       </header>
 
       {/* Mobile Drawer Menu */}

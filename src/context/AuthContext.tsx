@@ -7,16 +7,18 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Profile, UserKasAccess } from '../types/database';
 import { DEMO_PROFILES, DEMO_USER_KAS_ACCESS } from '../lib/demoData';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { hashUserPassword, verifyUserPassword } from '../lib/passwordUtils';
 
 interface AuthContextType {
   currentUser: Profile | null;
   userKasAccess: UserKasAccess[];
   loading: boolean;
-  isDemoMode: boolean;
   loginWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
   logout: () => Promise<void>;
-  switchDemoUser: (userId: string) => void;
-  availableDemoUsers: Profile[];
+  updateOwnPassword: (
+    currentPassword: string,
+    newPassword: string
+  ) => Promise<{ success: boolean; error?: string }>;
   canInputKas: (kasId: string) => boolean;
   canApproveKas: (kasId: string) => boolean;
   isLeader: boolean;
@@ -48,21 +50,43 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_USER_KEY = 'siku_hkbp_active_user_id';
-const SESSION_STORAGE_USER_KEY = 'siku_hkbp_cloud_active_user_id';
+const AUTH_USER_SESSION_KEY = 'siku_hkbp_auth_user_id';
+const LEGACY_LOCAL_USER_KEY = 'siku_hkbp_active_user_id';
+const LEGACY_CLOUD_USER_KEY = 'siku_hkbp_cloud_active_user_id';
+
+function readAuthenticatedUserId(): string | null {
+  if (typeof window === 'undefined') return null;
+  return sessionStorage.getItem(AUTH_USER_SESSION_KEY) || localStorage.getItem(AUTH_USER_SESSION_KEY);
+}
+
+function persistAuthenticatedUserId(userId: string) {
+  if (typeof window === 'undefined') return;
+  sessionStorage.setItem(AUTH_USER_SESSION_KEY, userId);
+  localStorage.setItem(AUTH_USER_SESSION_KEY, userId);
+}
+
+function clearAuthenticatedUserId() {
+  if (typeof window === 'undefined') return;
+  sessionStorage.removeItem(AUTH_USER_SESSION_KEY);
+  localStorage.removeItem(AUTH_USER_SESSION_KEY);
+  localStorage.removeItem(LEGACY_LOCAL_USER_KEY);
+  sessionStorage.removeItem(LEGACY_CLOUD_USER_KEY);
+}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<Profile | null>(null);
-  const [profilesList, setProfilesList] = useState<Profile[]>(isSupabaseConfigured ? [] : DEMO_PROFILES);
-  const [allKasAccess, setAllKasAccess] = useState<UserKasAccess[]>(isSupabaseConfigured ? [] : DEMO_USER_KAS_ACCESS);
   const [userKasAccess, setUserKasAccess] = useState<UserKasAccess[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [isDemoMode, setIsDemoMode] = useState<boolean>(!isSupabaseConfigured);
 
   useEffect(() => {
+    // Clean up legacy auto-login keys from older demo builds
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(LEGACY_LOCAL_USER_KEY);
+      sessionStorage.removeItem(LEGACY_CLOUD_USER_KEY);
+    }
+
     async function initAuth() {
       if (isSupabaseConfigured && supabase) {
-        setIsDemoMode(false);
         try {
           const [profRes, accessRes, sessionRes] = await Promise.all([
             supabase.from('profiles').select('*').order('full_name'),
@@ -71,18 +95,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ]);
 
           const dbProfiles: Profile[] =
-            profRes.data && profRes.data.length > 0 ? (profRes.data as Profile[]) : DEMO_PROFILES;
+            profRes.data && profRes.data.length > 0 ? (profRes.data as Profile[]) : [];
           const dbAccess: UserKasAccess[] =
             accessRes.data ? (accessRes.data as UserKasAccess[]) : [];
 
-          setProfilesList(dbProfiles);
-          setAllKasAccess(dbAccess);
-
           const session = sessionRes.data?.session;
           if (session?.user) {
-            const matched =
-              dbProfiles.find((p) => p.id === session.user.id || p.email.toLowerCase() === (session.user.email || '').toLowerCase());
-            if (matched) {
+            const matched = dbProfiles.find(
+              (p) =>
+                p.id === session.user.id ||
+                p.email.toLowerCase() === (session.user.email || '').toLowerCase()
+            );
+            if (matched && matched.is_active !== false) {
+              persistAuthenticatedUserId(matched.id);
               setCurrentUser(matched);
               setUserKasAccess(dbAccess.filter((a) => a.user_id === matched.id));
               setLoading(false);
@@ -90,44 +115,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           }
 
-          // Use selected cloud dashboard user from sessionStorage or default to Bendahara Umum
-          const savedCloudUserId =
-            (typeof window !== 'undefined' ? sessionStorage.getItem(SESSION_STORAGE_USER_KEY) : null) || 'user-bendum';
-          const initialUser =
-            dbProfiles.find((p) => p.id === savedCloudUserId) ||
-            dbProfiles.find((p) => p.role === 'bendahara_umum') ||
-            dbProfiles[0] ||
-            null;
-          setCurrentUser(initialUser);
-          setUserKasAccess(initialUser ? dbAccess.filter((a) => a.user_id === initialUser.id) : []);
+          const savedAuthUserId = readAuthenticatedUserId();
+          if (savedAuthUserId) {
+            const matched = dbProfiles.find((p) => p.id === savedAuthUserId && p.is_active !== false);
+            if (matched) {
+              setCurrentUser(matched);
+              setUserKasAccess(dbAccess.filter((a) => a.user_id === matched.id));
+              setLoading(false);
+              return;
+            }
+            clearAuthenticatedUserId();
+          }
+
+          setCurrentUser(null);
+          setUserKasAccess([]);
           setLoading(false);
           return;
         } catch (err) {
           console.warn('Supabase auth init error:', err);
+          setCurrentUser(null);
+          setUserKasAccess([]);
           setLoading(false);
           return;
         }
       }
 
-      // Demo Mode (hanya jika Supabase belum dikonfigurasi)
+      // Offline / Local mode (only when Supabase is not configured)
       const getStoredProfiles = (): Profile[] => {
         const stored = localStorage.getItem('siku_profiles');
-        return stored ? JSON.parse(stored) : DEMO_PROFILES;
+        if (!stored) return DEMO_PROFILES;
+        const parsed = JSON.parse(stored) as Profile[];
+        // Ensure legacy local profiles without password_hash fall back to seeded hash if matching ID
+        return parsed.map((p) => {
+          if (p.password_hash) return p;
+          const seed = DEMO_PROFILES.find((d) => d.id === p.id);
+          return seed ? { ...p, password_hash: seed.password_hash } : p;
+        });
       };
       const getStoredAccess = (): UserKasAccess[] => {
         const stored = localStorage.getItem('siku_user_kas_access');
         return stored ? JSON.parse(stored) : DEMO_USER_KAS_ACCESS;
       };
+
       const localProfiles = getStoredProfiles();
       const localAccess = getStoredAccess();
-      setProfilesList(localProfiles);
-      setAllKasAccess(localAccess);
+      const savedAuthUserId = readAuthenticatedUserId();
 
-      const savedUserId = localStorage.getItem(LOCAL_STORAGE_USER_KEY) || 'user-bendum';
-      const initialUser = localProfiles.find((p) => p.id === savedUserId) || localProfiles[1] || DEMO_PROFILES[1];
-      setCurrentUser(initialUser);
-      setUserKasAccess(localAccess.filter((a) => a.user_id === initialUser.id));
-      setIsDemoMode(true);
+      if (savedAuthUserId) {
+        const matched = localProfiles.find((p) => p.id === savedAuthUserId && p.is_active !== false);
+        if (matched) {
+          setCurrentUser(matched);
+          setUserKasAccess(localAccess.filter((a) => a.user_id === matched.id));
+          setLoading(false);
+          return;
+        }
+        clearAuthenticatedUserId();
+      }
+
+      setCurrentUser(null);
+      setUserKasAccess([]);
       setLoading(false);
     }
 
@@ -138,11 +184,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .channel('auth-profiles-realtime')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, async () => {
           const { data } = await supabase!.from('profiles').select('*').order('full_name');
-          if (data && data.length > 0) {
-            setProfilesList(data as Profile[]);
+          if (data) {
+            const list = data as Profile[];
             setCurrentUser((prev) => {
               if (!prev) return prev;
-              return (data as Profile[]).find((p) => p.id === prev.id) || prev;
+              const updated = list.find((p) => p.id === prev.id);
+              if (!updated || updated.is_active === false) {
+                clearAuthenticatedUserId();
+                setUserKasAccess([]);
+                return null;
+              }
+              return updated;
             });
           }
         })
@@ -150,7 +202,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const { data } = await supabase!.from('user_kas_access').select('*');
           if (data) {
             const list = data as UserKasAccess[];
-            setAllKasAccess(list);
             setCurrentUser((prev) => {
               if (prev) setUserKasAccess(list.filter((a) => a.user_id === prev.id));
               return prev;
@@ -165,103 +216,177 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  const getActiveProfiles = (): Profile[] => {
-    if (isSupabaseConfigured) return profilesList;
+  const getLocalProfiles = (): Profile[] => {
     const stored = localStorage.getItem('siku_profiles');
-    return stored ? JSON.parse(stored) : DEMO_PROFILES;
+    if (!stored) return DEMO_PROFILES;
+    const parsed = JSON.parse(stored) as Profile[];
+    return parsed.map((p) => {
+      if (p.password_hash) return p;
+      const seed = DEMO_PROFILES.find((d) => d.id === p.id);
+      return seed ? { ...p, password_hash: seed.password_hash } : p;
+    });
   };
 
-  const getActiveUserKasAccess = (): UserKasAccess[] => {
-    if (isSupabaseConfigured) return allKasAccess;
+  const getLocalUserKasAccess = (): UserKasAccess[] => {
     const stored = localStorage.getItem('siku_user_kas_access');
     return stored ? JSON.parse(stored) : DEMO_USER_KAS_ACCESS;
   };
 
-  const switchDemoUser = async (userId: string) => {
-    if (isSupabaseConfigured && supabase) {
-      // Refresh latest profiles & access from Supabase so dashboard reflects live cloud permissions
-      const [profRes, accessRes] = await Promise.all([
-        supabase.from('profiles').select('*').order('full_name'),
-        supabase.from('user_kas_access').select('*'),
-      ]);
-      const list = profRes.data && profRes.data.length > 0 ? (profRes.data as Profile[]) : profilesList;
-      const accessList = accessRes.data ? (accessRes.data as UserKasAccess[]) : allKasAccess;
-      if (profRes.data && profRes.data.length > 0) setProfilesList(list);
-      if (accessRes.data) setAllKasAccess(accessList);
-
-      const selected = list.find((p) => p.id === userId);
-      if (selected) {
-        setCurrentUser(selected);
-        if (typeof window !== 'undefined') sessionStorage.setItem(SESSION_STORAGE_USER_KEY, userId);
-        setUserKasAccess(accessList.filter((a) => a.user_id === selected.id));
-      }
-      return;
-    }
-
-    const list = getActiveProfiles();
-    const accessList = getActiveUserKasAccess();
-    const selected = list.find((p) => p.id === userId);
-    if (selected) {
-      setCurrentUser(selected);
-      localStorage.setItem(LOCAL_STORAGE_USER_KEY, userId);
-      setUserKasAccess(accessList.filter((a) => a.user_id === selected.id));
-    }
-  };
-
   const loginWithEmail = async (email: string, password: string): Promise<{ error: Error | null }> => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !password) {
+      return { error: new Error('Email dan kata sandi wajib diisi.') };
+    }
+
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (!error && data.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', data.user.id)
-            .single();
-          if (profile) {
-            setCurrentUser(profile as Profile);
-            const { data: access } = await supabase.from('user_kas_access').select('*').eq('user_id', profile.id);
-            if (access) setUserKasAccess(access as UserKasAccess[]);
-            setIsDemoMode(false);
+        const [profRes, accessRes] = await Promise.all([
+          supabase.from('profiles').select('*'),
+          supabase.from('user_kas_access').select('*'),
+        ]);
+
+        if (profRes.error) {
+          return { error: new Error(`Gagal menghubungi server database: ${profRes.error.message}`) };
+        }
+
+        const cloudProfiles = (profRes.data as Profile[] | null) || [];
+        const cloudAccess = (accessRes.data as UserKasAccess[] | null) || [];
+        const matched = cloudProfiles.find((p) => p.email.trim().toLowerCase() === normalizedEmail);
+
+        if (matched) {
+          if (matched.is_active === false) {
+            return {
+              error: new Error('Akun Anda berstatus non-aktif. Hubungi Administrator HKBP Hutaraja.'),
+            };
+          }
+
+          if (matched.password_hash) {
+            if (!verifyUserPassword(password, matched.password_hash)) {
+              return { error: new Error('Email atau kata sandi salah.') };
+            }
+            persistAuthenticatedUserId(matched.id);
+            setCurrentUser(matched);
+            setUserKasAccess(cloudAccess.filter((a) => a.user_id === matched.id));
+            return { error: null };
+          }
+
+          // Account exists in profiles without password_hash yet -> verify via Supabase Auth if configured
+          const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+            email: normalizedEmail,
+            password,
+          });
+          if (!authError && authData.user) {
+            persistAuthenticatedUserId(matched.id);
+            setCurrentUser(matched);
+            setUserKasAccess(cloudAccess.filter((a) => a.user_id === matched.id));
+            return { error: null };
+          }
+
+          return {
+            error: new Error(
+              'Kata sandi untuk akun ini belum diatur atau salah. Hubungi Administrator untuk mengatur kata sandi.'
+            ),
+          };
+        }
+
+        // Try Supabase Auth in case profile is matched by auth user ID
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password,
+        });
+        if (!authError && authData.user) {
+          const authMatched = cloudProfiles.find(
+            (p) => p.id === authData.user?.id || p.email.trim().toLowerCase() === normalizedEmail
+          );
+          if (authMatched) {
+            if (authMatched.is_active === false) {
+              return { error: new Error('Akun Anda berstatus non-aktif. Hubungi Administrator.') };
+            }
+            persistAuthenticatedUserId(authMatched.id);
+            setCurrentUser(authMatched);
+            setUserKasAccess(cloudAccess.filter((a) => a.user_id === authMatched.id));
             return { error: null };
           }
         }
-        // Fallback: match against cloud profiles table for church dashboard login
-        const { data: cloudProfiles } = await supabase.from('profiles').select('*');
-        const matched = (cloudProfiles as Profile[] | null)?.find(
-          (p) => p.email.toLowerCase() === email.toLowerCase()
-        );
-        if (matched && !error) {
-          await switchDemoUser(matched.id);
-          return { error: null };
-        }
-        return { error: error || new Error('Akun tidak ditemukan.') };
+
+        return { error: new Error('Email atau kata sandi salah.') };
       } catch (err: any) {
-        return { error: err };
+        return { error: new Error(err?.message || 'Terjadi kesalahan saat masuk ke sistem.') };
       }
-    } else {
-      const matched = getActiveProfiles().find((p) => p.email.toLowerCase() === email.toLowerCase());
-      if (matched) {
-        switchDemoUser(matched.id);
-        return { error: null };
-      }
-      return { error: new Error('Pengguna tidak ditemukan dalam daftar akun percontohan.') };
     }
+
+    // Local fallback when Supabase is not configured
+    const localProfiles = getLocalProfiles();
+    const matched = localProfiles.find((p) => p.email.trim().toLowerCase() === normalizedEmail);
+    if (!matched) {
+      return { error: new Error('Email atau kata sandi salah.') };
+    }
+    if (matched.is_active === false) {
+      return { error: new Error('Akun Anda berstatus non-aktif. Hubungi Administrator HKBP Hutaraja.') };
+    }
+    if (!verifyUserPassword(password, matched.password_hash)) {
+      return { error: new Error('Email atau kata sandi salah.') };
+    }
+
+    const localAccess = getLocalUserKasAccess();
+    persistAuthenticatedUserId(matched.id);
+    setCurrentUser(matched);
+    setUserKasAccess(localAccess.filter((a) => a.user_id === matched.id));
+    return { error: null };
   };
 
   const logout = async () => {
     if (isSupabaseConfigured && supabase) {
-      await supabase.auth.signOut();
-      if (typeof window !== 'undefined') sessionStorage.removeItem(SESSION_STORAGE_USER_KEY);
-      const majelisUser = profilesList.find((p) => p.role === 'majelis') || profilesList[0] || null;
-      setCurrentUser(majelisUser);
-      setUserKasAccess(majelisUser ? allKasAccess.filter((a) => a.user_id === majelisUser.id) : []);
-      return;
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.warn('Supabase signOut error:', err);
+      }
     }
-    const activeProfiles = getActiveProfiles();
-    const majelisUser = activeProfiles.find((p) => p.role === 'majelis') || activeProfiles[0] || DEMO_PROFILES[0];
-    setCurrentUser(majelisUser);
-    localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
+    clearAuthenticatedUserId();
+    setCurrentUser(null);
+    setUserKasAccess([]);
+  };
+
+  const updateOwnPassword = async (
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!currentUser) {
+      return { success: false, error: 'Anda harus masuk terlebih dahulu.' };
+    }
+    if (!newPassword || newPassword.length < 6) {
+      return { success: false, error: 'Kata sandi baru minimal 6 karakter.' };
+    }
+    if (currentUser.password_hash && !verifyUserPassword(currentPassword, currentUser.password_hash)) {
+      return { success: false, error: 'Kata sandi saat ini tidak sesuai.' };
+    }
+
+    const nextHash = hashUserPassword(newPassword);
+    const updatedAt = new Date().toISOString();
+
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ password_hash: nextHash, updated_at: updatedAt })
+        .eq('id', currentUser.id);
+      if (error) {
+        return {
+          success: false,
+          error: `Gagal memperbarui kata sandi di Supabase: ${error.message}`,
+        };
+      }
+      setCurrentUser((prev) => (prev ? { ...prev, password_hash: nextHash, updated_at: updatedAt } : prev));
+      return { success: true };
+    }
+
+    const localProfiles = getLocalProfiles();
+    const nextProfiles = localProfiles.map((p) =>
+      p.id === currentUser.id ? { ...p, password_hash: nextHash, updated_at: updatedAt } : p
+    );
+    localStorage.setItem('siku_profiles', JSON.stringify(nextProfiles));
+    setCurrentUser((prev) => (prev ? { ...prev, password_hash: nextHash, updated_at: updatedAt } : prev));
+    return { success: true };
   };
 
   // Permission helpers
@@ -274,25 +399,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isPengurusKas = currentUser?.role === 'pengurus_kas';
   const isLeader = Boolean(
     currentUser &&
-    ['admin', 'bendahara_umum', 'pendeta_ressort', 'sekretaris', 'majelis'].includes(currentUser.role)
+      ['admin', 'bendahara_umum', 'pendeta_ressort', 'sekretaris', 'majelis'].includes(currentUser.role)
   );
 
   const hasBendaharaKasAccess = userKasAccess.some((a) => a.access_level === 'bendahara');
   const hasKetuaKasAccess = userKasAccess.some((a) => a.access_level === 'ketua');
 
   const canRecordTransactions = Boolean(
-    currentUser &&
-    (isAdmin || isBendaharaUmum || (isPengurusKas && hasBendaharaKasAccess))
+    currentUser && (isAdmin || isBendaharaUmum || (isPengurusKas && hasBendaharaKasAccess))
   );
 
   const canTransfer = Boolean(
-    currentUser &&
-    (isAdmin || isBendaharaUmum || (isPengurusKas && hasBendaharaKasAccess))
+    currentUser && (isAdmin || isBendaharaUmum || (isPengurusKas && hasBendaharaKasAccess))
   );
 
   const canApprove = Boolean(
-    currentUser &&
-    (isAdmin || isPendeta || isSekretaris || hasKetuaKasAccess)
+    currentUser && (isAdmin || isPendeta || isSekretaris || hasKetuaKasAccess)
   );
 
   const canAudit = Boolean(currentUser && (isAdmin || isAuditor));
@@ -356,11 +478,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentUser,
         userKasAccess,
         loading,
-        isDemoMode,
         loginWithEmail,
         logout,
-        switchDemoUser,
-        availableDemoUsers: getActiveProfiles(),
+        updateOwnPassword,
         canInputKas,
         canApproveKas,
         isLeader,

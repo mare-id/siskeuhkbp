@@ -37,9 +37,37 @@ type PermissionKey =
   | 'canManageSettings'
   | 'isAdmin';
 
+const RequireAuth: React.FC<{ children: React.ReactElement }> = ({ children }) => {
+  const auth = useAuth();
+  if (auth.loading) {
+    return (
+      <div className="min-h-screen bg-[#F7F8FC] flex items-center justify-center p-6">
+        <div className="text-center space-y-2">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs font-medium text-slate-500">Memverifikasi sesi SISKEU HKBP Hutaraja...</p>
+        </div>
+      </div>
+    );
+  }
+  if (!auth.currentUser) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+};
+
+const PublicOnlyRoute: React.FC<{ children: React.ReactElement }> = ({ children }) => {
+  const auth = useAuth();
+  if (auth.loading) return null;
+  if (auth.currentUser) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+};
+
 const RoleGuard: React.FC<{ allow: PermissionKey; children: React.ReactElement }> = ({ allow, children }) => {
   const auth = useAuth();
   if (auth.loading) return null;
+  if (!auth.currentUser) return <Navigate to="/login" replace />;
   if (auth.isAdmin || auth[allow]) return children;
   return <Navigate to="/" replace />;
 };
@@ -51,9 +79,9 @@ export default function App() {
         <ToastProvider>
           <DataProvider>
             <Routes>
-              <Route path="/login" element={<LoginPage />} />
+              <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
               
-              <Route path="/" element={<AppLayout />}>
+              <Route path="/" element={<RequireAuth><AppLayout /></RequireAuth>}>
                 <Route index element={<DashboardPage />} />
                 <Route path="transactions" element={<TransactionsPage />} />
                 <Route path="budget" element={<RoleGuard allow="canManageBudget"><BudgetPage /></RoleGuard>} />

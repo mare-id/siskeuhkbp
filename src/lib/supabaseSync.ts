@@ -114,6 +114,8 @@ const JOINED_FIELDS_TO_STRIP = new Set([
   'transfer_target_storage',
   'member',
   'transaction',
+  'password',
+  'confirmPassword',
 ]);
 
 export function sanitizePayload<T = any>(payload: T): T {

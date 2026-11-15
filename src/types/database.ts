@@ -91,6 +91,7 @@ export interface Profile {
   seksi_name?: string | null;
   wijk?: string | null; // Nomor Wijk / Lingkungan Sintua
   phone?: string | null;
+  password_hash?: string | null;
   is_active: boolean;
   created_at?: string;
   updated_at?: string;

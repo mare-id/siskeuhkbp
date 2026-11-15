@@ -27,7 +27,9 @@ import {
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { formatRupiah } from '../lib/formatters';
+import { ConfirmActionModal } from '../components/common/ConfirmActionModal';
 import {
   supabaseUrl,
   supabaseAnonKey,
@@ -38,11 +40,14 @@ import {
 } from '../lib/supabase';
 
 export const SettingsPage: React.FC = () => {
-  const { settings, updateSettings, resetAllTransactionsAndBalancesToZero } = useData();
+  const { settings, updateSettings, resetAllTransactionsAndBalancesToZero, transactions, budgets, fixedAssets, advances } = useData();
   const { isAdmin } = useAuth();
+  const { toast } = useToast();
 
   const [formData, setFormData] = useState({ ...settings });
   const [successMsg, setSuccessMsg] = useState(false);
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [isDisconnectConfirmOpen, setIsDisconnectConfirmOpen] = useState(false);
 
   useEffect(() => {
     setFormData({ ...settings });
@@ -92,9 +97,7 @@ export const SettingsPage: React.FC = () => {
   };
 
   const handleDisconnectSupabase = () => {
-    if (window.confirm('Apakah Anda yakin ingin memutuskan koneksi Supabase dan kembali ke Mode Demo?')) {
-      clearSupabaseCredentials();
-    }
+    setIsDisconnectConfirmOpen(true);
   };
 
   const handleCopySqlScript = async () => {
@@ -106,7 +109,7 @@ export const SettingsPage: React.FC = () => {
       setCopiedSql(true);
       setTimeout(() => setCopiedSql(false), 3500);
     } catch (err: any) {
-      alert('Gagal menyalin SQL: ' + err.message);
+      toast.error('Gagal menyalin SQL: ' + err.message);
     }
   };
 
@@ -518,15 +521,7 @@ export const SettingsPage: React.FC = () => {
           <div className="pt-2">
             <button
               type="button"
-              onClick={async () => {
-                const confirmed = window.confirm(
-                  'KONFIRMASI RESET:\n\nApakah Anda yakin ingin mereset SEMUA transaksi keuangan, anggaran (APBG), dan saldo awal ke nol?\n\nSemua transaksi kas, rencana anggaran APBG, panjar, dan rekonsiliasi akan dikosongkan untuk memulai penggunaan aplikasi baru dari nol.'
-                );
-                if (confirmed) {
-                  const res = await resetAllTransactionsAndBalancesToZero();
-                  alert(res.message);
-                }
-              }}
+              onClick={() => setIsResetConfirmOpen(true)}
               className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-2 shadow-xs transition-colors"
             >
               <RotateCcw className="w-4 h-4" />
@@ -535,6 +530,54 @@ export const SettingsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Typed-Text Confirmation Modal for Reset All Data */}
+      <ConfirmActionModal
+        isOpen={isResetConfirmOpen}
+        onClose={() => setIsResetConfirmOpen(false)}
+        onConfirm={async () => {
+          const res = await resetAllTransactionsAndBalancesToZero();
+          setIsResetConfirmOpen(false);
+          if (res.success) {
+            toast.success(res.message);
+          } else {
+            toast.error(res.message || 'Gagal mereset data.');
+          }
+        }}
+        variant="danger"
+        title="Konfirmasi Reset Seluruh Data ke Nol"
+        message="Tindakan ini akan mengosongkan seluruh data transaksi keuangan, anggaran (APBG), saldo awal, aset tetap, panjar, dan rekonsiliasi secara permanen agar pembukuan dapat dimulai ulang dari nol."
+        warningText={
+          isSupabaseConfigured
+            ? 'PERHATIAN: Aplikasi sedang terhubung ke Supabase. Seluruh data di database Supabase akan ikut terhapus permanen dan tidak dapat dipulihkan.'
+            : 'Seluruh data pembukuan lokal akan direset bersih ke nol.'
+        }
+        summaryRows={[
+          { label: 'Transaksi Kas Dihapus', newValue: `${transactions.length} Transaksi`, highlight: true },
+          { label: 'Dokumen Anggaran (APBG)', newValue: `${budgets.length} Anggaran` },
+          { label: 'Aset Inventaris & Panjar', newValue: `${fixedAssets.length} Aset · ${advances.length} Panjar` },
+          { label: 'Saldo Awal Semua Kas', newValue: 'Dikembalikan ke Rp 0' },
+        ]}
+        expectedConfirmText="RESET SEMUA DATA"
+        confirmTextLabel="Untuk melanjutkan reset total, ketik teks berikut:"
+        confirmLabel="Ya, Reset Semua Data ke Nol"
+        cancelLabel="Batal"
+      />
+
+      {/* Confirmation Modal for Disconnect Supabase */}
+      <ConfirmActionModal
+        isOpen={isDisconnectConfirmOpen}
+        onClose={() => setIsDisconnectConfirmOpen(false)}
+        onConfirm={() => {
+          setIsDisconnectConfirmOpen(false);
+          clearSupabaseCredentials();
+        }}
+        variant="warning"
+        title="Putuskan Koneksi Supabase"
+        message="Apakah Anda yakin ingin memutuskan koneksi ke server database Supabase dan kembali ke Mode Demo lokal?"
+        confirmLabel="Ya, Putuskan Koneksi"
+        cancelLabel="Batal"
+      />
     </div>
   );
 };

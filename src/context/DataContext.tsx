@@ -109,6 +109,7 @@ import {
   DEMO_FISCAL_YEARS,
   generateMonthlyDistribution,
 } from '../lib/demoData';
+import { hashUserPassword } from '../lib/passwordUtils';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import {
   fetchAllDataFromSupabase,
@@ -264,7 +265,7 @@ interface DataContextType {
   rollForwardBalancesToYear: (fromYear: number, toYear: number) => Promise<{ success: boolean; count: number; error?: string }>;
 
   // User Management (Pengguna & Pelayan Gereja HKBP)
-  saveProfile: (profileData: Partial<Profile>) => Promise<{ success: boolean; id?: string; error?: string }>;
+  saveProfile: (profileData: Partial<Profile> & { password?: string }) => Promise<{ success: boolean; id?: string; error?: string }>;
   deleteProfile: (id: string) => Promise<{ success: boolean; error?: string }>;
   toggleProfileActive: (id: string) => Promise<{ success: boolean; error?: string }>;
 
@@ -2182,48 +2183,109 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const saveProfile = async (
-    profileData: Partial<Profile>
+    profileData: Partial<Profile> & { password?: string }
   ): Promise<{ success: boolean; id?: string; error?: string }> => {
-    if (!profileData.full_name || !profileData.email) {
+    const trimmedName = profileData.full_name?.trim() || '';
+    const trimmedEmail = profileData.email?.trim() || '';
+    if (!trimmedName || !trimmedEmail) {
       return { success: false, error: 'Nama lengkap dan email pengguna wajib diisi.' };
     }
 
-    if (profileData.id) {
-      setProfiles((prev) =>
-        prev.map((p) =>
-          p.id === profileData.id
-            ? ({ ...p, ...profileData, updated_at: new Date().toISOString() } as Profile)
-            : p
-        )
-      );
-      if (isSupabaseConfigured) {
-        const existing = profiles.find((p) => p.id === profileData.id);
-        if (existing) await syncUpsert('profiles', { ...existing, ...profileData, updated_at: new Date().toISOString() });
+    const duplicateEmail = profiles.find(
+      (p) => p.email.trim().toLowerCase() === trimmedEmail.toLowerCase() && p.id !== profileData.id
+    );
+    if (duplicateEmail) {
+      return { success: false, error: `Email "${trimmedEmail}" sudah digunakan oleh akun ${duplicateEmail.full_name}.` };
+    }
+
+    const { password: rawPassword, ...cleanProfileData } = profileData;
+    const hasNewPassword = Boolean(rawPassword && rawPassword.length > 0);
+    if (hasNewPassword && (rawPassword?.length || 0) < 6) {
+      return { success: false, error: 'Kata sandi minimal 6 karakter.' };
+    }
+
+    if (!cleanProfileData.id && !hasNewPassword) {
+      return { success: false, error: 'Kata sandi awal wajib diisi (minimal 6 karakter) saat membuat akun baru.' };
+    }
+
+    const computedPasswordHash = hasNewPassword && rawPassword ? hashUserPassword(rawPassword) : undefined;
+    const nowIso = new Date().toISOString();
+
+    if (cleanProfileData.id) {
+      const existing = profiles.find((p) => p.id === cleanProfileData.id);
+      if (!existing) {
+        return { success: false, error: 'Data pengguna tidak ditemukan.' };
       }
-      addAuditLog('profiles', profileData.id, 'UPDATE', null, profileData, `Data profil pengguna ${profileData.full_name} diperbarui`);
-      return { success: true, id: profileData.id };
+
+      const updatedProfile: Profile = {
+        ...existing,
+        ...cleanProfileData,
+        full_name: trimmedName,
+        email: trimmedEmail,
+        password_hash: computedPasswordHash ?? existing.password_hash ?? null,
+        updated_at: nowIso,
+      };
+
+      if (isSupabaseConfigured) {
+        const res = await syncUpsert('profiles', updatedProfile);
+        if (!res.success) {
+          return {
+            success: false,
+            error: `Gagal menyimpan ke Supabase: ${res.error || 'Periksa kolom password_hash pada tabel profiles.'}`,
+          };
+        }
+      }
+
+      setProfiles((prev) => prev.map((p) => (p.id === cleanProfileData.id ? updatedProfile : p)));
+      addAuditLog(
+        'profiles',
+        cleanProfileData.id,
+        'UPDATE',
+        null,
+        { ...updatedProfile, password_hash: updatedProfile.password_hash ? '[TERENKRIPSI]' : null },
+        hasNewPassword
+          ? `Data & kata sandi pengguna ${updatedProfile.full_name} diperbarui`
+          : `Data profil pengguna ${updatedProfile.full_name} diperbarui`
+      );
+      return { success: true, id: cleanProfileData.id };
     } else {
       const newId = `user-${Date.now()}`;
       const newProfile: Profile = {
         id: newId,
-        email: profileData.email,
-        full_name: profileData.full_name,
-        role: profileData.role || 'pengurus_kas',
-        ecclesiastical_role: profileData.ecclesiastical_role,
-        tohonan: profileData.tohonan || 'non_tahbisan',
-        tingkat: profileData.tingkat || 'huria',
-        seksi_name: profileData.seksi_name || null,
-        wijk: profileData.wijk || null,
-        phone: profileData.phone || null,
-        is_active: profileData.is_active !== undefined ? profileData.is_active : true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        email: trimmedEmail,
+        full_name: trimmedName,
+        role: cleanProfileData.role || 'pengurus_kas',
+        ecclesiastical_role: cleanProfileData.ecclesiastical_role,
+        tohonan: cleanProfileData.tohonan || 'non_tahbisan',
+        tingkat: cleanProfileData.tingkat || 'huria',
+        seksi_name: cleanProfileData.seksi_name || null,
+        wijk: cleanProfileData.wijk || null,
+        phone: cleanProfileData.phone || null,
+        password_hash: computedPasswordHash || null,
+        is_active: cleanProfileData.is_active !== undefined ? cleanProfileData.is_active : true,
+        created_at: nowIso,
+        updated_at: nowIso,
       };
-      setProfiles((prev) => [...prev, newProfile]);
+
       if (isSupabaseConfigured) {
-        await syncUpsert('profiles', newProfile);
+        const res = await syncUpsert('profiles', newProfile);
+        if (!res.success) {
+          return {
+            success: false,
+            error: `Gagal mendaftarkan pengguna ke Supabase: ${res.error || 'Periksa tabel profiles.'}`,
+          };
+        }
       }
-      addAuditLog('profiles', newId, 'INSERT', null, newProfile, `Pengguna baru ${newProfile.full_name} (${newProfile.email}) didaftarkan`);
+
+      setProfiles((prev) => [...prev, newProfile]);
+      addAuditLog(
+        'profiles',
+        newId,
+        'INSERT',
+        null,
+        { ...newProfile, password_hash: '[TERENKRIPSI]' },
+        `Pengguna baru ${newProfile.full_name} (${newProfile.email}) didaftarkan dengan kata sandi`
+      );
       return { success: true, id: newId };
     }
   };

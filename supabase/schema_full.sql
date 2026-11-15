@@ -73,6 +73,7 @@ create table if not exists public.profiles (
   seksi_name text,
   wijk text,
   phone text,
+  password_hash text,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -731,6 +732,12 @@ create table if not exists public.lpj_exceptions (
 -- 8B. IDEMPOTENT COLUMN & CONSTRAINT UPGRADES (AMAN UNTUK DB YANG SUDAH ADA)
 -- =============================================================================
 do $$ begin
+  -- Profiles password_hash column & default initial password hash ('Hkbp2026!') for uninitialized accounts
+  alter table public.profiles add column if not exists password_hash text;
+  update public.profiles
+    set password_hash = encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex')
+    where password_hash is null or password_hash = '';
+
   -- Categories PPKU 2023 columns
   alter table public.categories add column if not exists deskripsi text;
   alter table public.categories add column if not exists is_sentralisasi boolean not null default true;
@@ -1028,27 +1035,28 @@ insert into public.opening_balance_entries (id, tahun, kas_id, storage_account_i
 on conflict (id) do nothing;
 
 -- Initial Profiles (Struktural Lengkap HKBP Ressort Hutaraja)
-insert into public.profiles (id, email, full_name, role, ecclesiastical_role, tohonan, tingkat, seksi_name, wijk, phone, is_active) values
-('user-admin', 'admin@hkbp-hutaraja.org', 'St. P. Sitompul (Admin Sistem)', 'admin', 'admin_sistem', 'sintua', 'huria', null, 'Wijk II', '0812-1111-2222', true),
-('user-pendeta', 'pendeta@hkbp-hutaraja.org', 'Pdt. Santa Lucia Manurung, S.Th (Pendeta Ressort)', 'pendeta_ressort', 'pendeta_ressort', 'pendeta', 'ressort', null, null, '0811-3333-4444', true),
-('user-sekretaris', 'sekretaris@hkbp-hutaraja.org', 'St. Sardi Simanullang (Sekretaris Ressort / Parartaon)', 'sekretaris', 'sekretaris_huria', 'sintua', 'ressort', 'Majelis Perbendaharaan (Parartaon)', 'Wijk I', '0812-4444-5555', true),
-('user-bendum', 'bendum@hkbp-hutaraja.org', 'St. Manaek Lumban Gaol (Bendahara Umum / Parartaon)', 'bendahara_umum', 'bendahara_huria', 'sintua', 'huria', 'Majelis Perbendaharaan (Parartaon)', 'Wijk I', '0813-2222-3333', true),
-('user-parartaon-ketua', 'parartaon.ketua@hkbp-hutaraja.org', 'St. Harbet Simanjuntak (Ketua Parartaon)', 'majelis', 'majelis_perbendaharaan', 'sintua', 'huria', 'Ketua Majelis Perbendaharaan (Parartaon)', 'Wijk II', '0812-4321-8761', true),
-('user-parartaon-1', 'parartaon.oloan@hkbp-hutaraja.org', 'St. Oloan Silaban (Anggota Parartaon)', 'majelis', 'majelis_perbendaharaan', 'sintua', 'huria', 'Anggota Majelis Perbendaharaan (Parartaon)', 'Wijk III', '0812-4321-8762', true),
-('user-parartaon-2', 'parartaon.tohap@hkbp-hutaraja.org', 'St. Tohap Sihombing (Anggota Parartaon)', 'majelis', 'majelis_perbendaharaan', 'sintua', 'huria', 'Anggota Majelis Perbendaharaan (Parartaon)', 'Wijk IV', '0812-4321-8763', true),
-('user-dewan-koinonia', 'koinonia@hkbp-hutaraja.org', 'St. Sondang Samosir (Ketua Dewan Koinonia)', 'pengurus_kas', 'ketua_dewan_koinonia', 'sintua', 'huria', 'Dewan Koinonia', 'Wijk III', '0812-3434-5656', true),
-('user-dewan-diakonia', 'dewan.diakonia@hkbp-hutaraja.org', 'St. Juangga Sihite (Ketua Dewan Diakonia)', 'pengurus_kas', 'ketua_dewan_diakonia', 'sintua', 'huria', 'Dewan Diakonia', 'Wijk V', '0812-6666-7777', true),
-('user-dewan-marturia', 'marturia@hkbp-hutaraja.org', 'St. Parulian Simaremare (Ketua Dewan Marturia)', 'pengurus_kas', 'ketua_dewan_marturia', 'sintua', 'huria', 'Dewan Marturia', 'Wijk VI', '0812-7777-5555', true),
-('user-sopo-ketua', 'sopo.ketua@hkbp-hutaraja.org', 'Dedi Tumanggor (Ketua Pengurus Sopo Godang)', 'pengurus_kas', 'pengurus_sopo_godang', 'non_tahbisan', 'huria', 'Pengurus Sopo Godang', null, '0813-1111-4401', true),
-('user-sopo-sekretaris', 'sopo.sekretaris@hkbp-hutaraja.org', 'Usuawan Simanullang (Sekretaris Sopo Godang)', 'pengurus_kas', 'pengurus_sopo_godang', 'non_tahbisan', 'huria', 'Pengurus Sopo Godang', null, '0813-1111-4402', true),
-('user-sopo-bendahara', 'sopo.bendahara@hkbp-hutaraja.org', 'Ria Mega Panjaitan (Bendahara Sopo Godang)', 'pengurus_kas', 'pengurus_sopo_godang', 'non_tahbisan', 'huria', 'Pengurus Sopo Godang', null, '0813-1111-4403', true),
-('user-bend-sm', 'sm.bendahara@hkbp-hutaraja.org', 'Sdri. L. Panjaitan (Bendahara Sekolah Minggu)', 'pengurus_kas', 'pengurus_seksi_sekolah_minggu', 'non_tahbisan', 'huria', 'Seksi Sekolah Minggu', null, '0813-7777-8888', true),
-('user-ketua-sm', 'sm.ketua@hkbp-hutaraja.org', 'St. E. Manurung (Ketua Seksi Sekolah Minggu)', 'pengurus_kas', 'pengurus_seksi_sekolah_minggu', 'sintua', 'huria', 'Seksi Sekolah Minggu', 'Wijk II', '0811-8888-9999', true),
-('user-bend-ina', 'ina.bendahara@hkbp-hutaraja.org', 'Ny. M. Boru Tampubolon (Bendahara Kaum Ibu)', 'pengurus_kas', 'pengurus_seksi_parompuan', 'non_tahbisan', 'huria', 'Seksi Parompuan', null, '0812-9999-0000', true),
-('user-audit-ketua', 'audit.ketua@hkbp-hutaraja.org', 'Sabar Sianturi, S.E (Ketua Badan Audit)', 'auditor', 'ketua_badan_audit', 'non_tahbisan', 'huria', 'Badan Audit Huria (Ketua merangkap Anggota)', null, '0812-7070-8080', true),
-('user-audit-1', 'audit.anggota1@hkbp-hutaraja.org', 'Hendra Supreddi Simaremare, S.I.P (Anggota Badan Audit)', 'auditor', 'anggota_badan_audit', 'non_tahbisan', 'huria', 'Badan Audit Huria (Anggota)', null, '0813-8080-9090', true),
-('user-audit-2', 'audit.anggota2@hkbp-hutaraja.org', 'Zico Andrianus Simanjuntak (Anggota Badan Audit)', 'auditor', 'anggota_badan_audit', 'non_tahbisan', 'huria', 'Badan Audit Huria (Anggota)', null, '0812-9090-0101', true)
-on conflict (id) do nothing;
+-- Password awal standar: 'Hkbp2026!' (Admin dapat mengubah masing-masing akun di Data Master -> Pengguna)
+insert into public.profiles (id, email, full_name, role, ecclesiastical_role, tohonan, tingkat, seksi_name, wijk, phone, password_hash, is_active) values
+('user-admin', 'admin@hkbp-hutaraja.org', 'St. P. Sitompul (Admin Sistem)', 'admin', 'admin_sistem', 'sintua', 'huria', null, 'Wijk II', '0812-1111-2222', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-pendeta', 'pendeta@hkbp-hutaraja.org', 'Pdt. Santa Lucia Manurung, S.Th (Pendeta Ressort)', 'pendeta_ressort', 'pendeta_ressort', 'pendeta', 'ressort', null, null, '0811-3333-4444', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-sekretaris', 'sekretaris@hkbp-hutaraja.org', 'St. Sardi Simanullang (Sekretaris Ressort / Parartaon)', 'sekretaris', 'sekretaris_huria', 'sintua', 'ressort', 'Majelis Perbendaharaan (Parartaon)', 'Wijk I', '0812-4444-5555', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-bendum', 'bendum@hkbp-hutaraja.org', 'St. Manaek Lumban Gaol (Bendahara Umum / Parartaon)', 'bendahara_umum', 'bendahara_huria', 'sintua', 'huria', 'Majelis Perbendaharaan (Parartaon)', 'Wijk I', '0813-2222-3333', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-parartaon-ketua', 'parartaon.ketua@hkbp-hutaraja.org', 'St. Harbet Simanjuntak (Ketua Parartaon)', 'majelis', 'majelis_perbendaharaan', 'sintua', 'huria', 'Ketua Majelis Perbendaharaan (Parartaon)', 'Wijk II', '0812-4321-8761', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-parartaon-1', 'parartaon.oloan@hkbp-hutaraja.org', 'St. Oloan Silaban (Anggota Parartaon)', 'majelis', 'majelis_perbendaharaan', 'sintua', 'huria', 'Anggota Majelis Perbendaharaan (Parartaon)', 'Wijk III', '0812-4321-8762', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-parartaon-2', 'parartaon.tohap@hkbp-hutaraja.org', 'St. Tohap Sihombing (Anggota Parartaon)', 'majelis', 'majelis_perbendaharaan', 'sintua', 'huria', 'Anggota Majelis Perbendaharaan (Parartaon)', 'Wijk IV', '0812-4321-8763', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-dewan-koinonia', 'koinonia@hkbp-hutaraja.org', 'St. Sondang Samosir (Ketua Dewan Koinonia)', 'pengurus_kas', 'ketua_dewan_koinonia', 'sintua', 'huria', 'Dewan Koinonia', 'Wijk III', '0812-3434-5656', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-dewan-diakonia', 'dewan.diakonia@hkbp-hutaraja.org', 'St. Juangga Sihite (Ketua Dewan Diakonia)', 'pengurus_kas', 'ketua_dewan_diakonia', 'sintua', 'huria', 'Dewan Diakonia', 'Wijk V', '0812-6666-7777', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-dewan-marturia', 'marturia@hkbp-hutaraja.org', 'St. Parulian Simaremare (Ketua Dewan Marturia)', 'pengurus_kas', 'ketua_dewan_marturia', 'sintua', 'huria', 'Dewan Marturia', 'Wijk VI', '0812-7777-5555', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-sopo-ketua', 'sopo.ketua@hkbp-hutaraja.org', 'Dedi Tumanggor (Ketua Pengurus Sopo Godang)', 'pengurus_kas', 'pengurus_sopo_godang', 'non_tahbisan', 'huria', 'Pengurus Sopo Godang', null, '0813-1111-4401', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-sopo-sekretaris', 'sopo.sekretaris@hkbp-hutaraja.org', 'Usuawan Simanullang (Sekretaris Sopo Godang)', 'pengurus_kas', 'pengurus_sopo_godang', 'non_tahbisan', 'huria', 'Pengurus Sopo Godang', null, '0813-1111-4402', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-sopo-bendahara', 'sopo.bendahara@hkbp-hutaraja.org', 'Ria Mega Panjaitan (Bendahara Sopo Godang)', 'pengurus_kas', 'pengurus_sopo_godang', 'non_tahbisan', 'huria', 'Pengurus Sopo Godang', null, '0813-1111-4403', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-bend-sm', 'sm.bendahara@hkbp-hutaraja.org', 'Sdri. L. Panjaitan (Bendahara Sekolah Minggu)', 'pengurus_kas', 'pengurus_seksi_sekolah_minggu', 'non_tahbisan', 'huria', 'Seksi Sekolah Minggu', null, '0813-7777-8888', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-ketua-sm', 'sm.ketua@hkbp-hutaraja.org', 'St. E. Manurung (Ketua Seksi Sekolah Minggu)', 'pengurus_kas', 'pengurus_seksi_sekolah_minggu', 'sintua', 'huria', 'Seksi Sekolah Minggu', 'Wijk II', '0811-8888-9999', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-bend-ina', 'ina.bendahara@hkbp-hutaraja.org', 'Ny. M. Boru Tampubolon (Bendahara Kaum Ibu)', 'pengurus_kas', 'pengurus_seksi_parompuan', 'non_tahbisan', 'huria', 'Seksi Parompuan', null, '0812-9999-0000', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-audit-ketua', 'audit.ketua@hkbp-hutaraja.org', 'Sabar Sianturi, S.E (Ketua Badan Audit)', 'auditor', 'ketua_badan_audit', 'non_tahbisan', 'huria', 'Badan Audit Huria (Ketua merangkap Anggota)', null, '0812-7070-8080', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-audit-1', 'audit.anggota1@hkbp-hutaraja.org', 'Hendra Supreddi Simaremare, S.I.P (Anggota Badan Audit)', 'auditor', 'anggota_badan_audit', 'non_tahbisan', 'huria', 'Badan Audit Huria (Anggota)', null, '0813-8080-9090', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true),
+('user-audit-2', 'audit.anggota2@hkbp-hutaraja.org', 'Zico Andrianus Simanjuntak (Anggota Badan Audit)', 'auditor', 'anggota_badan_audit', 'non_tahbisan', 'huria', 'Badan Audit Huria (Anggota)', null, '0812-9090-0101', encode(digest('SISKEU-HKBP-HUTARAJA:Hkbp2026!', 'sha256'), 'hex'), true)
+on conflict (id) do update set password_hash = coalesce(public.profiles.password_hash, excluded.password_hash);
 
 -- User Kas Access
 insert into public.user_kas_access (id, user_id, kas_id, access_level) values

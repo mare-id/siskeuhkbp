@@ -32,6 +32,7 @@ import {
   Search,
   Landmark,
   FileText,
+  FileEdit,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -156,6 +157,12 @@ export const AppLayout: React.FC = () => {
       label: 'Tutup Buku',
       icon: Lock,
       allowed: canClosePeriod,
+    },
+    {
+      to: '/admin/transactions',
+      label: 'Edit & Hapus Transaksi',
+      icon: FileEdit,
+      allowed: isAdmin,
     },
     {
       to: '/master',

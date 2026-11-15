@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { Transaction, TransactionStatus, TransactionType } from '../types/database';
 import { formatDateIndo, formatRupiah } from '../lib/formatters';
 import { exportToExcel } from '../lib/exportUtils';
@@ -36,11 +37,14 @@ import { TransactionModal } from '../components/transactions/TransactionModal';
 import { TransferModal } from '../components/transactions/TransferModal';
 import { AttachmentPreviewModal } from '../components/transactions/AttachmentPreviewModal';
 import { ReversalModal } from '../components/transactions/ReversalModal';
+import { AdminEditTransactionModal } from '../components/transactions/AdminEditTransactionModal';
+import { ConfirmActionModal } from '../components/common/ConfirmActionModal';
 
 const ITEMS_PER_PAGE = 12;
 
 export const TransactionsPage: React.FC = () => {
   const { kasList, storageAccounts, categories, transactions, changeStatus, deleteTransaction, createReversalTransaction } = useData();
+  const { toast } = useToast();
   const {
     currentUser,
     isLeader,
@@ -61,6 +65,9 @@ export const TransactionsPage: React.FC = () => {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [previewAttachmentUrl, setPreviewAttachmentUrl] = useState<string | null>(null);
   const [reversalTargetTx, setReversalTargetTx] = useState<Transaction | null>(null);
+  const [editTargetTx, setEditTargetTx] = useState<Transaction | null>(null);
+  const [deleteTargetTx, setDeleteTargetTx] = useState<Transaction | null>(null);
+  const [recallTargetTx, setRecallTargetTx] = useState<Transaction | null>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -167,20 +174,35 @@ export const TransactionsPage: React.FC = () => {
     exportToExcel(rows, `Data_Transaksi_HKBP_Hutaraja_${new Date().toISOString().split('T')[0]}`);
   };
 
-  const handleRecallToDraft = async (txId: string) => {
-    if (confirm('Tarik kembali pengajuan transaksi ini menjadi Draft?')) {
-      await changeStatus(txId, 'draft');
+  const handleConfirmRecallToDraft = async () => {
+    if (!recallTargetTx) return;
+    const res = await changeStatus(recallTargetTx.id, 'draft');
+    setRecallTargetTx(null);
+    if (!res.success) {
+      toast.error(res.error || 'Gagal menarik transaksi ke Draf.');
+      return;
     }
+    toast.success('Transaksi berhasil ditarik kembali ke Draf.');
   };
 
   const handleSubmitDraft = async (txId: string) => {
-    await changeStatus(txId, 'submitted');
+    const res = await changeStatus(txId, 'submitted');
+    if (!res.success) {
+      toast.error(res.error || 'Gagal mengajukan transaksi.');
+      return;
+    }
+    toast.success('Draf transaksi berhasil diajukan untuk persetujuan.');
   };
 
-  const handleDelete = async (txId: string) => {
-    if (confirm('Yakin ingin menghapus draf transaksi ini?')) {
-      await deleteTransaction(txId);
+  const handleConfirmDelete = async (reason?: string) => {
+    if (!deleteTargetTx) return;
+    const res = await deleteTransaction(deleteTargetTx.id, reason);
+    setDeleteTargetTx(null);
+    if (!res.success) {
+      toast.error(res.error || 'Gagal menghapus transaksi.');
+      return;
     }
+    toast.success('Transaksi berhasil dihapus.');
   };
 
   const handleConfirmReversal = async (txId: string, reason: string) => {
@@ -610,6 +632,26 @@ export const TransactionsPage: React.FC = () => {
 
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* Admin Edit & Delete on all statuses */}
+                          {isAdmin && (
+                            <>
+                              <button
+                                onClick={() => setEditTargetTx(tx)}
+                                title="Edit Transaksi (Admin)"
+                                className="p-1.5 text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                              >
+                                <FileEdit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setDeleteTargetTx(tx)}
+                                title="Hapus Transaksi (Admin)"
+                                className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+
                           {/* Draft Actions - only for recording users */}
                           {tx.status === 'draft' && canRecordTransactions && (isAdmin || tx.created_by === currentUser?.id) && (
                             <>
@@ -620,20 +662,22 @@ export const TransactionsPage: React.FC = () => {
                               >
                                 <Send className="w-3.5 h-3.5" />
                               </button>
-                              <button
-                                onClick={() => handleDelete(tx.id)}
-                                title="Hapus Draf"
-                                className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {!isAdmin && (
+                                <button
+                                  onClick={() => setDeleteTargetTx(tx)}
+                                  title="Hapus Draf"
+                                  className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </>
                           )}
 
                           {/* Submitted Action (Author can recall before approval) */}
                           {tx.status === 'submitted' && tx.created_by === currentUser?.id && canRecordTransactions && (
                             <button
-                              onClick={() => handleRecallToDraft(tx.id)}
+                              onClick={() => setRecallTargetTx(tx)}
                               title="Tarik Kembali ke Draf"
                               className="px-2 py-1 text-[10px] font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition-colors"
                             >
@@ -764,6 +808,24 @@ export const TransactionsPage: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {isAdmin && (
+                        <>
+                          <button
+                            onClick={() => setEditTargetTx(tx)}
+                            className="px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-1"
+                          >
+                            <FileEdit className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            onClick={() => setDeleteTargetTx(tx)}
+                            className="p-1.5 text-rose-600 bg-rose-50 border border-rose-200 rounded-lg"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+
                       {tx.status === 'draft' && canRecordTransactions && (isAdmin || tx.created_by === currentUser?.id) && (
                         <>
                           <button
@@ -773,12 +835,14 @@ export const TransactionsPage: React.FC = () => {
                             <Send className="w-3 h-3" />
                             <span>Ajukan</span>
                           </button>
-                          <button
-                            onClick={() => handleDelete(tx.id)}
-                            className="p-1 text-rose-600"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {!isAdmin && (
+                            <button
+                              onClick={() => setDeleteTargetTx(tx)}
+                              className="p-1 text-rose-600"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </>
                       )}
 
@@ -847,6 +911,62 @@ export const TransactionsPage: React.FC = () => {
         transaction={reversalTargetTx}
         onClose={() => setReversalTargetTx(null)}
         onConfirm={handleConfirmReversal}
+      />
+      <AdminEditTransactionModal
+        isOpen={Boolean(editTargetTx)}
+        transaction={editTargetTx}
+        onClose={() => setEditTargetTx(null)}
+      />
+      <ConfirmActionModal
+        isOpen={Boolean(deleteTargetTx)}
+        onClose={() => setDeleteTargetTx(null)}
+        onConfirm={handleConfirmDelete}
+        variant="danger"
+        title="Konfirmasi Hapus Transaksi"
+        message="Apakah Anda yakin ingin menghapus transaksi ini secara permanen? Tindakan ini tidak dapat dibatalkan."
+        warningText={
+          deleteTargetTx?.status === 'approved'
+            ? 'Peringatan: Transaksi ini berstatus Disetujui (Approved). Menghapusnya akan mengubah saldo resmi kas.'
+            : undefined
+        }
+        summaryRows={
+          deleteTargetTx
+            ? [
+                { label: 'Tanggal', newValue: formatDateIndo(deleteTargetTx.tanggal) },
+                {
+                  label: 'Kas / Dana',
+                  newValue: kasList.find((k) => k.id === deleteTargetTx.kas_id)?.nama || deleteTargetTx.kas_id,
+                },
+                { label: 'Uraian', newValue: deleteTargetTx.description },
+                { label: 'Nominal', newValue: formatRupiah(deleteTargetTx.amount), highlight: true },
+                { label: 'Status', newValue: deleteTargetTx.status.toUpperCase() },
+              ]
+            : []
+        }
+        showReasonInput={isAdmin}
+        reasonLabel="Alasan Penghapusan (Audit Trail)"
+        reasonPlaceholder="Contoh: Salah input nominal / transaksi ganda..."
+        confirmLabel="Ya, Hapus Transaksi"
+        cancelLabel="Batal"
+      />
+      <ConfirmActionModal
+        isOpen={Boolean(recallTargetTx)}
+        onClose={() => setRecallTargetTx(null)}
+        onConfirm={handleConfirmRecallToDraft}
+        variant="warning"
+        title="Konfirmasi Tarik ke Draf"
+        message="Tarik kembali pengajuan transaksi ini menjadi status Draft agar dapat diubah atau dihapus?"
+        summaryRows={
+          recallTargetTx
+            ? [
+                { label: 'Tanggal', newValue: formatDateIndo(recallTargetTx.tanggal) },
+                { label: 'Uraian', newValue: recallTargetTx.description },
+                { label: 'Nominal', newValue: formatRupiah(recallTargetTx.amount) },
+              ]
+            : []
+        }
+        confirmLabel="Ya, Tarik ke Draf"
+        cancelLabel="Batal"
       />
     </div>
   );

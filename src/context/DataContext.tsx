@@ -165,8 +165,8 @@ interface DataContextType {
     status: TransactionStatus;
     allocations: CompoundIncomeAllocationItem[];
   }) => Promise<{ success: boolean; error?: string; createdCount?: number }>;
-  updateTransaction: (id: string, updates: Partial<Transaction>) => Promise<{ success: boolean; error?: string }>;
-  deleteTransaction: (id: string) => Promise<{ success: boolean; error?: string }>;
+  updateTransaction: (id: string, updates: Partial<Transaction>, reason?: string) => Promise<{ success: boolean; error?: string }>;
+  deleteTransaction: (id: string, reason?: string) => Promise<{ success: boolean; error?: string }>;
   changeStatus: (id: string, newStatus: TransactionStatus, rejectNote?: string) => Promise<{ success: boolean; error?: string }>;
   bulkApprove: (ids: string[]) => Promise<{ success: boolean; count: number }>;
   createTransfer: (params: {
@@ -1458,32 +1458,37 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true, createdCount: createdTxs.length };
   };
 
-  // Update transaction (draft/submitted only)
+  // Update transaction (draft/submitted for officers, any status for Admin)
   const updateTransaction = async (
     id: string,
-    updates: Partial<Transaction>
+    updates: Partial<Transaction>,
+    reason?: string
   ): Promise<{ success: boolean; error?: string }> => {
     const existing = transactions.find((t) => t.id === id);
     if (!existing) return { success: false, error: 'Transaksi tidak ditemukan.' };
 
-    const txYear = new Date(existing.tanggal).getFullYear();
-    if (isYearLockedByLpj(txYear)) {
+    const isUserAdmin = currentUser?.role === 'admin';
+    const existingYear = new Date(existing.tanggal).getFullYear();
+    const targetYear = updates.tanggal ? new Date(updates.tanggal).getFullYear() : existingYear;
+
+    if (isYearLockedByLpj(existingYear) || isYearLockedByLpj(targetYear)) {
       return {
         success: false,
-        error: `Tahun Anggaran ${txYear} telah disahkan LPJ-nya oleh Rapat Huria dan telah terkunci permanen. Transaksi tidak dapat diubah.`,
+        error: `Tahun Anggaran ${isYearLockedByLpj(existingYear) ? existingYear : targetYear} telah disahkan LPJ-nya oleh Rapat Huria dan telah terkunci permanen. Transaksi tidak dapat diubah.`,
       };
     }
 
-    if (existing.status === 'approved') {
+    if (existing.status === 'approved' && !isUserAdmin) {
       return {
         success: false,
-        error: 'Transaksi yang sudah Disetujui tidak dapat diubah secara langsung. Gunakan menu Koreksi/Pembalik.',
+        error: 'Transaksi yang sudah Disetujui tidak dapat diubah secara langsung. Gunakan menu Koreksi/Pembalik atau hubungi Admin.',
       };
     }
 
     let computedSentralisasi: Partial<Transaction> = {};
     const finalType = updates.type || existing.type;
-    const finalAmount = updates.amount !== undefined ? updates.amount : existing.amount;
+    const finalAmount = updates.amount !== undefined ? Number(updates.amount) : Number(existing.amount);
+    const finalKasId = updates.kas_id || existing.kas_id;
     const finalCatId = updates.category_id !== undefined ? updates.category_id : existing.category_id;
     const finalRole = updates.sentralisasi_role !== undefined ? updates.sentralisasi_role : existing.sentralisasi_role;
 
@@ -1504,8 +1509,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           huria_rate: 1.0,
           bpsk_amount: 0,
           huria_amount: finalAmount,
-          sentralisasi_exclusion_type:
-            updates.sentralisasi_exclusion_type ?? existing.sentralisasi_exclusion_type ?? cat?.sentralisasi_exclusion_type ?? 'lainnya',
+          sentralisasi_exclusion_type: inferExclusionTypeForKas(
+            finalKasId,
+            updates.sentralisasi_exclusion_type !== undefined
+              ? updates.sentralisasi_exclusion_type
+              : existing.sentralisasi_exclusion_type,
+            cat?.sentralisasi_exclusion_type
+          ),
         };
       } else if (finalRole === 'huria_share') {
         computedSentralisasi = {
@@ -1531,6 +1541,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const bpsk = Math.round(finalAmount * 0.55);
         computedSentralisasi = {
           is_sentralisasi: true,
+          sentralisasi_role: null,
           bpsk_rate: 0.55,
           huria_rate: 0.45,
           bpsk_amount: bpsk,
@@ -1538,29 +1549,67 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           sentralisasi_exclusion_type: null,
         };
       }
+    } else {
+      computedSentralisasi = {
+        is_sentralisasi: false,
+        sentralisasi_role: null,
+        bpsk_rate: 0,
+        huria_rate: 1.0,
+        bpsk_amount: 0,
+        huria_amount: 0,
+        sentralisasi_exclusion_type: null,
+      };
     }
 
-    const mergedUpdates = {
+    const nextStatus = updates.status || existing.status;
+    const statusPatch: Partial<Transaction> = {};
+    if (updates.status !== undefined) {
+      if (nextStatus === 'approved') {
+        statusPatch.approved_by = existing.approved_by || currentUser?.id || null;
+        statusPatch.approved_at = existing.approved_at || new Date().toISOString();
+        statusPatch.reject_note = null;
+      } else if (nextStatus === 'rejected') {
+        statusPatch.reject_note = updates.reject_note ?? existing.reject_note ?? 'Ditolak oleh Admin';
+      } else {
+        statusPatch.reject_note = null;
+      }
+    }
+
+    const mergedUpdates: Partial<Transaction> = {
       ...updates,
       ...computedSentralisasi,
+      ...statusPatch,
+      amount: finalAmount,
       updated_at: new Date().toISOString(),
     };
+
+    if (isSupabaseConfigured) {
+      const syncRes = await syncUpdate('transactions', mergedUpdates, 'id', id);
+      if (!syncRes.success) {
+        return {
+          success: false,
+          error: syncRes.error || 'Gagal menyimpan perubahan transaksi ke Supabase.',
+        };
+      }
+    }
 
     setTransactions((prev) =>
       prev.map((t) => (t.id === id ? { ...t, ...mergedUpdates } : t))
     );
-    if (isSupabaseConfigured) {
-      await syncUpdate('transactions', mergedUpdates, 'id', id);
-    }
-    addAuditLog('transactions', id, 'UPDATE', existing, mergedUpdates, `Transaksi diupdate`);
+
+    const noteDetail = reason?.trim()
+      ? `Transaksi diubah oleh ${currentUser?.full_name || 'Admin'} (${reason.trim()})`
+      : `Transaksi diubah oleh ${currentUser?.full_name || 'Admin'}`;
+    addAuditLog('transactions', id, 'UPDATE', existing, { ...existing, ...mergedUpdates }, noteDetail);
     return { success: true };
   };
 
-  // Delete transaction (draft only)
-  const deleteTransaction = async (id: string): Promise<{ success: boolean; error?: string }> => {
+  // Delete transaction (draft for officers, any status for Admin)
+  const deleteTransaction = async (id: string, reason?: string): Promise<{ success: boolean; error?: string }> => {
     const existing = transactions.find((t) => t.id === id);
     if (!existing) return { success: false, error: 'Transaksi tidak ditemukan.' };
 
+    const isUserAdmin = currentUser?.role === 'admin';
     const txYear = new Date(existing.tanggal).getFullYear();
     if (isYearLockedByLpj(txYear)) {
       return {
@@ -1569,15 +1618,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
-    if (existing.status === 'approved') {
+    if (existing.status === 'approved' && !isUserAdmin) {
       return { success: false, error: 'Transaksi yang sudah Disetujui tidak boleh dihapus.' };
     }
 
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
     if (isSupabaseConfigured) {
-      await syncDelete('transactions', 'id', id);
+      const syncRes = await syncDelete('transactions', 'id', id);
+      if (!syncRes.success) {
+        return {
+          success: false,
+          error: syncRes.error || 'Gagal menghapus transaksi dari Supabase.',
+        };
+      }
     }
-    addAuditLog('transactions', id, 'DELETE', existing, null, `Transaksi dihapus`);
+
+    setTransactions((prev) => prev.filter((t) => t.id !== id));
+
+    const noteDetail = reason?.trim()
+      ? `Transaksi dihapus oleh ${currentUser?.full_name || 'Admin'} (${reason.trim()})`
+      : `Transaksi dihapus oleh ${currentUser?.full_name || 'Admin'}`;
+    addAuditLog('transactions', id, 'DELETE', existing, null, noteDetail);
     return { success: true };
   };
 

@@ -24,6 +24,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { UserGuidePage } from './pages/UserGuidePage';
 import { LoginPage } from './pages/LoginPage';
+import { AdminTransactionsPage } from './pages/AdminTransactionsPage';
 
 type PermissionKey =
   | 'canManageBudget'
@@ -33,7 +34,8 @@ type PermissionKey =
   | 'canClosePeriod'
   | 'canManageMasterData'
   | 'canViewAuditTrail'
-  | 'canManageSettings';
+  | 'canManageSettings'
+  | 'isAdmin';
 
 const RoleGuard: React.FC<{ allow: PermissionKey; children: React.ReactElement }> = ({ allow, children }) => {
   const auth = useAuth();
@@ -62,6 +64,7 @@ export default function App() {
                 <Route path="lpj-data" element={<LpjDataPage />} />
                 <Route path="closing" element={<RoleGuard allow="canClosePeriod"><PeriodClosingPage /></RoleGuard>} />
                 <Route path="master" element={<RoleGuard allow="canManageMasterData"><MasterDataPage /></RoleGuard>} />
+                <Route path="admin/transactions" element={<RoleGuard allow="isAdmin"><AdminTransactionsPage /></RoleGuard>} />
                 <Route path="audit-logs" element={<RoleGuard allow="canViewAuditTrail"><AuditLogsPage /></RoleGuard>} />
                 <Route path="settings" element={<RoleGuard allow="canManageSettings"><SettingsPage /></RoleGuard>} />
                 <Route path="guide" element={<UserGuidePage />} />

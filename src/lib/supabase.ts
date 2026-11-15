@@ -55,8 +55,26 @@ export function clearSupabaseCredentials() {
 /**
  * Test connectivity with Supabase project
  */
-export async function testSupabaseConnection(): Promise<{ success: boolean; message: string }> {
-  if (!isSupabaseConfigured || !supabase) {
+export async function testSupabaseConnection(
+  customUrl?: string,
+  customKey?: string
+): Promise<{ success: boolean; message: string }> {
+  const targetUrl = (customUrl ?? supabaseUrl).trim();
+  const targetKey = (customKey ?? supabaseAnonKey).trim();
+  const isReady = Boolean(
+    targetUrl &&
+    targetKey &&
+    targetUrl.startsWith('http') &&
+    targetUrl !== 'https://your-project-ref.supabase.co' &&
+    !targetUrl.includes('placeholder') &&
+    targetKey.length > 20
+  );
+
+  const client = customUrl && customKey && isReady
+    ? createClient(targetUrl, targetKey, { auth: { persistSession: false, autoRefreshToken: false } })
+    : supabase;
+
+  if (!isReady || !client) {
     return {
       success: false,
       message: 'Kredensial Supabase belum terkonfigurasi. Masukkan URL Proyek dan Anon Key terlebih dahulu.',
@@ -64,7 +82,7 @@ export async function testSupabaseConnection(): Promise<{ success: boolean; mess
   }
 
   try {
-    const { data, error } = await supabase.from('kas').select('id, nama').limit(1);
+    const { error } = await client.from('kas').select('id, nama').limit(1);
     if (error) {
       return {
         success: false,

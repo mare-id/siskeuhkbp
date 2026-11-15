@@ -129,6 +129,22 @@ function todayLocalIso(): string {
 }
 
 /**
+ * Menghitung pembagian 55% Kas Sentralisasi (BPSK) dan 45% Kas Tujuan (Huria)
+ * atau 100% ke Kas Tujuan apabila bukan objek sentralisasi.
+ */
+export function splitSentralisasiAmount(
+  amount: number,
+  isSentralisasi: boolean
+): { bpskAmount: number; huriaAmount: number } {
+  const cleanAmount = Math.max(0, Math.round(Number(amount) || 0));
+  if (!isSentralisasi) {
+    return { bpskAmount: 0, huriaAmount: cleanAmount };
+  }
+  const bpskAmount = Math.round(cleanAmount * PPKU_BPSK_RATE);
+  return { bpskAmount, huriaAmount: cleanAmount - bpskAmount };
+}
+
+/**
  * Mengevaluasi kepatuhan batas waktu penyetoran 55% Sentralisasi ke Virtual Account BPSK HKBP
  * maksimal 3 hari setelah ibadah jemaat (PPKU HKBP 2023 Pasal 4 ayat 2a & Pasal 10).
  */
@@ -143,7 +159,8 @@ export function evaluateBpskRemittanceCompliance(
     .filter((tx) => {
       if (tx.type !== 'income') return false;
       const cat = categories.find((c) => c.id === tx.category_id);
-      const isExcluded = cat ? cat.is_sentralisasi === false : tx.is_sentralisasi === false;
+      const isExcluded =
+        tx.is_sentralisasi !== undefined ? tx.is_sentralisasi === false : cat?.is_sentralisasi === false;
       return !isExcluded;
     })
     .sort((a, b) => a.tanggal.localeCompare(b.tanggal));
@@ -152,7 +169,13 @@ export function evaluateBpskRemittanceCompliance(
   sentralisasiIncomes.forEach((tx) => {
     const amt = Number(tx.amount) || 0;
     const bpsk =
-      tx.bpsk_amount !== undefined ? Number(tx.bpsk_amount) : Math.round(amt * PPKU_BPSK_RATE);
+      tx.sentralisasi_role === 'huria_share'
+        ? 0
+        : tx.sentralisasi_role === 'bpsk_share'
+        ? amt
+        : tx.bpsk_amount !== undefined
+        ? Number(tx.bpsk_amount)
+        : Math.round(amt * PPKU_BPSK_RATE);
     totalBpskObligation += bpsk;
   });
 
@@ -202,7 +225,14 @@ export function evaluateBpskRemittanceCompliance(
   for (const tx of sentralisasiIncomes) {
     const amt = Number(tx.amount) || 0;
     const bpsk =
-      tx.bpsk_amount !== undefined ? Number(tx.bpsk_amount) : Math.round(amt * PPKU_BPSK_RATE);
+      tx.sentralisasi_role === 'huria_share'
+        ? 0
+        : tx.sentralisasi_role === 'bpsk_share'
+        ? amt
+        : tx.bpsk_amount !== undefined
+        ? Number(tx.bpsk_amount)
+        : Math.round(amt * PPKU_BPSK_RATE);
+    if (bpsk <= 0) continue;
     if (remainingRemitted >= bpsk) {
       remainingRemitted -= bpsk;
     } else {

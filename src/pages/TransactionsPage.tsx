@@ -567,9 +567,17 @@ export const TransactionsPage: React.FC = () => {
                           {formatRupiah(tx.amount)}
                         </div>
                         {tx.type === 'income' && (
-                          tx.is_sentralisasi === false ? (
+                          tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi' ? (
                             <div className="text-[9.5px] font-sans font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded mt-0.5 inline-block border border-emerald-100">
-                              100% Kas Huria
+                              100% Kas Tujuan (Non-Sentralisasi)
+                            </div>
+                          ) : tx.sentralisasi_role === 'bpsk_share' ? (
+                            <div className="text-[9.5px] font-sans font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded mt-0.5 inline-block border border-blue-100">
+                              Porsi 55% Sentralisasi (BPSK)
+                            </div>
+                          ) : tx.sentralisasi_role === 'huria_share' ? (
+                            <div className="text-[9.5px] font-sans font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded mt-0.5 inline-block border border-indigo-100">
+                              Porsi 45% Bagian Lokal Huria
                             </div>
                           ) : (
                             <div className="text-[9px] font-sans font-medium text-slate-500 mt-0.5 text-right space-y-0.2">
@@ -719,9 +727,17 @@ export const TransactionsPage: React.FC = () => {
                         {formatRupiah(tx.amount)}
                       </span>
                       {tx.type === 'income' && (
-                        tx.is_sentralisasi === false ? (
+                        tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi' ? (
                           <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-100 block mt-0.5">
-                            100% Kas Huria
+                            100% Non-Sentralisasi
+                          </span>
+                        ) : tx.sentralisasi_role === 'bpsk_share' ? (
+                          <span className="text-[9px] font-semibold text-blue-700 bg-blue-50 px-1 py-0.2 rounded border border-blue-100 block mt-0.5">
+                            55% Sentralisasi (BPSK)
+                          </span>
+                        ) : tx.sentralisasi_role === 'huria_share' ? (
+                          <span className="text-[9px] font-semibold text-indigo-700 bg-indigo-50 px-1 py-0.2 rounded border border-indigo-100 block mt-0.5">
+                            45% Bagian Lokal
                           </span>
                         ) : (
                           <span className="text-[8.5px] font-medium text-blue-700 block mt-0.5">

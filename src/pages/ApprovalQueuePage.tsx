@@ -306,12 +306,32 @@ export const ApprovalQueuePage: React.FC = () => {
                         );
                       })()}
 
-                      {tx.type === 'income' && tx.is_sentralisasi !== false && (
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200">
-                            55% BPSK ({formatRupiah(tx.bpsk_amount ?? Math.round(Number(tx.amount) * 0.55))}) · Batas Setor H+{PPKU_BPSK_DEADLINE_DAYS} (PPKU Pasal 4)
-                          </span>
-                        </div>
+                      {tx.type === 'income' && (
+                        tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi' ? (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              100% Kas Tujuan (Bebas Potongan Sentralisasi)
+                            </span>
+                          </div>
+                        ) : tx.sentralisasi_role === 'bpsk_share' ? (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200">
+                              Otomatis 55% Kas Sentralisasi · Batas Setor BPSK H+{PPKU_BPSK_DEADLINE_DAYS} (PPKU Pasal 4)
+                            </span>
+                          </div>
+                        ) : tx.sentralisasi_role === 'huria_share' ? (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-800 border border-indigo-200">
+                              Bagian 45% Kas Lokal (Pasangan 55% di Kas Sentralisasi)
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200">
+                              55% BPSK ({formatRupiah(tx.bpsk_amount ?? Math.round(Number(tx.amount) * 0.55))}) · Batas Setor H+{PPKU_BPSK_DEADLINE_DAYS} (PPKU Pasal 4)
+                            </span>
+                          </div>
+                        )
                       )}
 
                       <div className="flex items-center gap-3 pt-0.5">
@@ -351,7 +371,39 @@ export const ApprovalQueuePage: React.FC = () => {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      {!isCreator &&
+                        tx.allocation_group_id &&
+                        (() => {
+                          const groupApprovableIds = pendingApprovals
+                            .filter(
+                              (other) =>
+                                other.allocation_group_id === tx.allocation_group_id &&
+                                other.created_by !== currentUser?.id
+                            )
+                            .map((other) => other.id);
+                          if (groupApprovableIds.length <= 1) return null;
+                          return (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const res = await bulkApprove(groupApprovableIds);
+                                if (res.success) {
+                                  confetti({ particleCount: 70, spread: 70, origin: { y: 0.8 } });
+                                  setActionSuccessMsg(
+                                    `${res.count} baris paket alokasi berhasil disetujui sekaligus.`
+                                  );
+                                  setTimeout(() => setActionSuccessMsg(''), 4000);
+                                }
+                              }}
+                              className="px-3.5 py-2.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors flex items-center gap-1.5"
+                            >
+                              <CheckCheck className="w-4 h-4" />
+                              <span>Setujui Paket ({groupApprovableIds.length})</span>
+                            </button>
+                          );
+                        })()}
+
                       <button
                         onClick={() => setRejectingTx(tx)}
                         className="px-4 py-2.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors flex items-center gap-1.5 active:scale-95"

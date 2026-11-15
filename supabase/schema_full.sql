@@ -1,9 +1,15 @@
 -- =============================================================================
--- SIKU HKBP HUTARAJA - COMPLETE FULL DATABASE SCHEMA FOR SUPABASE
+-- SIKU HKBP HUTARAJA - COMPLETE FULL DATABASE SCHEMA FOR SUPABASE (PostgreSQL)
 -- =============================================================================
--- Skrip SQL ini mencakup seluruh tabel, tipe data, enum HKBP, relasi foreign key,
--- RLS (Row Level Security), storage bucket bukti nota, dan data awal master.
--- Jalankan skrip ini sekali di Supabase SQL Editor (Dashboard -> SQL Editor -> New Query -> Run).
+-- Skrip SQL ini bersifat IDEMPOTENT (aman dijalankan ulang berkali-kali).
+-- Mencakup seluruh 38 tabel, tipe data, enum HKBP, upgrade kolom otomatis,
+-- RLS (Row Level Security), publikasi Realtime, Storage Bucket nota, dan seed awal.
+--
+-- CARA PENGGUNAAN:
+-- 1. Buka Supabase Dashboard -> SQL Editor -> New Query
+-- 2. Tempel seluruh isi skrip ini, lalu klik Run (atau Ctrl + Enter)
+-- 3. Pastikan Environment Variables VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY
+--    telah diisi (atau simpan melalui Pengaturan Sistem di Dashboard)
 -- =============================================================================
 
 -- 1. EXTENSIONS
@@ -11,47 +17,47 @@ create extension if not exists "uuid-ossp";
 create extension if not exists "pgcrypto";
 
 -- 2. ENUMS & CUSTOM TYPES
-do 313 begin
+do $$ begin
   create type public.user_role as enum (
     'admin', 'bendahara_umum', 'pengurus_kas', 'pendeta_ressort', 'sekretaris', 'majelis', 'auditor'
   );
-exception when duplicate_object then null; end 313;
+exception when duplicate_object then null; end $$;
 
-do 313 begin
+do $$ begin
   create type public.kas_access_level as enum ('bendahara', 'ketua');
-exception when duplicate_object then null; end 313;
+exception when duplicate_object then null; end $$;
 
-do 313 begin
+do $$ begin
   create type public.storage_type as enum ('cash', 'bank');
-exception when duplicate_object then null; end 313;
+exception when duplicate_object then null; end $$;
 
-do 313 begin
+do $$ begin
   create type public.category_type as enum ('income', 'expense');
-exception when duplicate_object then null; end 313;
+exception when duplicate_object then null; end $$;
 
-do 313 begin
+do $$ begin
   create type public.transaction_type as enum ('income', 'expense', 'transfer_out', 'transfer_in');
-exception when duplicate_object then null; end 313;
+exception when duplicate_object then null; end $$;
 
-do 313 begin
+do $$ begin
   create type public.transaction_status as enum ('draft', 'submitted', 'approved', 'rejected');
-exception when duplicate_object then null; end 313;
+exception when duplicate_object then null; end $$;
 
-do 313 begin
+do $$ begin
   create type public.fund_type as enum ('unrestricted', 'restricted');
-exception when duplicate_object then null; end 313;
+exception when duplicate_object then null; end $$;
 
-do 313 begin
+do $$ begin
   create type public.opening_book_status as enum ('not_started', 'drafting', 'submitted', 'approved', 'locked');
-exception when duplicate_object then null; end 313;
+exception when duplicate_object then null; end $$;
 
-do 313 begin
+do $$ begin
   create type public.opening_adjustment_status as enum ('submitted', 'approved_ketua', 'approved_bendum', 'rejected');
-exception when duplicate_object then null; end 313;
+exception when duplicate_object then null; end $$;
 
-do 313 begin
-  create type public.budget_status as enum ('draft', 'submitted', 'returned', 'approved');
-exception when duplicate_object then null; end 313;
+do $$ begin
+  create type public.budget_status as enum ('draft', 'reviewed', 'submitted_rapat', 'approved', 'returned');
+exception when duplicate_object then null; end $$;
 
 -- 3. CORE TABLES
 
@@ -108,7 +114,7 @@ create table if not exists public.user_kas_access (
   unique(user_id, kas_id, access_level)
 );
 
--- Kategori Transaksi
+-- Kategori Transaksi (Mendukung PPKU 2023 Sentralisasi 55% / 45%)
 create table if not exists public.categories (
   id text primary key default gen_random_uuid()::text,
   nama text not null,
@@ -119,6 +125,7 @@ create table if not exists public.categories (
   is_sentralisasi boolean not null default true,
   sentralisasi_group text,
   sentralisasi_exclusion_type text,
+  default_kas_id text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -143,13 +150,26 @@ create table if not exists public.app_settings (
   updated_at timestamptz not null default now()
 );
 
+-- Master Tahun Anggaran (Fiscal Years)
+create table if not exists public.fiscal_years (
+  id text primary key default gen_random_uuid()::text,
+  year integer unique not null check (year >= 2000 and year <= 2100),
+  theme text not null default '',
+  start_date date not null,
+  end_date date not null,
+  status text not null default 'planning',
+  is_budget_locked boolean not null default false,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
 -- Transaksi Keuangan
 create table if not exists public.transactions (
   id text primary key default gen_random_uuid()::text,
   tanggal date not null default current_date,
   kas_id text not null references public.kas(id) on delete restrict,
   storage_account_id text not null references public.storage_accounts(id) on delete restrict,
-  category_id text references public.categories(id) on delete restrict,
+  category_id text references public.categories(id) on delete set null,
   type text not null,
   amount numeric(15,2) not null check (amount > 0),
   description text not null,
@@ -157,21 +177,23 @@ create table if not exists public.transactions (
   attachment_url text,
   status text not null default 'draft',
   transfer_id text,
-  transfer_target_kas_id text references public.kas(id),
-  transfer_target_storage_id text references public.storage_accounts(id),
-  transfer_confirmed_by text references public.profiles(id),
+  transfer_target_kas_id text,
+  transfer_target_storage_id text,
+  transfer_confirmed_by text,
   transfer_confirmed_at timestamptz,
-  reverses_id text references public.transactions(id),
+  reverses_id text,
   is_reversal boolean not null default false,
-  created_by text references public.profiles(id),
-  approved_by text references public.profiles(id),
+  created_by text,
+  approved_by text,
   approved_at timestamptz,
   reject_note text,
   audit_status text default 'unverified',
-  audited_by text references public.profiles(id),
+  audited_by text,
   audited_at timestamptz,
   audit_note text,
   is_sentralisasi boolean default true,
+  sentralisasi_role text,
+  allocation_group_id text,
   bpsk_rate numeric(5,2) default 0.55,
   huria_rate numeric(5,2) default 0.45,
   bpsk_amount numeric(15,2) default 0,
@@ -191,9 +213,9 @@ create table if not exists public.period_closings (
   bulan integer not null check (bulan >= 1 and bulan <= 12),
   kas_id text references public.kas(id) on delete cascade,
   is_closed boolean not null default true,
-  closed_by text references public.profiles(id),
+  closed_by text,
   closed_at timestamptz not null default now(),
-  reopened_by text references public.profiles(id),
+  reopened_by text,
   reopened_at timestamptz,
   reopen_reason text,
   created_at timestamptz not null default now()
@@ -208,11 +230,11 @@ create table if not exists public.reconciliations (
   physical_balance numeric(15,2) not null,
   discrepancy numeric(15,2) not null default 0,
   notes text,
-  checked_by text references public.profiles(id),
+  checked_by text,
   created_at timestamptz not null default now()
 );
 
--- Audit Logs
+-- Audit Logs (changed_by dapat berisi user_id atau 'system')
 create table if not exists public.audit_logs (
   id text primary key default gen_random_uuid()::text,
   table_name text not null,
@@ -220,7 +242,7 @@ create table if not exists public.audit_logs (
   action text not null,
   old_data jsonb,
   new_data jsonb,
-  changed_by text references public.profiles(id),
+  changed_by text,
   notes text,
   changed_at timestamptz not null default now()
 );
@@ -260,12 +282,12 @@ create table if not exists public.opening_balance_entries (
   explanation text,
   document_url text,
   status text not null default 'drafting',
-  created_by text references public.profiles(id),
-  approved_by text references public.profiles(id),
-  approved_at timestamptz,
-  locked_by text references public.profiles(id),
-  locked_at timestamptz,
+  created_by text,
   submitted_at timestamptz,
+  approved_by text,
+  approved_at timestamptz,
+  locked_by text,
+  locked_at timestamptz,
   return_note text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -281,15 +303,17 @@ create table if not exists public.opening_balance_adjustments (
   reason text not null,
   document_url text,
   status text not null default 'submitted',
-  proposed_by text references public.profiles(id),
-  approved_ketua_by text references public.profiles(id),
+  proposed_by text,
+  approved_ketua_by text,
   approved_ketua_at timestamptz,
-  approved_bendum_by text references public.profiles(id),
+  approved_bendum_by text,
   approved_bendum_at timestamptz,
-  rejected_by text references public.profiles(id),
+  rejected_by text,
   rejected_at timestamptz,
   reject_reason text,
-  created_at timestamptz not null default now()
+  reject_note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.opening_other_positions (
@@ -298,9 +322,11 @@ create table if not exists public.opening_other_positions (
   kas_id text not null references public.kas(id) on delete cascade,
   type text not null,
   name text not null,
-  category text not null,
+  category text,
   acquisition_year integer,
   amount numeric(15,2) not null default 0,
+  condition text,
+  location text,
   section_manager text,
   notes text,
   created_at timestamptz not null default now()
@@ -313,6 +339,8 @@ create table if not exists public.prior_year_summaries (
   category_id text references public.categories(id) on delete restrict,
   jumlah numeric(15,2) not null default 0,
   sumber text default 'manual',
+  created_by text,
+  approved_by text,
   locked boolean default true,
   created_at timestamptz not null default now()
 );
@@ -327,12 +355,20 @@ create table if not exists public.budgets (
   status text not null default 'draft',
   estimated_opening_balance numeric(15,2) not null default 0,
   is_opening_balance_locked boolean not null default false,
+  is_current_active boolean not null default false,
+  notes text,
   return_note text,
   rapat_date date,
   rapat_berita_acara_no text,
   rapat_document_url text,
-  created_by text references public.profiles(id),
-  approved_by text references public.profiles(id),
+  created_by text,
+  reviewed_by text,
+  reviewed_at timestamptz,
+  submitted_rapat_by text,
+  submitted_rapat_at timestamptz,
+  ratified_by text,
+  ratified_at timestamptz,
+  approved_by text,
   approved_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -344,7 +380,7 @@ create table if not exists public.budget_items (
   budget_id text not null references public.budgets(id) on delete cascade,
   category_id text not null references public.categories(id) on delete restrict,
   type text not null,
-  description text not null,
+  description text,
   annual_amount numeric(15,2) not null default 0,
   monthly_distribution jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
@@ -356,17 +392,18 @@ create table if not exists public.budget_reallocations (
   budget_id text not null references public.budgets(id) on delete cascade,
   kas_id text not null references public.kas(id) on delete cascade,
   tahun integer not null default 2026,
-  from_item_id text not null references public.budget_items(id),
-  to_item_id text not null references public.budget_items(id),
+  from_item_id text not null references public.budget_items(id) on delete cascade,
+  to_item_id text not null references public.budget_items(id) on delete cascade,
   amount numeric(15,2) not null,
   reason text not null,
   status text not null default 'approved',
-  proposed_by text references public.profiles(id),
-  approved_by text references public.profiles(id),
+  proposed_by text,
+  approved_by text,
   approved_at timestamptz,
-  rejected_by text references public.profiles(id),
+  rejected_by text,
   rejected_at timestamptz,
   reject_reason text,
+  reject_note text,
   created_at timestamptz not null default now()
 );
 
@@ -382,21 +419,32 @@ create table if not exists public.fixed_assets (
   lokasi text not null default 'Gereja',
   kas_id text references public.kas(id) on delete set null,
   status text not null default 'aktif',
+  foto_url text,
+  dokumen_url text,
+  transaction_id text,
   useful_life_years integer default 0,
   salvage_value numeric(15,2) default 0,
   notes text,
   disposed_at date,
+  disposal_date date,
   disposal_reason text,
-  created_at timestamptz not null default now()
+  disposal_proposed_by text,
+  disposal_approved_by text,
+  disposal_approved_at timestamptz,
+  created_by text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.asset_depreciations (
   id text primary key default gen_random_uuid()::text,
   asset_id text not null references public.fixed_assets(id) on delete cascade,
   year integer not null,
+  tahun integer,
   depreciation_amount numeric(15,2) not null default 0,
   accumulated_depreciation numeric(15,2) not null default 0,
   book_value numeric(15,2) not null default 0,
+  method text default 'straight_line',
   calculated_at timestamptz not null default now(),
   unique (asset_id, year)
 );
@@ -405,6 +453,7 @@ create table if not exists public.advances (
   id text primary key default gen_random_uuid()::text,
   kode text unique not null,
   kas_id text not null references public.kas(id) on delete restrict,
+  storage_account_id text,
   recipient_name text not null,
   recipient_phone text,
   amount numeric(15,2) not null default 0,
@@ -412,23 +461,35 @@ create table if not exists public.advances (
   due_date date not null,
   purpose text not null,
   status text not null default 'active',
-  settled_at date,
-  created_by text references public.profiles(id),
-  created_at timestamptz not null default now()
+  transaction_id text,
+  settled_at timestamptz,
+  created_by text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.advance_settlements (
   id text primary key default gen_random_uuid()::text,
   advance_id text not null references public.advances(id) on delete cascade,
   settlement_date date not null default current_date,
-  total_spent numeric(15,2) not null default 0,
-  remaining_amount numeric(15,2) not null default 0,
+  spent_amount numeric(15,2) not null default 0,
+  remaining_returned numeric(15,2) not null default 0,
+  deficit_reimbursed numeric(15,2) not null default 0,
+  total_spent numeric(15,2) default 0,
+  remaining_amount numeric(15,2) default 0,
   notes text,
+  receipt_url text,
   receipt_urls jsonb default '[]'::jsonb,
-  status text not null default 'approved',
-  created_by text references public.profiles(id),
-  approved_by text references public.profiles(id),
-  created_at timestamptz not null default now()
+  status text not null default 'draft',
+  submitted_by text,
+  created_by text,
+  approved_by text,
+  approved_at timestamptz,
+  reject_note text,
+  return_transaction_id text,
+  reimburse_transaction_id text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.receivables_payables (
@@ -441,11 +502,13 @@ create table if not exists public.receivables_payables (
   amount numeric(15,2) not null default 0,
   remaining_amount numeric(15,2) not null default 0,
   issue_date date not null default current_date,
-  due_date date not null,
+  due_date date,
   status text not null default 'active',
   description text not null,
-  created_by text references public.profiles(id),
-  created_at timestamptz not null default now()
+  document_url text,
+  created_by text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.receivable_payable_payments (
@@ -453,10 +516,11 @@ create table if not exists public.receivable_payable_payments (
   parent_id text not null references public.receivables_payables(id) on delete cascade,
   payment_date date not null default current_date,
   payment_amount numeric(15,2) not null default 0,
-  storage_account_id text references public.storage_accounts(id),
+  storage_account_id text,
+  transaction_id text,
   notes text,
   receipt_url text,
-  created_by text references public.profiles(id),
+  created_by text,
   created_at timestamptz not null default now()
 );
 
@@ -470,6 +534,7 @@ create table if not exists public.lpj_notes (
   significant_events text,
   restricted_funds_notes text,
   post_reporting_events text,
+  updated_by text,
   updated_at timestamptz not null default now()
 );
 
@@ -482,6 +547,7 @@ create table if not exists public.lpj_settings (
   document_number_format text default 'HKBP-HTR/LPJ/{TAHUN}/{NOMOR}',
   signatories jsonb default '[]'::jsonb,
   useful_life_defaults jsonb default '{}'::jsonb,
+  updated_by text,
   updated_at timestamptz not null default now()
 );
 
@@ -508,10 +574,10 @@ create table if not exists public.audit_engagements (
   lpj_id text,
   status text not null default 'draft',
   dibuka_pada date not null default current_date,
-  batas_waktu date not null default current_date + interval '14 days',
+  batas_waktu date not null default (current_date + interval '14 days'),
   berita_acara_url text,
   combined_with_lpj boolean not null default false,
-  created_by text references public.profiles(id),
+  created_by text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (tahun, jenis)
@@ -525,27 +591,31 @@ create table if not exists public.audit_reviews (
   general_notes text,
   personal_opinion text not null default 'sesuai',
   submitted_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
   unique(engagement_id, member_id)
 );
 
 create table if not exists public.audit_findings (
   id text primary key default gen_random_uuid()::text,
-  engagement_id text not null references public.audit_engagements(id) on delete cascade,
+  engagement_id text not null,
   kas_id text references public.kas(id) on delete set null,
   kode text not null,
   title text not null,
   description text not null,
   severity text not null default 'wajib_diperbaiki',
   status text not null default 'terbuka',
+  carried_from_finding_id text,
   due_date date,
   response_notes text,
-  response_by text references public.profiles(id),
+  response_by text,
   responded_at timestamptz,
-  closed_by text references public.profiles(id),
+  closed_by text,
   closed_at timestamptz,
   closing_notes text,
-  created_by text references public.profiles(id),
-  created_at timestamptz not null default now()
+  created_by text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.audit_final_opinions (
@@ -557,8 +627,9 @@ create table if not exists public.audit_final_opinions (
   dissenting_opinion_notes text,
   berita_acara_no text not null,
   berita_acara_date date not null default current_date,
+  berita_acara_url text,
   signatories jsonb not null default '[]'::jsonb,
-  finalized_by text references public.profiles(id),
+  finalized_by text,
   finalized_at timestamptz not null default now()
 );
 
@@ -572,7 +643,8 @@ create table if not exists public.cash_counts (
   difference numeric(15,2) default 0,
   cash_breakdown jsonb not null default '{}'::jsonb,
   explanation text,
-  auditor_id text references public.profiles(id),
+  photo_url text,
+  auditor_id text,
   witness_name text,
   created_at timestamptz not null default now()
 );
@@ -609,7 +681,7 @@ create table if not exists public.semester_reports (
   checklist_result jsonb not null default '{}'::jsonb,
   sent_to_pastor_date date,
   sent_ref text,
-  pastor_ack_by text references public.profiles(id),
+  pastor_ack_by text,
   pastor_ack_at timestamptz,
   pastor_note text,
   announced_date date,
@@ -617,7 +689,7 @@ create table if not exists public.semester_reports (
   announcement_text text,
   announcement_document_url text,
   return_notes text,
-  created_by text references public.profiles(id),
+  created_by text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (tahun, semester, version)
@@ -636,10 +708,10 @@ create table if not exists public.lpj_reports (
   meeting_document_url text,
   meeting_notes text,
   meeting_attendees_count integer default 0,
-  approved_by text references public.profiles(id),
+  approved_by text,
   approved_at timestamptz,
   return_notes text,
-  created_by text references public.profiles(id),
+  created_by text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (tahun, version)
@@ -651,18 +723,131 @@ create table if not exists public.lpj_exceptions (
   target_id text not null,
   rule_code text not null,
   reason text not null,
-  granted_by text not null references public.profiles(id),
+  granted_by text not null,
   granted_at timestamptz not null default now()
 );
 
+-- =============================================================================
+-- 8B. IDEMPOTENT COLUMN & CONSTRAINT UPGRADES (AMAN UNTUK DB YANG SUDAH ADA)
+-- =============================================================================
+do $$ begin
+  -- Categories PPKU 2023 columns
+  alter table public.categories add column if not exists deskripsi text;
+  alter table public.categories add column if not exists is_sentralisasi boolean not null default true;
+  alter table public.categories add column if not exists sentralisasi_group text;
+  alter table public.categories add column if not exists sentralisasi_exclusion_type text;
+  alter table public.categories add column if not exists default_kas_id text;
+
+  -- App Settings columns
+  alter table public.app_settings add column if not exists ketua_parartaon_name text default 'St. Harbet Simanjuntak';
+  alter table public.app_settings add column if not exists bpsk_va_number text default 'VA-BPSK HKBP Ressort Hutaraja (Mandiri / BRI)';
+  alter table public.app_settings add column if not exists budget_reallocation_max_pct numeric(5,2) not null default 15.00;
+
+  -- Transactions PPKU & Sentralisasi columns
+  alter table public.transactions add column if not exists is_sentralisasi boolean default true;
+  alter table public.transactions add column if not exists sentralisasi_role text;
+  alter table public.transactions add column if not exists allocation_group_id text;
+  alter table public.transactions add column if not exists bpsk_rate numeric(5,2) default 0.55;
+  alter table public.transactions add column if not exists huria_rate numeric(5,2) default 0.45;
+  alter table public.transactions add column if not exists bpsk_amount numeric(15,2) default 0;
+  alter table public.transactions add column if not exists huria_amount numeric(15,2) default 0;
+  alter table public.transactions add column if not exists sentralisasi_remitted boolean default false;
+  alter table public.transactions add column if not exists sentralisasi_remitted_at timestamptz;
+  alter table public.transactions add column if not exists sentralisasi_remitted_ref text;
+  alter table public.transactions add column if not exists sentralisasi_exclusion_type text;
+
+  -- Budgets workflow columns
+  alter table public.budgets add column if not exists is_current_active boolean not null default false;
+  alter table public.budgets add column if not exists notes text;
+  alter table public.budgets add column if not exists reviewed_by text;
+  alter table public.budgets add column if not exists reviewed_at timestamptz;
+  alter table public.budgets add column if not exists submitted_rapat_by text;
+  alter table public.budgets add column if not exists submitted_rapat_at timestamptz;
+  alter table public.budgets add column if not exists ratified_by text;
+  alter table public.budgets add column if not exists ratified_at timestamptz;
+  alter table public.budget_items alter column description drop not null;
+  alter table public.budget_reallocations add column if not exists reject_note text;
+
+  -- Opening Balance module columns
+  alter table public.opening_balance_adjustments add column if not exists reject_note text;
+  alter table public.opening_balance_adjustments add column if not exists updated_at timestamptz not null default now();
+  alter table public.opening_other_positions add column if not exists condition text;
+  alter table public.opening_other_positions add column if not exists location text;
+  alter table public.opening_other_positions alter column category drop not null;
+  alter table public.prior_year_summaries add column if not exists created_by text;
+  alter table public.prior_year_summaries add column if not exists approved_by text;
+
+  -- Fixed assets & LPJ supporting tables
+  alter table public.fixed_assets add column if not exists foto_url text;
+  alter table public.fixed_assets add column if not exists dokumen_url text;
+  alter table public.fixed_assets add column if not exists transaction_id text;
+  alter table public.fixed_assets add column if not exists disposal_date date;
+  alter table public.fixed_assets add column if not exists disposal_proposed_by text;
+  alter table public.fixed_assets add column if not exists disposal_approved_by text;
+  alter table public.fixed_assets add column if not exists disposal_approved_at timestamptz;
+  alter table public.fixed_assets add column if not exists created_by text;
+  alter table public.fixed_assets add column if not exists updated_at timestamptz not null default now();
+
+  alter table public.asset_depreciations add column if not exists tahun integer;
+  alter table public.asset_depreciations add column if not exists method text default 'straight_line';
+
+  alter table public.advances add column if not exists storage_account_id text;
+  alter table public.advances add column if not exists transaction_id text;
+  alter table public.advances add column if not exists updated_at timestamptz not null default now();
+
+  alter table public.advance_settlements add column if not exists spent_amount numeric(15,2) not null default 0;
+  alter table public.advance_settlements add column if not exists remaining_returned numeric(15,2) not null default 0;
+  alter table public.advance_settlements add column if not exists deficit_reimbursed numeric(15,2) not null default 0;
+  alter table public.advance_settlements add column if not exists receipt_url text;
+  alter table public.advance_settlements add column if not exists submitted_by text;
+  alter table public.advance_settlements add column if not exists approved_at timestamptz;
+  alter table public.advance_settlements add column if not exists reject_note text;
+  alter table public.advance_settlements add column if not exists return_transaction_id text;
+  alter table public.advance_settlements add column if not exists reimburse_transaction_id text;
+  alter table public.advance_settlements add column if not exists updated_at timestamptz not null default now();
+
+  alter table public.receivables_payables add column if not exists document_url text;
+  alter table public.receivables_payables add column if not exists updated_at timestamptz not null default now();
+  alter table public.receivables_payables alter column due_date drop not null;
+  alter table public.receivable_payable_payments add column if not exists transaction_id text;
+
+  alter table public.lpj_notes add column if not exists updated_by text;
+  alter table public.lpj_settings add column if not exists updated_by text;
+
+  -- Audit module columns
+  alter table public.audit_findings add column if not exists carried_from_finding_id text;
+  alter table public.audit_findings add column if not exists updated_at timestamptz not null default now();
+  alter table public.audit_reviews add column if not exists created_at timestamptz not null default now();
+  alter table public.audit_reviews add column if not exists updated_at timestamptz not null default now();
+  alter table public.audit_final_opinions add column if not exists berita_acara_url text;
+  alter table public.cash_counts add column if not exists photo_url text;
+
+  -- Relax FKs on audit / system-user reference columns so 'system' fallback never fails
+  alter table public.audit_logs drop constraint if exists audit_logs_changed_by_fkey;
+  alter table public.transactions drop constraint if exists transactions_created_by_fkey;
+  alter table public.transactions drop constraint if exists transactions_approved_by_fkey;
+  alter table public.transactions drop constraint if exists transactions_audited_by_fkey;
+  alter table public.transactions drop constraint if exists transactions_transfer_confirmed_by_fkey;
+  alter table public.transactions drop constraint if exists transactions_reverses_id_fkey;
+  alter table public.audit_findings drop constraint if exists audit_findings_engagement_id_fkey;
+  alter table public.lpj_exceptions drop constraint if exists lpj_exceptions_granted_by_fkey;
+exception when others then null; end $$;
+
+-- Helpful Indexes for Dashboard Performance
+create index if not exists idx_transactions_tanggal on public.transactions(tanggal desc);
+create index if not exists idx_transactions_kas_id on public.transactions(kas_id);
+create index if not exists idx_transactions_status on public.transactions(status);
+create index if not exists idx_budgets_kas_tahun on public.budgets(kas_id, tahun);
+create index if not exists idx_audit_logs_changed_at on public.audit_logs(changed_at desc);
+
 -- 9. ROW LEVEL SECURITY (RLS) & POLICIES
--- Buka akses penuh untuk tabel publik (Dashboard menggunakan Supabase client)
-do 313
+-- Buka akses tabel publik agar dashboard & RPC client berfungsi langsung
+do $$
 declare
   tbl text;
   tables text[] := array[
     'profiles', 'kas', 'storage_accounts', 'user_kas_access', 'categories',
-    'app_settings', 'transactions', 'period_closings', 'reconciliations',
+    'app_settings', 'fiscal_years', 'transactions', 'period_closings', 'reconciliations',
     'audit_logs', 'opening_setup', 'opening_balances', 'opening_balance_entries',
     'opening_balance_adjustments', 'opening_other_positions', 'prior_year_summaries',
     'budgets', 'budget_items', 'budget_reallocations', 'fixed_assets',
@@ -677,17 +862,23 @@ begin
     execute format('drop policy if exists "Allow full access for all" on public.%I;', tbl);
     execute format('create policy "Allow full access for all" on public.%I for all using (true) with check (true);', tbl);
   end loop;
-end 313;
+end $$;
 
 -- 10. REALTIME CONFIGURATION
--- Aktifkan streaming perubahan data ke frontend dashboard
-do 313
+-- Aktifkan streaming perubahan data secara real-time untuk seluruh tabel ke frontend dashboard
+do $$
 declare
   tbl text;
   tables text[] := array[
-    'transactions', 'kas', 'storage_accounts', 'opening_balances',
-    'opening_balance_entries', 'budgets', 'budget_items', 'fixed_assets',
-    'advances', 'receivables_payables', 'audit_engagements', 'semester_reports', 'lpj_reports'
+    'profiles', 'kas', 'storage_accounts', 'user_kas_access', 'categories',
+    'app_settings', 'fiscal_years', 'transactions', 'period_closings', 'reconciliations',
+    'audit_logs', 'opening_setup', 'opening_balances', 'opening_balance_entries',
+    'opening_balance_adjustments', 'opening_other_positions', 'prior_year_summaries',
+    'budgets', 'budget_items', 'budget_reallocations', 'fixed_assets',
+    'asset_depreciations', 'advances', 'advance_settlements', 'receivables_payables',
+    'receivable_payable_payments', 'lpj_notes', 'lpj_settings', 'audit_body_members',
+    'audit_engagements', 'audit_reviews', 'audit_findings', 'audit_final_opinions',
+    'cash_counts', 'audit_period_verifications', 'semester_reports', 'lpj_reports', 'lpj_exceptions'
   ];
 begin
   for tbl in select unnest(tables) loop
@@ -696,9 +887,9 @@ begin
     exception when others then null;
     end;
   end loop;
-end 313;
+end $$;
 
--- 11. STORAGE BUCKET FOR RECEIPTS
+-- 11. STORAGE BUCKET FOR RECEIPTS (BUKTI NOTA)
 insert into storage.buckets (id, name, public)
 values ('receipts', 'receipts', true)
 on conflict (id) do nothing;
@@ -706,11 +897,19 @@ on conflict (id) do nothing;
 drop policy if exists "Public Access Receipts" on storage.objects;
 create policy "Public Access Receipts" on storage.objects for all using (bucket_id = 'receipts') with check (bucket_id = 'receipts');
 
--- 12. INITIAL SEED DATA (DATA AWAL HKBP HUTARAJA)
+-- 12. INITIAL SEED DATA (DATA AWAL HKBP RESSORT HUTARAJA)
 
 -- Settings
-insert into public.app_settings (id, church_name, church_subtext, church_address, church_phone, church_email, pendeta_name, sekretaris_name, bendahara_umum_name, ketua_parartaon_name, bpsk_va_number, receipt_required_threshold, block_negative_balance, active_year)
-values ('main', 'HKBP Ressort Hutaraja', 'Ressort Khusus - Distrik V Sumatera Timur', 'Jl. Gereja No. 1, Hutaraja, Sumatera Utara', '0812-3456-7890', 'ressort.hutaraja@hkbp.or.id', 'Pdt. Santa Lucia Manurung, S.Th', 'St. Sardi Simanullang', 'St. Manaek Lumban Gaol', 'St. Harbet Simanjuntak', 'VA-BPSK HKBP Ressort Hutaraja (Mandiri / BRI)', 500000, true, 2026)
+insert into public.app_settings (id, church_name, church_subtext, church_address, church_phone, church_email, pendeta_name, sekretaris_name, bendahara_umum_name, ketua_parartaon_name, bpsk_va_number, receipt_required_threshold, block_negative_balance, active_year, budget_reallocation_max_pct)
+values ('main', 'HKBP Ressort Hutaraja', 'Ressort Khusus - Distrik V Sumatera Timur', 'Jl. Gereja No. 1, Hutaraja, Sumatera Utara', '0812-3456-7890', 'ressort.hutaraja@hkbp.or.id', 'Pdt. Santa Lucia Manurung, S.Th', 'St. Sardi Simanullang', 'St. Manaek Lumban Gaol', 'St. Harbet Simanjuntak', 'VA-BPSK HKBP Ressort Hutaraja (Mandiri / BRI)', 500000, true, 2026, 15.00)
+on conflict (id) do nothing;
+
+-- Master Tahun Anggaran
+insert into public.fiscal_years (id, year, theme, start_date, end_date, status, is_budget_locked, notes) values
+('fy-2024', 2024, 'Tahun Oikumene Inklusif HKBP', '2024-01-01', '2024-12-31', 'closed', true, 'Buku kas tahun 2024 telah ditutup dan disahkan dalam Rapat Huria 2024.'),
+('fy-2025', 2025, 'Tahun Pemberdayaan Kemitraan HKBP', '2025-01-01', '2025-12-31', 'closed', true, 'Laporan Pertanggungjawaban (LPJ) Keuangan 2025 telah diaudit dan disahkan.'),
+('fy-2026', 2026, 'Tahun Transformasi & Oikoumene Inklusif HKBP', '2026-01-01', '2026-12-31', 'active', true, 'Tahun anggaran operasional berjalan resmi Huria.'),
+('fy-2027', 2027, 'Tahun Kesehatian Pelayanan & Misi HKBP', '2027-01-01', '2027-12-31', 'planning', false, 'Periode penyusunan RAPB Parartaon tahun anggaran mendatang.')
 on conflict (id) do nothing;
 
 -- Opening Setup
@@ -719,26 +918,39 @@ values ('main', 2026, '2026-01-01', 'in_progress', 'Pembukaan Buku Keuangan HKBP
 on conflict (id) do nothing;
 
 -- LPJ Settings & Notes
-insert into public.lpj_settings (id, enable_depreciation, budget_variance_threshold_percent, default_advance_days)
-values ('main', false, 10.0, 14)
+insert into public.lpj_settings (
+  id, enable_depreciation, depreciation_method, budget_variance_threshold_percent, default_advance_days,
+  document_number_format, signatories, useful_life_defaults
+)
+values (
+  'main', false, 'straight_line', 10.0, 14,
+  'HKBP-HTR/LPJ/{TAHUN}/{NOMOR}',
+  '[
+    {"role": "Ketua Parartaon", "title": "Ketua Majelis Perbendaharaan", "name": "St. Harbet Simanjuntak"},
+    {"role": "Sekretaris Ressort", "title": "Sekretaris Ressort / Parartaon", "name": "St. Sardi Simanullang"},
+    {"role": "Bendahara Umum", "title": "Bendahara Umum / Parartaon", "name": "St. Manaek Lumban Gaol"},
+    {"role": "Pendeta Ressort", "title": "Pendeta HKBP Ressort Hutaraja", "name": "Pdt. Santa Lucia Manurung, S.Th"}
+  ]'::jsonb,
+  '{"tanah": 0, "bangunan": 20, "kendaraan": 5, "alat_musik": 5, "elektronik": 4, "perabot": 5, "lainnya": 4}'::jsonb
+)
 on conflict (id) do nothing;
 
 insert into public.lpj_notes (id, year, accounting_basis, accounting_policies)
-values ('lpj-note-2026', 2026, 'Laporan Keuangan HKBP Ressort Hutaraja Tahun 2026 disusun dengan Basis Kas yang Dimodifikasi (ISAK 35 nonlaba).', 'Pencatatan kas terpisah per seksi, dana terikat dan tidak terikat, aset tetap historis.')
+values ('lpj-note-2026', 2026, 'Laporan Keuangan HKBP Ressort Hutaraja Tahun 2026 disusun dengan Basis Kas yang Dimodifikasi (Modified Cash Basis) berdasarkan pedoman ISAK 35 untuk Entitas Berorientasi Nonlaba.', 'Pencatatan kas terpisah per seksi, dana terikat dan tidak terikat, aset tetap historis, panjar sebagai piutang berjalan.')
 on conflict (id) do nothing;
 
 -- Master Kas (10 Entitas Kas Resmi Huria, Seksi, & Unit Sopo Godang)
-insert into public.kas (id, kode, nama, deskripsi, warna, fund_type, is_active) values
-('kas-1', 'KAS-UMUM', 'Kas Umum Huria', 'Pusat kas operasional huria dan ressort HKBP Hutaraja (Dikelola Bendahara Umum)', '#7C9CF5', 'unrestricted', true),
-('kas-2', 'KAS-SOSIAL', 'Kas Sosial Huria', 'Dana sosial huria, bantuan kedukaan, sakit, dan diakonia jemaat (Dikelola Bendahara Umum)', '#A8E6CF', 'restricted', true),
-('kas-3', 'KAS-SM', 'Kas Sekolah Minggu', 'Ibadah dan pembinaan anak sekolah minggu', '#FFE8A3', 'unrestricted', true),
-('kas-4', 'KAS-INA', 'Kas Kaum Ibu (Ina)', 'Pelayanan kategorial kaum ibu / Parompuan HKBP', '#FFB4A2', 'unrestricted', true),
-('kas-5', 'KAS-AMA', 'Kas Kaum Bapak (Ama)', 'Pelayanan kategorial kaum bapak / Ama HKBP', '#B8C0FF', 'unrestricted', true),
-('kas-6', 'KAS-RNHKBP', 'Kas Naposobulung (Pemuda)', 'Persekutuan dan kegiatan pemuda pemudi gereja', '#CDB4FF', 'unrestricted', true),
-('kas-7', 'KAS-BANGUN', 'Kas Pembangunan', 'Renovasi fisik gedung gereja, pastori, dan sarana ibadah (Dikelola Bendahara Umum)', '#FFD166', 'restricted', true),
-('kas-8', 'KAS-TRANSITORIS', 'Kas Transitoris', 'Dana titipan sementara / persembahan khusus yang diteruskan ke pihak terkait (Dikelola Bendahara Umum)', '#94A3B8', 'restricted', true),
-('kas-9', 'KAS-SENTRAL', 'Kas Sentralisasi', 'Dana tampungan kewajiban 55% Sentralisasi BPSK HKBP sebelum disetor ke Pusat (Dikelola Bendahara Umum)', '#38BDF8', 'restricted', true),
-('kas-10', 'KAS-SOPO', 'Kas Sopo Godang', 'Dana operasional, pemeliharaan, dan pengelolaan gedung serbaguna Sopo Godang (Dikelola Pengurus Sopo Godang)', '#F59E0B', 'unrestricted', true)
+insert into public.kas (id, kode, nama, deskripsi, warna, fund_type, restricted_purpose, is_active) values
+('kas-1', 'KAS-UMUM', 'Kas Umum Huria', 'Pusat kas operasional huria dan ressort HKBP Hutaraja (Dikelola Bendahara Umum)', '#7C9CF5', 'unrestricted', null, true),
+('kas-2', 'KAS-SOSIAL', 'Kas Sosial Huria', 'Dana sosial huria, bantuan kedukaan, sakit, dan diakonia jemaat (Dikelola Bendahara Umum)', '#A8E6CF', 'restricted', 'Pelayanan kasih, bantuan orang sakit, janda/yatim, dan santunan kedukaan', true),
+('kas-3', 'KAS-SM', 'Kas Sekolah Minggu', 'Dana pembinaan anak dan guru Sekolah Minggu', '#FFE8A3', 'unrestricted', null, true),
+('kas-4', 'KAS-INA', 'Kas Kaum Ibu (Ina)', 'Dana persekutuan dan kegiatan Seksi Parompuan', '#FFB4A2', 'unrestricted', null, true),
+('kas-5', 'KAS-AMA', 'Kas Kaum Bapak (Ama)', 'Dana persekutuan dan kegiatan Seksi Ama', '#B8C0FF', 'unrestricted', null, true),
+('kas-6', 'KAS-RNHKBP', 'Kas Naposobulung (Pemuda)', 'Dana kegiatan Remaja dan Naposobulung HKBP Hutaraja', '#CDB4FF', 'unrestricted', null, true),
+('kas-7', 'KAS-BANGUN', 'Kas Pembangunan', 'Dana renovasi fisik gereja, pastori, dan sarana ibadah (Dikelola Bendahara Umum)', '#FFD166', 'restricted', 'Pembangunan fisik menara lonceng gereja, renovasi pastori ressort, dan sarana ibadah', true),
+('kas-8', 'KAS-TRANSITORIS', 'Kas Transitoris', 'Dana titipan sementara / persembahan khusus yang diteruskan ke pihak terkait (Dikelola Bendahara Umum)', '#94A3B8', 'restricted', 'Titipan dana transitoris sebelum disalurkan kepada penerima/lembaga terkait', true),
+('kas-9', 'KAS-SENTRAL', 'Kas Sentralisasi', 'Dana tampungan kewajiban 55% Sentralisasi BPSK HKBP sebelum disetor ke Pusat (Dikelola Bendahara Umum)', '#38BDF8', 'restricted', 'Alokasi 55% Sentralisasi Keuangan HKBP untuk penyetoran resmi ke BPSK HKBP', true),
+('kas-10', 'KAS-SOPO', 'Kas Sopo Godang', 'Dana operasional, pemeliharaan, dan pengelolaan gedung serbaguna Sopo Godang (Dikelola Pengurus Sopo Godang)', '#F59E0B', 'unrestricted', null, true)
 on conflict (id) do nothing;
 
 -- Storage Accounts
@@ -748,38 +960,71 @@ insert into public.storage_accounts (id, nama, tipe, nomor_rekening, atas_nama, 
 ('stor-3', 'Bank Mandiri Ressort Hutaraja', 'bank', '107-00-1289456-7', 'HKBP Ressort Hutaraja', true)
 on conflict (id) do nothing;
 
--- Master Kategori
-insert into public.categories (id, nama, tipe, kode, is_active) values
-('cat-in-1', 'Persembahan Minggu (Pelean IA & IB)', 'income', 'IN-01', true),
-('cat-in-2', 'Pelean Ucapan Syukur (Taon Parasi Rohaon)', 'income', 'IN-02', true),
-('cat-in-3', 'Sulang-sulang Pahoppu / Partumpolon', 'income', 'IN-03', true),
-('cat-in-4', 'Dana Pembangunan', 'income', 'IN-04', true),
-('cat-in-5', 'Diakonia Sosial', 'income', 'IN-05', true),
-('cat-in-6', 'Sumbangan / Donasi Donatur', 'income', 'IN-06', true),
-('cat-in-7', 'Pemasukan Lain-lain', 'income', 'IN-99', true),
-('cat-out-1', 'Gaji / Honor Pelayan & Pegawai', 'expense', 'OUT-01', true),
-('cat-out-2', 'Operasional Kantor & Ibadah', 'expense', 'OUT-02', true),
-('cat-out-3', 'Listrik, Air & Internet', 'expense', 'OUT-03', true),
-('cat-out-4', 'Pemeliharaan Gedung & Inventaris', 'expense', 'OUT-04', true),
-('cat-out-5', 'Kegiatan Ibadah & Hari Besar Gerejawi', 'expense', 'OUT-05', true),
-('cat-out-6', 'Diakonia / Bantuan Sosial Jemaat', 'expense', 'OUT-06', true),
-('cat-out-7', 'Setoran ke Distrik & Pusat HKBP', 'expense', 'OUT-07', true),
-('cat-out-8', 'Pengeluaran Lain-lain', 'expense', 'OUT-99', true)
+-- Master Kategori Resmi PPKU 2023 (20 Penerimaan Sentralisasi & Pengecualian + 10 Pengeluaran)
+insert into public.categories (id, nama, tipe, kode, deskripsi, is_active, is_sentralisasi, sentralisasi_group, sentralisasi_exclusion_type) values
+-- Penerimaan Objek Sentralisasi (55% BPSK / 45% Huria)
+('cat-in-pelean-1-2', 'Pelean Ibadah Ia, Ib & II (Kebaktian Minggu)', 'income', 'IN-01', 'Pelean Ibadah Ia, Ib, dan II kebaktian hari Minggu (PPKU Pasal 4 ayat 3a-c: 55% BPSK maks. H+3 / 45% Kas Huria)', true, true, 'pelean_mingguan', null),
+('cat-in-namarboho', 'Pelean Namarboho / Bulanan / Tahunan Jemaat (incl. SM & Remaja)', 'income', 'IN-02', 'Pelean bulanan/tahunan jemaat termasuk Sekolah Minggu & Remaja (PPKU Pasal 4 ayat 3k: 55% BPSK / 45% Huria)', true, true, 'pelean_mingguan', null),
+('cat-in-persepuluhan', 'Pelean Persepuluhan Jemaat', 'income', 'IN-02B', 'Persembahan persepuluhan jemaat sesuai PPKU Pasal 4 ayat 3j (Objek Sentralisasi: 55% BPSK HKBP / 45% Kas Huria)', true, true, 'pelean_mingguan', null),
+('cat-in-partangiangan', 'Pelean Ibadah Partangiangan (Lingkungan / Wijk)', 'income', 'IN-03', 'Persembahan partangiangan wijk/sektor sesuai PPKU Pasal 4 ayat 3d (55% BPSK HKBP / 45% Huria)', true, true, 'pelean_mingguan', null),
+('cat-in-kategorial', 'Pelean Ibadah & Sermon Kategorial / Seksi', 'income', 'IN-04', 'Pelean kebaktian & sermon kategorial (SM, Remaja, Naposo, Ina, Ama, Lansia) sesuai PPKU Pasal 4 ayat 3e (55% BPSK / 45% Huria)', true, true, 'pelean_mingguan', null),
+('cat-in-hari-raya', 'Pelean Hari Raya Gerejawi & Ibadah Khusus / Kasual', 'income', 'IN-05', 'Pelean Natal, Tahun Baru, Paskah, Kenaikan, & Ibadah Khusus/Kasual sesuai PPKU Pasal 4 ayat 3h (55% BPSK / 45% Huria)', true, true, 'pelean_mingguan', null),
+('cat-in-ulaon-na-badia', 'Pelean Ibadah Ulaon Na Badia (Perjamuan Kudus)', 'income', 'IN-05B', 'Persembahan Sakramen Perjamuan Kudus sesuai PPKU Pasal 4 ayat 3g (Objek Sentralisasi: 55% BPSK HKBP / 45% Huria)', true, true, 'pelean_mingguan', null),
+('cat-in-syukur-altar', 'Pelean Hamauliateon (Syukur Altar / Panggung / Amplop)', 'income', 'IN-06', 'Persembahan syukur jemaat amplop/kotak altar (Objek Sentralisasi: 55% BPSK HKBP / 45% Huria)', true, true, 'pelean_syukur', null),
+('cat-in-syukur-baptisan', 'Pelean Syukur Baptisan Kudus (Pandidion)', 'income', 'IN-07', 'Ucapan syukur atas sakramen baptisan kudus (Objek Sentralisasi: 55% BPSK HKBP / 45% Huria)', true, true, 'pelean_syukur', null),
+('cat-in-syukur-sidi', 'Pelean Syukur Peneguhan Sidi (Malua)', 'income', 'IN-08', 'Ucapan syukur atas peneguhan sidi jemaat (Objek Sentralisasi: 55% BPSK HKBP / 45% Huria)', true, true, 'pelean_syukur', null),
+('cat-in-syukur-nikah', 'Pelean Syukur Pernikahan Kudus (Pamasu-masuon)', 'income', 'IN-09', 'Ucapan syukur pemberkatan pernikahan jemaat (Objek Sentralisasi: 55% BPSK HKBP / 45% Huria)', true, true, 'pelean_syukur', null),
+('cat-in-syukur-keluarga', 'Pelean Syukur Keluarga & Syukur Khusus Lainnya', 'income', 'IN-10', 'Ucapan syukur keluarga, ulang tahun, dll (Objek Sentralisasi: 55% BPSK HKBP / 45% Huria)', true, true, 'pelean_syukur', null),
+('cat-in-badan-usaha', 'Keuntungan Badan Usaha Milik HKBP', 'income', 'IN-11', 'Penerimaan bagi hasil / keuntungan badan usaha HKBP (Objek Sentralisasi: 55% BPSK HKBP / 45% Huria)', true, true, 'badan_usaha_lembaga', null),
+('cat-in-yayasan', 'Kontribusi / Sumbangan Yayasan di Bawah HKBP', 'income', 'IN-12', 'Kontribusi resmi yayasan naungan HKBP (Objek Sentralisasi: 55% BPSK HKBP / 45% Huria)', true, true, 'badan_usaha_lembaga', null),
+('cat-in-sewa-aset-yayasan', 'Sewa Aset dari Yayasan HKBP', 'income', 'IN-12B', 'Penerimaan sewa aset dari yayasan di lingkungan HKBP sesuai PPKU Pasal 4 ayat 2c (55% BPSK / 45% Huria)', true, true, 'badan_usaha_lembaga', null),
+('cat-in-pendidikan-tinggi', 'Keuntungan Lembaga Pendidikan Tinggi HKBP', 'income', 'IN-13', 'Penerimaan resmi dari perguruan tinggi / lembaga pendidikan HKBP (Objek Sentralisasi: 55% BPSK / 45% Huria)', true, true, 'badan_usaha_lembaga', null),
+('cat-in-hibah-eksternal', 'Bantuan, Hibah, & Sumbangan Resmi Pihak Luar', 'income', 'IN-14', 'Bantuan/dana hibah pihak luar sah seizin Pimpinan HKBP (Objek Sentralisasi: 55% BPSK HKBP / 45% Huria)', true, true, 'badan_usaha_lembaga', null),
+-- Penerimaan Dikecualikan (100% Non-Sentralisasi)
+('cat-in-ex-sosial-duka', 'Pelean Sosial / Duka (Pelean Sosial / Gariana)', 'income', 'IN-EX-01', 'Dikecualikan dari Sentralisasi: 100% dikelola untuk jemaat yang berduka / kemalangan (Kas Diakonia Sosial)', true, false, 'dikecualikan_khusus', 'sosial_duka'),
+('cat-in-ex-beasiswa', 'Pelean Beasiswa (Pelean Dana Belajar)', 'income', 'IN-EX-02', 'Dikecualikan dari Sentralisasi: 100% dikelola khusus untuk bantuan pendidikan / beasiswa jemaat', true, false, 'dikecualikan_khusus', 'beasiswa'),
+('cat-in-ex-pembangunan', 'Dana Pembangunan Fisik Lokal', 'income', 'IN-EX-03', 'Dikecualikan dari Sentralisasi: 100% dikelola kepanitiaan pembangunan untuk renovasi / pembangunan fisik gereja lokal', true, false, 'dikecualikan_khusus', 'pembangunan_lokal'),
+-- Pos Pengeluaran / Beban
+('cat-out-bpsk', 'Penyetoran 55% Sentralisasi ke Kas Pusat (BPSK HKBP)', 'expense', 'OUT-01', 'Penyetoran kewajiban sentralisasi 55% ke rekening BPSK HKBP Kantor Pusat', true, false, null, null),
+('cat-out-operasional-huria', 'Operasional & Administrasi Pelayanan Huria (45%)', 'expense', 'OUT-02', 'Beban operasional rutin pelayanan lokal huria dari porsi 45%', true, false, null, null),
+('cat-out-ibadah', 'Pelayanan Ibadah & Hari Besar Gerejawi', 'expense', 'OUT-03', 'Perlengkapan perjamuan, lilin, cetak warta, konsumsi majelis, dekorasi ibadah', true, false, null, null),
+('cat-out-kategorial', 'Kegiatan Seksi Kategorial (Koinonia, Marturia, Diakonia)', 'expense', 'OUT-04', 'Program kerja seksi Sekolah Minggu, Remaja, Pemuda, Ina, Ama, Lansia', true, false, null, null),
+('cat-out-sosial-duka', 'Penyaluran Santunan Sosial / Duka (Dana Gariana)', 'expense', 'OUT-05', 'Penyaluran dana duka/kemalangan bagi keluarga jemaat yang berduka', true, false, null, null),
+('cat-out-beasiswa', 'Penyaluran Bantuan Beasiswa (Dana Belajar)', 'expense', 'OUT-06', 'Bantuan biaya pendidikan siswa dan mahasiswa berprestasi / kurang mampu', true, false, null, null),
+('cat-out-pembangunan', 'Pengeluaran Pembangunan & Renovasi Fisik Gereja', 'expense', 'OUT-07', 'Pembelian material dan upah tukang proyek pembangunan fisik gereja lokal', true, false, null, null),
+('cat-out-gedung', 'Pemeliharaan Gedung, Gereja & Inventaris', 'expense', 'OUT-08', 'Perbaikan sarana ibadah, sound system, AC, pengecatan gedung gereja', true, false, null, null),
+('cat-out-utilitas', 'Listrik, Air, Telepon & Internet Gereja', 'expense', 'OUT-09', 'Beban langganan utilitas operasional kantor dan gedung gereja', true, false, null, null),
+('cat-out-lainnya', 'Pengeluaran Lain-lain yang Sah', 'expense', 'OUT-99', 'Pengeluaran sah lainnya yang disetujui pimpinan jemaat', true, false, null, null)
 on conflict (id) do nothing;
 
--- Initial Saldo Awal (Diset 0 Sesuai Permintaan)
+-- Initial Saldo Awal (Rp 0)
 insert into public.opening_balances (id, tahun, kas_id, storage_account_id, amount, notes) values
 ('ob-1', 2026, 'kas-1', 'stor-1', 0, 'Brankas Tunai Kas Umum Huria'),
 ('ob-2', 2026, 'kas-1', 'stor-2', 0, 'Bank BRI Kas Umum Huria'),
-('ob-3', 2026, 'kas-2', 'stor-1', 0, 'Saldo Awal Kas Sosial Huria'),
-('ob-4', 2026, 'kas-3', 'stor-1', 0, 'Saldo Awal Kas Sekolah Minggu'),
-('ob-5', 2026, 'kas-4', 'stor-1', 0, 'Saldo Awal Kas Kaum Ibu (Ina)'),
-('ob-6', 2026, 'kas-5', 'stor-1', 0, 'Saldo Awal Kas Kaum Bapak (Ama)'),
-('ob-7', 2026, 'kas-6', 'stor-1', 0, 'Saldo Awal Kas Naposobulung (Pemuda)'),
+('ob-3', 2026, 'kas-2', 'stor-1', 0, 'Brankas Kas Sosial Huria'),
+('ob-4', 2026, 'kas-3', 'stor-1', 0, 'Brankas Kas Sekolah Minggu'),
+('ob-5', 2026, 'kas-4', 'stor-1', 0, 'Brankas Kas Kaum Ibu'),
+('ob-6', 2026, 'kas-5', 'stor-1', 0, 'Brankas Kas Kaum Bapak'),
+('ob-7', 2026, 'kas-6', 'stor-1', 0, 'Brankas Kas Pemuda'),
 ('ob-8', 2026, 'kas-7', 'stor-3', 0, 'Bank Mandiri Kas Pembangunan'),
-('ob-9', 2026, 'kas-8', 'stor-2', 0, 'Saldo Awal Kas Transitoris'),
-('ob-10', 2026, 'kas-9', 'stor-2', 0, 'Saldo Awal Kas Sentralisasi'),
-('ob-11', 2026, 'kas-10', 'stor-1', 0, 'Saldo Awal Kas Sopo Godang')
+('ob-9', 2026, 'kas-8', 'stor-1', 0, 'Brankas Kas Transitoris'),
+('ob-10', 2026, 'kas-9', 'stor-2', 0, 'Bank BRI Kas Sentralisasi'),
+('ob-11', 2026, 'kas-10', 'stor-1', 0, 'Brankas Kas Sopo Godang')
+on conflict (id) do nothing;
+
+-- Initial Opening Balance Entries (Drafting Rp 0 siap pembukaan buku)
+insert into public.opening_balance_entries (id, tahun, kas_id, storage_account_id, amount, book_balance, physical_balance, difference, explanation, status, created_by) values
+('obe-1', 2026, 'kas-1', 'stor-1', 0, 0, 0, 0, 'Saldo awal tunai brankas direset ke nol', 'drafting', 'user-bendum'),
+('obe-2', 2026, 'kas-1', 'stor-2', 0, 0, 0, 0, 'Saldo awal rekening BRI direset ke nol', 'drafting', 'user-bendum'),
+('obe-3', 2026, 'kas-2', 'stor-1', 0, 0, 0, 0, 'Saldo awal Kas Sosial Huria direset ke nol', 'drafting', 'user-bendum'),
+('obe-4', 2026, 'kas-7', 'stor-3', 0, 0, 0, 0, 'Saldo awal Kas Pembangunan direset ke nol', 'drafting', 'user-bendum'),
+('obe-5', 2026, 'kas-3', 'stor-1', 0, 0, 0, 0, 'Saldo awal Kas Sekolah Minggu direset ke nol', 'drafting', 'user-bend-sm'),
+('obe-6', 2026, 'kas-4', 'stor-1', 0, 0, 0, 0, 'Saldo awal Kas Kaum Ibu direset ke nol', 'drafting', 'user-bend-ina'),
+('obe-7', 2026, 'kas-5', 'stor-1', 0, 0, 0, 0, 'Saldo awal Kas Kaum Bapak direset ke nol', 'drafting', 'user-bendum'),
+('obe-8', 2026, 'kas-6', 'stor-1', 0, 0, 0, 0, 'Saldo awal Kas Pemuda direset ke nol', 'drafting', 'user-bendum'),
+('obe-9', 2026, 'kas-8', 'stor-1', 0, 0, 0, 0, 'Saldo awal Kas Transitoris direset ke nol', 'drafting', 'user-bendum'),
+('obe-10', 2026, 'kas-9', 'stor-2', 0, 0, 0, 0, 'Saldo awal Kas Sentralisasi direset ke nol', 'drafting', 'user-bendum'),
+('obe-11', 2026, 'kas-10', 'stor-1', 0, 0, 0, 0, 'Saldo awal Kas Sopo Godang direset ke nol', 'drafting', 'user-sopo-bendahara')
 on conflict (id) do nothing;
 
 -- Initial Profiles (Struktural Lengkap HKBP Ressort Hutaraja)
@@ -839,3 +1084,23 @@ insert into public.audit_body_members (id, user_id, jabatan, periode_mulai, peri
 ('abm-3', 'user-audit-2', 'anggota', '2025-01-01', '2027-01-01', true)
 on conflict (id) do nothing;
 
+-- Audit Engagements Awal
+insert into public.audit_engagements (id, tahun, jenis, judul, deskripsi, semester_report_id, lpj_id, status, dibuka_pada, batas_waktu, combined_with_lpj, created_by) values
+('eng-opening', 2026, 'opening', 'Pemeriksaan Saldo Awal & Pembukaan Buku SIKU 2026', 'Audit independen atas migrasi saldo pindahan buku manual ke sistem digital per 1 Januari 2026', null, null, 'completed', '2026-01-02', '2026-01-10', false, 'user-audit-ketua'),
+('eng-sem1', 2026, 'semester_1', 'Pemeriksaan Keuangan Semester I Tahun 2026', 'Audit berkala realisasi pendapatan, belanja, kas fisik, dan panjar periode Januari - Juni 2026', 'sem-rep-1', null, 'completed', '2026-07-01', '2026-07-15', false, 'user-audit-ketua'),
+('eng-tahunan', 2026, 'tahunan', 'Pemeriksaan Laporan Pertanggungjawaban (LPJ) Tahunan ISAK 35 Tahun 2026', 'Audit menyeluruh laporan keuangan tahunan huria dan ressort sebelum diajukan ke Rapat Huria', null, 'lpj-rep-2026', 'in_progress', '2026-12-15', '2027-01-15', true, 'user-audit-ketua')
+on conflict (id) do nothing;
+
+-- Semester Reports & LPJ Reports Awal
+insert into public.semester_reports (id, tahun, semester, status, version, checklist_result, created_by) values
+('sem-rep-1', 2026, 1, 'preparation', 1, '{"months_closed": false, "no_draft_transactions": true, "storages_reconciled": false, "advances_reviewed": true, "budget_variance_explained": false, "prior_findings_resolved": true, "details": {}}'::jsonb, 'user-bendum'),
+('sem-rep-2', 2026, 2, 'preparation', 1, '{"months_closed": false, "no_draft_transactions": true, "storages_reconciled": false, "advances_reviewed": true, "budget_variance_explained": false, "prior_findings_resolved": true, "details": {}}'::jsonb, 'user-bendum')
+on conflict (id) do nothing;
+
+insert into public.lpj_reports (id, tahun, nomor_dokumen, status, version, checklist_result, created_by) values
+('lpj-rep-2026', 2026, 'HKBP-HTR/LPJ/2026/001', 'preparation', 1, '{"all_months_closed": false, "no_pending_transactions": true, "all_reconciliations_completed": false, "overdue_advances_cleared_or_reserved": true, "budget_deviations_clarified": false, "audit_findings_settled": true, "inventory_physical_checked": false, "details": {}}'::jsonb, 'user-bendum')
+on conflict (id) do nothing;
+
+insert into public.lpj_exceptions (id, target_type, target_id, rule_code, reason, granted_by, granted_at) values
+('exc-1', 'semester', 'sem-rep-1', 'advances_reviewed', 'Dispensasi awal contoh pada template sistem.', 'user-bendum', '2026-07-05T09:00:00Z')
+on conflict (id) do nothing;

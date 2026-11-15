@@ -11,6 +11,7 @@ import {
   BudgetItem,
   BudgetReallocation,
   Category,
+  FiscalYear,
   Kas,
   OpeningBalance,
   OpeningSetup,
@@ -28,6 +29,7 @@ import {
   Advance,
   AdvanceSettlement,
   ReceivablePayable,
+  ReceivablePayablePayment,
   LpjNotes,
   LpjSettings,
   AuditBodyMember,
@@ -52,6 +54,7 @@ export interface SupabaseDataset {
   reconciliations?: Reconciliation[];
   auditLogs?: AuditLog[];
   settings?: AppSettings;
+  fiscalYears?: FiscalYear[];
   profiles?: Profile[];
   userKasAccessList?: UserKasAccess[];
   budgets?: Budget[];
@@ -80,6 +83,100 @@ export interface SupabaseDataset {
   lpjExceptions?: LpjException[];
 }
 
+// Frontend-only joined fields that do NOT exist as PostgreSQL columns
+const JOINED_FIELDS_TO_STRIP = new Set([
+  'user',
+  'kas',
+  'storage_account',
+  'category',
+  'creator',
+  'approver',
+  'auditor',
+  'reviewer',
+  'ratifier',
+  'from_item',
+  'to_item',
+  'proposer',
+  'responder',
+  'closer',
+  'payments',
+  'settlements',
+  'advance',
+  'submitter',
+  'reviews',
+  'findings',
+  'final_opinion',
+  'locker',
+  'pastor',
+  'granter',
+  'closed_user',
+  'transfer_target_kas',
+  'transfer_target_storage',
+  'member',
+  'transaction',
+]);
+
+export function sanitizePayload<T = any>(payload: T): T {
+  if (Array.isArray(payload)) {
+    return payload.map((item) => sanitizePayload(item)) as unknown as T;
+  }
+  if (payload && typeof payload === 'object') {
+    const clean: Record<string, any> = {};
+    for (const [key, val] of Object.entries(payload as Record<string, any>)) {
+      if (JOINED_FIELDS_TO_STRIP.has(key) || val === undefined) {
+        continue;
+      }
+      clean[key] = val;
+    }
+    return clean as T;
+  }
+  return payload;
+}
+
+const DOMAIN_LOCAL_STORAGE_KEYS = [
+  'siku_kas_list',
+  'siku_storage_accounts',
+  'siku_categories',
+  'siku_transactions',
+  'siku_opening_balances',
+  'siku_period_closings',
+  'siku_reconciliations',
+  'siku_audit_logs',
+  'siku_settings',
+  'siku_fiscal_years',
+  'siku_profiles',
+  'siku_user_kas_access',
+  'siku_budgets',
+  'siku_budget_items',
+  'siku_budget_reallocations',
+  'siku_opening_setup',
+  'siku_opening_entries',
+  'siku_opening_adjustments',
+  'siku_opening_other_positions',
+  'siku_prior_year_summaries',
+  'siku_fixed_assets',
+  'siku_advances',
+  'siku_advance_settlements',
+  'siku_receivables_payables',
+  'siku_lpj_notes',
+  'siku_lpj_settings',
+  'siku_audit_body_members',
+  'siku_audit_engagements',
+  'siku_audit_reviews',
+  'siku_audit_findings',
+  'siku_audit_final_opinions',
+  'siku_cash_counts',
+  'siku_audit_period_verifications',
+  'siku_semester_reports',
+  'siku_lpj_reports',
+  'siku_lpj_exceptions',
+];
+
+export function purgeDomainLocalStorage() {
+  if (typeof window === 'undefined') return;
+  DOMAIN_LOCAL_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
+}
+
 /**
  * Fetch all data from Supabase PostgreSQL tables
  */
@@ -100,6 +197,7 @@ export async function fetchAllDataFromSupabase(): Promise<{ success: boolean; da
       logRes,
       profRes,
       accessRes,
+      fyRes,
       bgRes,
       bgItemsRes,
       bgRealRes,
@@ -112,6 +210,7 @@ export async function fetchAllDataFromSupabase(): Promise<{ success: boolean; da
       advRes,
       advSetRes,
       recPayRes,
+      recPayPayRes,
       lpjNotesRes,
       lpjSettingsRes,
       auditMembersRes,
@@ -128,37 +227,39 @@ export async function fetchAllDataFromSupabase(): Promise<{ success: boolean; da
     ] = await Promise.all([
       supabase.from('kas').select('*').order('kode'),
       supabase.from('storage_accounts').select('*').order('nama'),
-      supabase.from('categories').select('*').order('nama'),
-      supabase.from('transactions').select('*').order('tanggal', { ascending: false }),
+      supabase.from('categories').select('*').order('kode'),
+      supabase.from('transactions').select('*').order('tanggal', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('opening_balances').select('*'),
-      supabase.from('period_closings').select('*'),
-      supabase.from('reconciliations').select('*'),
-      supabase.from('audit_logs').select('*').order('changed_at', { ascending: false }).limit(250),
+      supabase.from('period_closings').select('*').order('tahun', { ascending: false }).order('bulan', { ascending: false }),
+      supabase.from('reconciliations').select('*').order('tanggal', { ascending: false }),
+      supabase.from('audit_logs').select('*').order('changed_at', { ascending: false }).limit(300),
       supabase.from('profiles').select('*').order('full_name'),
       supabase.from('user_kas_access').select('*'),
-      supabase.from('budgets').select('*'),
+      supabase.from('fiscal_years').select('*').order('year', { ascending: false }),
+      supabase.from('budgets').select('*').order('tahun', { ascending: false }),
       supabase.from('budget_items').select('*'),
-      supabase.from('budget_reallocations').select('*'),
+      supabase.from('budget_reallocations').select('*').order('created_at', { ascending: false }),
       supabase.from('opening_setup').select('*').limit(1),
       supabase.from('opening_balance_entries').select('*'),
-      supabase.from('opening_balance_adjustments').select('*'),
-      supabase.from('opening_other_positions').select('*'),
+      supabase.from('opening_balance_adjustments').select('*').order('created_at', { ascending: false }),
+      supabase.from('opening_other_positions').select('*').order('created_at', { ascending: false }),
       supabase.from('prior_year_summaries').select('*'),
-      supabase.from('fixed_assets').select('*'),
-      supabase.from('advances').select('*'),
-      supabase.from('advance_settlements').select('*'),
-      supabase.from('receivables_payables').select('*'),
+      supabase.from('fixed_assets').select('*').order('created_at', { ascending: false }),
+      supabase.from('advances').select('*').order('advance_date', { ascending: false }),
+      supabase.from('advance_settlements').select('*').order('created_at', { ascending: false }),
+      supabase.from('receivables_payables').select('*').order('created_at', { ascending: false }),
+      supabase.from('receivable_payable_payments').select('*').order('payment_date', { ascending: false }),
       supabase.from('lpj_notes').select('*').limit(1),
       supabase.from('lpj_settings').select('*').limit(1),
       supabase.from('audit_body_members').select('*'),
-      supabase.from('audit_engagements').select('*'),
+      supabase.from('audit_engagements').select('*').order('tahun', { ascending: false }),
       supabase.from('audit_reviews').select('*'),
-      supabase.from('audit_findings').select('*'),
+      supabase.from('audit_findings').select('*').order('created_at', { ascending: false }),
       supabase.from('audit_final_opinions').select('*'),
       supabase.from('audit_period_verifications').select('*'),
-      supabase.from('cash_counts').select('*'),
-      supabase.from('semester_reports').select('*'),
-      supabase.from('lpj_reports').select('*'),
+      supabase.from('cash_counts').select('*').order('tanggal', { ascending: false }),
+      supabase.from('semester_reports').select('*').order('tahun', { ascending: false }),
+      supabase.from('lpj_reports').select('*').order('tahun', { ascending: false }),
       supabase.from('lpj_exceptions').select('*'),
       supabase.from('app_settings').select('*').limit(1),
     ]);
@@ -175,6 +276,7 @@ export async function fetchAllDataFromSupabase(): Promise<{ success: boolean; da
     if (logRes.data) result.auditLogs = logRes.data as AuditLog[];
     if (profRes.data && profRes.data.length > 0) result.profiles = profRes.data as Profile[];
     if (accessRes.data) result.userKasAccessList = accessRes.data as UserKasAccess[];
+    if (fyRes.data && fyRes.data.length > 0) result.fiscalYears = fyRes.data as FiscalYear[];
     if (bgRes.data) result.budgets = bgRes.data as Budget[];
     if (bgItemsRes.data) result.budgetItems = bgItemsRes.data as BudgetItem[];
     if (bgRealRes.data) result.budgetReallocations = bgRealRes.data as BudgetReallocation[];
@@ -186,7 +288,21 @@ export async function fetchAllDataFromSupabase(): Promise<{ success: boolean; da
     if (assetsRes.data) result.fixedAssets = assetsRes.data as FixedAsset[];
     if (advRes.data) result.advances = advRes.data as Advance[];
     if (advSetRes.data) result.advanceSettlements = advSetRes.data as AdvanceSettlement[];
-    if (recPayRes.data) result.receivablesPayables = recPayRes.data as ReceivablePayable[];
+
+    if (recPayRes.data) {
+      const payments = (recPayPayRes.data || []) as ReceivablePayablePayment[];
+      const paymentsByParent = new Map<string, ReceivablePayablePayment[]>();
+      payments.forEach((p) => {
+        const list = paymentsByParent.get(p.parent_id) || [];
+        list.push(p);
+        paymentsByParent.set(p.parent_id, list);
+      });
+      result.receivablesPayables = (recPayRes.data as ReceivablePayable[]).map((rp) => ({
+        ...rp,
+        payments: paymentsByParent.get(rp.id) || [],
+      }));
+    }
+
     if (lpjNotesRes.data && lpjNotesRes.data.length > 0) result.lpjNotes = lpjNotesRes.data[0] as LpjNotes;
     if (lpjSettingsRes.data && lpjSettingsRes.data.length > 0) result.lpjSettings = lpjSettingsRes.data[0] as LpjSettings;
     if (auditMembersRes.data && auditMembersRes.data.length > 0) result.auditBodyMembers = auditMembersRes.data as AuditBodyMember[];
@@ -209,12 +325,13 @@ export async function fetchAllDataFromSupabase(): Promise<{ success: boolean; da
 }
 
 /**
- * Universal upsert helper for single record
+ * Universal upsert helper for single record or array of records
  */
 export async function syncUpsert(table: string, payload: any): Promise<{ success: boolean; error?: string }> {
   if (!isSupabaseConfigured || !supabase) return { success: true };
   try {
-    const { error } = await supabase.from(table).upsert(payload);
+    const cleanPayload = sanitizePayload(payload);
+    const { error } = await supabase.from(table).upsert(cleanPayload);
     if (error) {
       console.error(`Supabase syncUpsert error [${table}]:`, error);
       return { success: false, error: error.message };
@@ -232,7 +349,8 @@ export async function syncUpsert(table: string, payload: any): Promise<{ success
 export async function syncInsert(table: string, payload: any): Promise<{ success: boolean; error?: string }> {
   if (!isSupabaseConfigured || !supabase) return { success: true };
   try {
-    const { error } = await supabase.from(table).insert(payload);
+    const cleanPayload = sanitizePayload(payload);
+    const { error } = await supabase.from(table).insert(cleanPayload);
     if (error) {
       console.error(`Supabase syncInsert error [${table}]:`, error);
       return { success: false, error: error.message };
@@ -255,7 +373,8 @@ export async function syncUpdate(
 ): Promise<{ success: boolean; error?: string }> {
   if (!isSupabaseConfigured || !supabase) return { success: true };
   try {
-    const { error } = await supabase.from(table).update(payload).eq(matchCol, matchVal);
+    const cleanPayload = sanitizePayload(payload);
+    const { error } = await supabase.from(table).update(cleanPayload).eq(matchCol, matchVal);
     if (error) {
       console.error(`Supabase syncUpdate error [${table}]:`, error);
       return { success: false, error: error.message };
@@ -304,16 +423,29 @@ export async function syncResetZeroDataInSupabase(): Promise<{ success: boolean;
     // 3. Delete advances & settlements
     await supabase.from('advance_settlements').delete().neq('id', '');
     await supabase.from('advances').delete().neq('id', '');
-    // 4. Delete receivables / payables
+    // 4. Delete receivables / payables & payments
+    await supabase.from('receivable_payable_payments').delete().neq('id', '');
     await supabase.from('receivables_payables').delete().neq('id', '');
-    // 5. Delete audit findings, reviews, counts, verifications
+    // 5. Delete audit findings, reviews, opinions, counts, verifications
+    await supabase.from('audit_final_opinions').delete().neq('id', '');
     await supabase.from('audit_findings').delete().neq('id', '');
     await supabase.from('audit_reviews').delete().neq('id', '');
     await supabase.from('cash_counts').delete().neq('id', '');
     await supabase.from('audit_period_verifications').delete().neq('id', '');
     // 6. Reset opening balances to 0
-    await supabase.from('opening_balances').update({ amount: 0 }).neq('id', '');
-    await supabase.from('opening_balance_entries').update({ total_amount: 0, status: 'drafting' }).neq('id', '');
+    await supabase.from('opening_balances').update({ amount: 0, updated_at: new Date().toISOString() }).neq('id', '');
+    await supabase
+      .from('opening_balance_entries')
+      .update({
+        amount: 0,
+        book_balance: 0,
+        physical_balance: 0,
+        difference: 0,
+        status: 'drafting',
+        updated_at: new Date().toISOString(),
+      })
+      .neq('id', '');
+    await supabase.from('opening_setup').update({ status: 'in_progress', updated_at: new Date().toISOString() }).eq('id', 'main');
     // 7. Reset budgets and budget items to zero
     await supabase.from('budget_reallocations').delete().neq('id', '');
     await supabase.from('budget_items').delete().neq('id', '');
@@ -323,6 +455,9 @@ export async function syncResetZeroDataInSupabase(): Promise<{ success: boolean;
     await supabase.from('prior_year_summaries').delete().neq('id', '');
     await supabase.from('opening_balance_adjustments').delete().neq('id', '');
     await supabase.from('opening_other_positions').delete().neq('id', '');
+    // 9. Reset semester & LPJ report statuses
+    await supabase.from('semester_reports').update({ status: 'preparation', snapshot_data: null, updated_at: new Date().toISOString() }).neq('id', '');
+    await supabase.from('lpj_reports').update({ status: 'preparation', snapshot_data: null, updated_at: new Date().toISOString() }).neq('id', '');
 
     return { success: true };
   } catch (err: any) {

@@ -2241,35 +2241,76 @@ export const ReportsPage: React.FC = () => {
         const g1Cats = categories.filter(
           (c) =>
             c.tipe === 'income' &&
+            c.is_sentralisasi !== false &&
             (c.sentralisasi_group === 'pelean_mingguan' ||
-              ['IN-01', 'IN-02', 'IN-02B', 'IN-03', 'IN-04', 'IN-05', 'IN-05B'].includes(c.kode || ''))
+              (!c.sentralisasi_group && ['IN-01', 'IN-02', 'IN-02B', 'IN-03', 'IN-04', 'IN-05', 'IN-05B'].includes(c.kode || '')))
         );
         // Group 2: Syukur & Khusus (Hamauliateon)
         const g2Cats = categories.filter(
-          (c) => c.tipe === 'income' && (c.sentralisasi_group === 'pelean_syukur' || ['IN-06', 'IN-07', 'IN-08', 'IN-09', 'IN-10'].includes(c.kode || ''))
+          (c) =>
+            c.tipe === 'income' &&
+            c.is_sentralisasi !== false &&
+            (c.sentralisasi_group === 'pelean_syukur' ||
+              (!c.sentralisasi_group && ['IN-06', 'IN-07', 'IN-08', 'IN-09', 'IN-10'].includes(c.kode || '')))
         );
         // Group 3: Badan Usaha, Lembaga & Hibah (PPKU Pasal 4 ayat 2b-e)
         const g3Cats = categories.filter(
           (c) =>
             c.tipe === 'income' &&
+            c.is_sentralisasi !== false &&
             (c.sentralisasi_group === 'badan_usaha_lembaga' ||
-              ['IN-11', 'IN-12', 'IN-12B', 'IN-13', 'IN-14'].includes(c.kode || ''))
+              (!c.sentralisasi_group && ['IN-11', 'IN-12', 'IN-12B', 'IN-13', 'IN-14'].includes(c.kode || '')))
         );
-        // Group 4: Pengecualian Resmi (100% Bebas Sentralisasi)
+        // Group 4: Non-Sentralisasi / Pengecualian Resmi (100% Kas Tujuan / Bebas Sentralisasi)
         const g4Cats = categories.filter(
-          (c) => c.tipe === 'income' && (c.is_sentralisasi === false || c.sentralisasi_group === 'dikecualikan_khusus' || ['IN-EX-01', 'IN-EX-02', 'IN-EX-03'].includes(c.kode || ''))
+          (c) =>
+            c.tipe === 'income' &&
+            (c.is_sentralisasi === false || c.sentralisasi_group === 'dikecualikan_khusus')
         );
 
-        const getCatTotal = (catId: string) => {
-          return yearIncomes
-            .filter((tx) => tx.category_id === catId)
-            .reduce((sum, tx) => sum + Number(tx.amount), 0);
+        const getCatStats = (catId: string) => {
+          const catTxs = yearIncomes.filter((tx) => tx.category_id === catId);
+          let total = 0;
+          let bpsk = 0;
+          let huria = 0;
+
+          catTxs.forEach((tx) => {
+            const amt = Number(tx.amount) || 0;
+            total += amt;
+            const cat = categories.find((c) => c.id === tx.category_id);
+            const isExcluded =
+              tx.is_sentralisasi !== undefined ? tx.is_sentralisasi === false : cat?.is_sentralisasi === false;
+            if (isExcluded) {
+              huria += amt;
+            } else if (tx.sentralisasi_role === 'huria_share') {
+              huria += amt;
+            } else if (tx.sentralisasi_role === 'bpsk_share') {
+              bpsk += amt;
+            } else {
+              const b = tx.bpsk_amount !== undefined ? Number(tx.bpsk_amount) : Math.round(amt * 0.55);
+              bpsk += b;
+              huria += tx.huria_amount !== undefined ? Number(tx.huria_amount) : amt - b;
+            }
+          });
+
+          return { total, bpsk, huria };
         };
 
         const renderGroupTable = (title: string, groupDesc: string, catList: typeof categories, isExcludedGroup = false) => {
-          const groupTotal = catList.reduce((sum, c) => sum + getCatTotal(c.id), 0);
-          const bpskGroupTotal = isExcludedGroup ? 0 : Math.round(groupTotal * 0.55);
-          const huriaGroupTotal = isExcludedGroup ? groupTotal : groupTotal - bpskGroupTotal;
+          const groupStats = catList.reduce(
+            (acc, c) => {
+              const s = getCatStats(c.id);
+              return {
+                total: acc.total + s.total,
+                bpsk: acc.bpsk + s.bpsk,
+                huria: acc.huria + s.huria,
+              };
+            },
+            { total: 0, bpsk: 0, huria: 0 }
+          );
+          const groupTotal = groupStats.total;
+          const bpskGroupTotal = isExcludedGroup ? 0 : groupStats.bpsk;
+          const huriaGroupTotal = isExcludedGroup ? groupTotal : groupStats.huria;
 
           return (
             <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
@@ -2284,7 +2325,7 @@ export const ReportsPage: React.FC = () => {
                           : 'bg-blue-100 text-blue-800 border border-blue-200'
                       }`}
                     >
-                      {isExcludedGroup ? '100% Kas Huria (Bebas Sentralisasi)' : 'Objek PPKU (55% BPSK / 45% Huria)'}
+                      {isExcludedGroup ? '100% Kas Tujuan (Bebas Sentralisasi)' : 'Objek PPKU (55% BPSK / 45% Huria)'}
                     </span>
                   </h4>
                   <p className="text-xs text-slate-500 mt-0.5">{groupDesc}</p>
@@ -2305,11 +2346,11 @@ export const ReportsPage: React.FC = () => {
                       <th className="py-2.5 px-4 text-right">Total Pelean (100%)</th>
                       {!isExcludedGroup ? (
                         <>
-                          <th className="py-2.5 px-4 text-right text-blue-700">55% Kas Pusat (BPSK)</th>
-                          <th className="py-2.5 px-4 text-right text-indigo-700">45% Kas Huria</th>
+                          <th className="py-2.5 px-4 text-right text-blue-700">55% Kas Sentralisasi (BPSK)</th>
+                          <th className="py-2.5 px-4 text-right text-indigo-700">45% Lokal / Kas Tujuan</th>
                         </>
                       ) : (
-                        <th className="py-2.5 px-4 text-right text-emerald-700">100% Hak Kas Huria</th>
+                        <th className="py-2.5 px-4 text-right text-emerald-700">100% Hak Kas Tujuan</th>
                       )}
                     </tr>
                   </thead>
@@ -2322,9 +2363,7 @@ export const ReportsPage: React.FC = () => {
                       </tr>
                     ) : (
                       catList.map((cat, idx) => {
-                        const total = getCatTotal(cat.id);
-                        const bpsk = isExcludedGroup ? 0 : Math.round(total * 0.55);
-                        const huria = isExcludedGroup ? total : total - bpsk;
+                        const { total, bpsk, huria } = getCatStats(cat.id);
 
                         return (
                           <tr key={cat.id} className="hover:bg-slate-50/60 transition-colors">

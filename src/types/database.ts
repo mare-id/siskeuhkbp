@@ -253,7 +253,19 @@ export type SentralisasiGroup =
 export type SentralisasiExclusionType =
   | 'sosial_duka'
   | 'beasiswa'
-  | 'pembangunan_lokal';
+  | 'pembangunan_lokal'
+  | 'transitoris'
+  | 'lainnya';
+
+export type SentralisasiRole = 'huria_share' | 'bpsk_share' | 'non_sentralisasi';
+
+export interface CompoundIncomeAllocationItem {
+  kas_id: string;
+  amount: number;
+  is_sentralisasi: boolean;
+  sub_description?: string;
+  exclusion_type?: SentralisasiExclusionType | null;
+}
 
 export interface Category {
   id: string;
@@ -263,9 +275,10 @@ export interface Category {
   deskripsi?: string | null;
   is_active: boolean;
   // PPKU Sentralisasi Keuangan HKBP
-  is_sentralisasi?: boolean; // true: Objek Sentralisasi (55% BPSK / 45% Huria), false: Dikecualikan (100% Huria)
+  is_sentralisasi?: boolean; // true: Objek Sentralisasi (55% Kas Sentralisasi / 45% Kas Tujuan), false: Bukan Sentralisasi (100% Kas Tujuan)
   sentralisasi_group?: SentralisasiGroup | null;
   sentralisasi_exclusion_type?: SentralisasiExclusionType | null;
+  default_kas_id?: string | null; // Kas Tujuan lokal default (opsional)
   created_at?: string;
   updated_at?: string;
 }
@@ -283,12 +296,14 @@ export interface Transaction {
   attachment_url?: string | null;
   status: TransactionStatus;
   
-  // PPKU Sentralisasi Keuangan HKBP (55% Kas Pusat BPSK / 45% Huria Lokal)
+  // PPKU Sentralisasi Keuangan HKBP (55% Kas Sentralisasi BPSK / 45% Kas Tujuan Huria)
   is_sentralisasi?: boolean;
+  sentralisasi_role?: SentralisasiRole | null; // 'huria_share' | 'bpsk_share' | 'non_sentralisasi'
+  allocation_group_id?: string | null; // Mengelompokkan pecahan 55%/45% & transaksi rincian ucapan syukur multi-kas
   bpsk_rate?: number; // 0.55 if sentralisasi else 0
   huria_rate?: number; // 0.45 if sentralisasi else 1.00
-  bpsk_amount?: number; // Bagian 55% untuk Kas Pusat (BPSK HKBP)
-  huria_amount?: number; // Bagian 45% (atau 100% jika dikecualikan) untuk Kas Huria
+  bpsk_amount?: number; // Bagian 55% untuk Kas Sentralisasi (BPSK HKBP)
+  huria_amount?: number; // Bagian 45% (atau 100% jika bebas sentralisasi) untuk Kas Tujuan
   sentralisasi_remitted?: boolean; // Status penyetoran ke BPSK HKBP
   sentralisasi_remitted_at?: string | null;
   sentralisasi_remitted_ref?: string | null;

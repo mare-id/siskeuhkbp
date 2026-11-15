@@ -30,6 +30,8 @@ import {
   StorageBalanceSummary,
   Transaction,
   TransactionStatus,
+  CompoundIncomeAllocationItem,
+  SentralisasiExclusionType,
   UserKasAccess,
   FixedAsset,
   FixedAssetCategory,
@@ -110,6 +112,7 @@ import {
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import {
   fetchAllDataFromSupabase,
+  purgeDomainLocalStorage,
   syncInsert,
   syncUpsert,
   syncUpdate,
@@ -152,6 +155,16 @@ interface DataContextType {
 
   // Actions
   addTransaction: (tx: Omit<Transaction, 'id' | 'created_at' | 'updated_at' | 'is_reversal'>) => Promise<{ success: boolean; error?: string }>;
+  addCompoundIncomeTransactions: (params: {
+    tanggal: string;
+    storage_account_id: string;
+    category_id?: string | null;
+    description: string;
+    receipt_no?: string;
+    attachment_url?: string | null;
+    status: TransactionStatus;
+    allocations: CompoundIncomeAllocationItem[];
+  }) => Promise<{ success: boolean; error?: string; createdCount?: number }>;
   updateTransaction: (id: string, updates: Partial<Transaction>) => Promise<{ success: boolean; error?: string }>;
   deleteTransaction: (id: string) => Promise<{ success: boolean; error?: string }>;
   changeStatus: (id: string, newStatus: TransactionStatus, rejectNote?: string) => Promise<{ success: boolean; error?: string }>;
@@ -355,57 +368,38 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 // Ensure runtime clean reset on client load (Struktur Pengurus Lengkap, 10 Kas, & Warta Mingguan)
+// HANYA berjalan di mode Demo/Lokal. Saat Supabase aktif, seluruh penyimpanan lokal dibersihkan & dinonaktifkan.
 const SIKU_CLEAN_RESET_KEY = 'siku_reset_v9_pengurus_sopo_warta';
-if (typeof window !== 'undefined' && !localStorage.getItem(SIKU_CLEAN_RESET_KEY)) {
-  localStorage.removeItem('siku_kas_list');
-  localStorage.removeItem('siku_profiles');
-  localStorage.removeItem('siku_settings');
-  localStorage.removeItem('siku_user_kas_access');
-  localStorage.removeItem('siku_audit_body_members');
-  localStorage.removeItem('siku_lpj_settings');
-  localStorage.removeItem('siku_audit_engagements');
-  localStorage.removeItem('siku_transactions');
-  localStorage.removeItem('siku_budgets');
-  localStorage.removeItem('siku_budget_items');
-  localStorage.removeItem('siku_budget_reallocations');
-  localStorage.removeItem('siku_opening_balances');
-  localStorage.removeItem('siku_opening_entries');
-  localStorage.removeItem('siku_opening_adjustments');
-  localStorage.removeItem('siku_opening_other_positions');
-  localStorage.removeItem('siku_opening_setup');
-  localStorage.removeItem('siku_period_closings');
-  localStorage.removeItem('siku_reconciliations');
-  localStorage.removeItem('siku_advances');
-  localStorage.removeItem('siku_advance_settlements');
-  localStorage.removeItem('siku_receivables_payables');
-  localStorage.removeItem('siku_fixed_assets');
-  localStorage.removeItem('siku_prior_year_summaries');
-  localStorage.removeItem('siku_cash_counts');
-  localStorage.removeItem('siku_audit_period_verifications');
-  localStorage.removeItem('siku_audit_reviews');
-  localStorage.removeItem('siku_audit_findings');
-  localStorage.removeItem('siku_audit_final_opinions');
-  localStorage.removeItem('siku_semester_reports');
-  localStorage.removeItem('siku_lpj_reports');
-  localStorage.removeItem('siku_audit_logs');
-  localStorage.removeItem('siku_categories'); // Reload PPKU categories
-  localStorage.setItem(SIKU_CLEAN_RESET_KEY, 'true');
+if (typeof window !== 'undefined') {
+  if (isSupabaseConfigured) {
+    purgeDomainLocalStorage();
+  } else if (!localStorage.getItem(SIKU_CLEAN_RESET_KEY)) {
+    purgeDomainLocalStorage();
+    localStorage.setItem(SIKU_CLEAN_RESET_KEY, 'true');
+  }
+}
+
+function readLocalOrDefault<T>(key: string, fallback: T): T {
+  if (isSupabaseConfigured || typeof window === 'undefined') return fallback;
+  try {
+    const saved = localStorage.getItem(key);
+    return saved ? (JSON.parse(saved) as T) : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser } = useAuth();
 
-  const [kasList, setKasList] = useState<Kas[]>(() => {
-    const saved = localStorage.getItem('siku_kas_list');
-    return saved ? JSON.parse(saved) : DEMO_KAS;
-  });
+  const [kasList, setKasList] = useState<Kas[]>(() => readLocalOrDefault('siku_kas_list', isSupabaseConfigured ? [] : DEMO_KAS));
 
-  const [storageAccounts, setStorageAccounts] = useState<StorageAccount[]>(() => {
-    const saved = localStorage.getItem('siku_storage_accounts');
-    return saved ? JSON.parse(saved) : DEMO_STORAGE_ACCOUNTS;
-  });
+  const [storageAccounts, setStorageAccounts] = useState<StorageAccount[]>(() =>
+    readLocalOrDefault('siku_storage_accounts', isSupabaseConfigured ? [] : DEMO_STORAGE_ACCOUNTS)
+  );
 
   const [categories, setCategories] = useState<Category[]>(() => {
+    if (isSupabaseConfigured || typeof window === 'undefined') return isSupabaseConfigured ? [] : DEMO_CATEGORIES;
     const saved = localStorage.getItem('siku_categories');
     if (!saved) return DEMO_CATEGORIES;
     const parsed: Category[] = JSON.parse(saved);
@@ -416,45 +410,39 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return [...updated, ...additions];
   });
 
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = localStorage.getItem('siku_transactions');
-    return saved ? JSON.parse(saved) : DEMO_TRANSACTIONS;
-  });
+  const [transactions, setTransactions] = useState<Transaction[]>(() =>
+    readLocalOrDefault('siku_transactions', isSupabaseConfigured ? [] : DEMO_TRANSACTIONS)
+  );
 
-  const [openingBalances, setOpeningBalances] = useState<OpeningBalance[]>(() => {
-    const saved = localStorage.getItem('siku_opening_balances');
-    return saved ? JSON.parse(saved) : DEMO_OPENING_BALANCES;
-  });
+  const [openingBalances, setOpeningBalances] = useState<OpeningBalance[]>(() =>
+    readLocalOrDefault('siku_opening_balances', isSupabaseConfigured ? [] : DEMO_OPENING_BALANCES)
+  );
 
-  const [periodClosings, setPeriodClosings] = useState<PeriodClosing[]>(() => {
-    const saved = localStorage.getItem('siku_period_closings');
-    return saved ? JSON.parse(saved) : DEMO_PERIOD_CLOSINGS;
-  });
+  const [periodClosings, setPeriodClosings] = useState<PeriodClosing[]>(() =>
+    readLocalOrDefault('siku_period_closings', isSupabaseConfigured ? [] : DEMO_PERIOD_CLOSINGS)
+  );
 
-  const [reconciliations, setReconciliations] = useState<Reconciliation[]>(() => {
-    const saved = localStorage.getItem('siku_reconciliations');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [reconciliations, setReconciliations] = useState<Reconciliation[]>(() =>
+    readLocalOrDefault('siku_reconciliations', [])
+  );
 
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-    const saved = localStorage.getItem('siku_audit_logs');
-    return saved ? JSON.parse(saved) : DEMO_AUDIT_LOGS;
-  });
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() =>
+    readLocalOrDefault('siku_audit_logs', isSupabaseConfigured ? [] : DEMO_AUDIT_LOGS)
+  );
 
   const [settings, setSettings] = useState<AppSettings>(() => {
+    if (isSupabaseConfigured || typeof window === 'undefined') return DEMO_SETTINGS;
     const saved = localStorage.getItem('siku_settings');
     return saved ? { ...DEMO_SETTINGS, ...JSON.parse(saved) } : DEMO_SETTINGS;
   });
 
-  const [profiles, setProfiles] = useState<Profile[]>(() => {
-    const saved = localStorage.getItem('siku_profiles');
-    return saved ? JSON.parse(saved) : DEMO_PROFILES;
-  });
+  const [profiles, setProfiles] = useState<Profile[]>(() =>
+    readLocalOrDefault('siku_profiles', isSupabaseConfigured ? [] : DEMO_PROFILES)
+  );
 
-  const [fiscalYears, setFiscalYears] = useState<FiscalYear[]>(() => {
-    const saved = localStorage.getItem('siku_fiscal_years');
-    return saved ? JSON.parse(saved) : DEMO_FISCAL_YEARS;
-  });
+  const [fiscalYears, setFiscalYears] = useState<FiscalYear[]>(() =>
+    readLocalOrDefault('siku_fiscal_years', isSupabaseConfigured ? [] : DEMO_FISCAL_YEARS)
+  );
 
   useEffect(() => {
     if (isSupabaseConfigured) return;
@@ -466,142 +454,117 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('siku_profiles', JSON.stringify(profiles));
   }, [profiles]);
 
-  const [auditPeriodVerifications, setAuditPeriodVerifications] = useState<AuditPeriodVerification[]>(() => {
-    const saved = localStorage.getItem('siku_audit_period_verifications');
-    return saved ? JSON.parse(saved) : DEMO_AUDIT_PERIOD_VERIFICATIONS;
-  });
+  const [auditPeriodVerifications, setAuditPeriodVerifications] = useState<AuditPeriodVerification[]>(() =>
+    readLocalOrDefault('siku_audit_period_verifications', isSupabaseConfigured ? [] : DEMO_AUDIT_PERIOD_VERIFICATIONS)
+  );
 
   useEffect(() => {
     if (isSupabaseConfigured) return;
     localStorage.setItem('siku_audit_period_verifications', JSON.stringify(auditPeriodVerifications));
   }, [auditPeriodVerifications]);
 
-  const [userKasAccessList, setUserKasAccessList] = useState<UserKasAccess[]>(() => {
-    const saved = localStorage.getItem('siku_user_kas_access');
-    return saved ? JSON.parse(saved) : DEMO_USER_KAS_ACCESS;
-  });
+  const [userKasAccessList, setUserKasAccessList] = useState<UserKasAccess[]>(() =>
+    readLocalOrDefault('siku_user_kas_access', isSupabaseConfigured ? [] : DEMO_USER_KAS_ACCESS)
+  );
 
   // Budget State
-  const [budgets, setBudgets] = useState<Budget[]>(() => {
-    const saved = localStorage.getItem('siku_budgets');
-    return saved ? JSON.parse(saved) : DEMO_BUDGETS;
-  });
+  const [budgets, setBudgets] = useState<Budget[]>(() =>
+    readLocalOrDefault('siku_budgets', isSupabaseConfigured ? [] : DEMO_BUDGETS)
+  );
 
-  const [budgetItems, setBudgetItems] = useState<BudgetItem[]>(() => {
-    const saved = localStorage.getItem('siku_budget_items');
-    return saved ? JSON.parse(saved) : DEMO_BUDGET_ITEMS;
-  });
+  const [budgetItems, setBudgetItems] = useState<BudgetItem[]>(() =>
+    readLocalOrDefault('siku_budget_items', isSupabaseConfigured ? [] : DEMO_BUDGET_ITEMS)
+  );
 
-  const [budgetReallocations, setBudgetReallocations] = useState<BudgetReallocation[]>(() => {
-    const saved = localStorage.getItem('siku_budget_reallocations');
-    return saved ? JSON.parse(saved) : DEMO_BUDGET_REALLOCATIONS;
-  });
+  const [budgetReallocations, setBudgetReallocations] = useState<BudgetReallocation[]>(() =>
+    readLocalOrDefault('siku_budget_reallocations', isSupabaseConfigured ? [] : DEMO_BUDGET_REALLOCATIONS)
+  );
 
   // Opening Book & Balance State
-  const [openingSetup, setOpeningSetup] = useState<OpeningSetup>(() => {
-    const saved = localStorage.getItem('siku_opening_setup');
-    return saved ? JSON.parse(saved) : DEMO_OPENING_SETUP;
-  });
+  const [openingSetup, setOpeningSetup] = useState<OpeningSetup>(() =>
+    readLocalOrDefault('siku_opening_setup', DEMO_OPENING_SETUP)
+  );
 
-  const [openingEntries, setOpeningEntries] = useState<OpeningBalanceEntry[]>(() => {
-    const saved = localStorage.getItem('siku_opening_entries');
-    return saved ? JSON.parse(saved) : DEMO_OPENING_ENTRIES;
-  });
+  const [openingEntries, setOpeningEntries] = useState<OpeningBalanceEntry[]>(() =>
+    readLocalOrDefault('siku_opening_entries', isSupabaseConfigured ? [] : DEMO_OPENING_ENTRIES)
+  );
 
-  const [openingAdjustments, setOpeningAdjustments] = useState<OpeningBalanceAdjustment[]>(() => {
-    const saved = localStorage.getItem('siku_opening_adjustments');
-    return saved ? JSON.parse(saved) : DEMO_OPENING_ADJUSTMENTS;
-  });
+  const [openingAdjustments, setOpeningAdjustments] = useState<OpeningBalanceAdjustment[]>(() =>
+    readLocalOrDefault('siku_opening_adjustments', isSupabaseConfigured ? [] : DEMO_OPENING_ADJUSTMENTS)
+  );
 
-  const [openingOtherPositions, setOpeningOtherPositions] = useState<OpeningOtherPosition[]>(() => {
-    const saved = localStorage.getItem('siku_opening_other_positions');
-    return saved ? JSON.parse(saved) : DEMO_OPENING_OTHER_POSITIONS;
-  });
+  const [openingOtherPositions, setOpeningOtherPositions] = useState<OpeningOtherPosition[]>(() =>
+    readLocalOrDefault('siku_opening_other_positions', isSupabaseConfigured ? [] : DEMO_OPENING_OTHER_POSITIONS)
+  );
 
-  const [priorYearSummaries, setPriorYearSummaries] = useState<PriorYearSummary[]>(() => {
-    const saved = localStorage.getItem('siku_prior_year_summaries');
-    return saved ? JSON.parse(saved) : DEMO_PRIOR_YEAR_SUMMARIES;
-  });
+  const [priorYearSummaries, setPriorYearSummaries] = useState<PriorYearSummary[]>(() =>
+    readLocalOrDefault('siku_prior_year_summaries', isSupabaseConfigured ? [] : DEMO_PRIOR_YEAR_SUMMARIES)
+  );
 
   // LPJ Supporting Data State (ISAK 35 - Modified Cash Basis)
-  const [fixedAssets, setFixedAssets] = useState<FixedAsset[]>(() => {
-    const saved = localStorage.getItem('siku_fixed_assets');
-    return saved ? JSON.parse(saved) : DEMO_FIXED_ASSETS;
-  });
+  const [fixedAssets, setFixedAssets] = useState<FixedAsset[]>(() =>
+    readLocalOrDefault('siku_fixed_assets', isSupabaseConfigured ? [] : DEMO_FIXED_ASSETS)
+  );
 
-  const [advances, setAdvances] = useState<Advance[]>(() => {
-    const saved = localStorage.getItem('siku_advances');
-    return saved ? JSON.parse(saved) : DEMO_ADVANCES;
-  });
+  const [advances, setAdvances] = useState<Advance[]>(() =>
+    readLocalOrDefault('siku_advances', isSupabaseConfigured ? [] : DEMO_ADVANCES)
+  );
 
-  const [advanceSettlements, setAdvanceSettlements] = useState<AdvanceSettlement[]>(() => {
-    const saved = localStorage.getItem('siku_advance_settlements');
-    return saved ? JSON.parse(saved) : DEMO_ADVANCE_SETTLEMENTS;
-  });
+  const [advanceSettlements, setAdvanceSettlements] = useState<AdvanceSettlement[]>(() =>
+    readLocalOrDefault('siku_advance_settlements', isSupabaseConfigured ? [] : DEMO_ADVANCE_SETTLEMENTS)
+  );
 
-  const [receivablesPayables, setReceivablesPayables] = useState<ReceivablePayable[]>(() => {
-    const saved = localStorage.getItem('siku_receivables_payables');
-    return saved ? JSON.parse(saved) : DEMO_RECEIVABLES_PAYABLES;
-  });
+  const [receivablesPayables, setReceivablesPayables] = useState<ReceivablePayable[]>(() =>
+    readLocalOrDefault('siku_receivables_payables', isSupabaseConfigured ? [] : DEMO_RECEIVABLES_PAYABLES)
+  );
 
-  const [lpjNotes, setLpjNotes] = useState<LpjNotes>(() => {
-    const saved = localStorage.getItem('siku_lpj_notes');
-    return saved ? JSON.parse(saved) : DEMO_LPJ_NOTES;
-  });
+  const [lpjNotes, setLpjNotes] = useState<LpjNotes>(() =>
+    readLocalOrDefault('siku_lpj_notes', DEMO_LPJ_NOTES)
+  );
 
-  const [lpjSettings, setLpjSettings] = useState<LpjSettings>(() => {
-    const saved = localStorage.getItem('siku_lpj_settings');
-    return saved ? JSON.parse(saved) : DEMO_LPJ_SETTINGS;
-  });
+  const [lpjSettings, setLpjSettings] = useState<LpjSettings>(() =>
+    readLocalOrDefault('siku_lpj_settings', DEMO_LPJ_SETTINGS)
+  );
 
   // Badan Audit Huria State
-  const [auditBodyMembers, setAuditBodyMembers] = useState<AuditBodyMember[]>(() => {
-    const saved = localStorage.getItem('siku_audit_body_members');
-    return saved ? JSON.parse(saved) : DEMO_AUDIT_BODY_MEMBERS;
-  });
+  const [auditBodyMembers, setAuditBodyMembers] = useState<AuditBodyMember[]>(() =>
+    readLocalOrDefault('siku_audit_body_members', isSupabaseConfigured ? [] : DEMO_AUDIT_BODY_MEMBERS)
+  );
 
-  const [auditEngagements, setAuditEngagements] = useState<AuditEngagement[]>(() => {
-    const saved = localStorage.getItem('siku_audit_engagements');
-    return saved ? JSON.parse(saved) : DEMO_AUDIT_ENGAGEMENTS;
-  });
+  const [auditEngagements, setAuditEngagements] = useState<AuditEngagement[]>(() =>
+    readLocalOrDefault('siku_audit_engagements', isSupabaseConfigured ? [] : DEMO_AUDIT_ENGAGEMENTS)
+  );
 
-  const [auditReviews, setAuditReviews] = useState<AuditReview[]>(() => {
-    const saved = localStorage.getItem('siku_audit_reviews');
-    return saved ? JSON.parse(saved) : DEMO_AUDIT_REVIEWS;
-  });
+  const [auditReviews, setAuditReviews] = useState<AuditReview[]>(() =>
+    readLocalOrDefault('siku_audit_reviews', isSupabaseConfigured ? [] : DEMO_AUDIT_REVIEWS)
+  );
 
-  const [auditFindings, setAuditFindings] = useState<AuditFinding[]>(() => {
-    const saved = localStorage.getItem('siku_audit_findings');
-    return saved ? JSON.parse(saved) : DEMO_AUDIT_FINDINGS;
-  });
+  const [auditFindings, setAuditFindings] = useState<AuditFinding[]>(() =>
+    readLocalOrDefault('siku_audit_findings', isSupabaseConfigured ? [] : DEMO_AUDIT_FINDINGS)
+  );
 
-  const [auditFinalOpinions, setAuditFinalOpinions] = useState<AuditFinalOpinion[]>(() => {
-    const saved = localStorage.getItem('siku_audit_final_opinions');
-    return saved ? JSON.parse(saved) : DEMO_AUDIT_FINAL_OPINIONS;
-  });
+  const [auditFinalOpinions, setAuditFinalOpinions] = useState<AuditFinalOpinion[]>(() =>
+    readLocalOrDefault('siku_audit_final_opinions', isSupabaseConfigured ? [] : DEMO_AUDIT_FINAL_OPINIONS)
+  );
 
-  const [cashCounts, setCashCounts] = useState<CashCount[]>(() => {
-    const saved = localStorage.getItem('siku_cash_counts');
-    return saved ? JSON.parse(saved) : DEMO_CASH_COUNTS;
-  });
+  const [cashCounts, setCashCounts] = useState<CashCount[]>(() =>
+    readLocalOrDefault('siku_cash_counts', isSupabaseConfigured ? [] : DEMO_CASH_COUNTS)
+  );
 
   // Laporan Semester & LPJ State
-  const [semesterReports, setSemesterReports] = useState<SemesterReport[]>(() => {
-    const saved = localStorage.getItem('siku_semester_reports');
-    return saved ? JSON.parse(saved) : DEMO_SEMESTER_REPORTS;
-  });
+  const [semesterReports, setSemesterReports] = useState<SemesterReport[]>(() =>
+    readLocalOrDefault('siku_semester_reports', isSupabaseConfigured ? [] : DEMO_SEMESTER_REPORTS)
+  );
 
-  const [lpjReports, setLpjReports] = useState<LpjReport[]>(() => {
-    const saved = localStorage.getItem('siku_lpj_reports');
-    return saved ? JSON.parse(saved) : DEMO_LPJ_REPORTS;
-  });
+  const [lpjReports, setLpjReports] = useState<LpjReport[]>(() =>
+    readLocalOrDefault('siku_lpj_reports', isSupabaseConfigured ? [] : DEMO_LPJ_REPORTS)
+  );
 
-  const [lpjExceptions, setLpjExceptions] = useState<LpjException[]>(() => {
-    const saved = localStorage.getItem('siku_lpj_exceptions');
-    return saved ? JSON.parse(saved) : DEMO_LPJ_EXCEPTIONS;
-  });
+  const [lpjExceptions, setLpjExceptions] = useState<LpjException[]>(() =>
+    readLocalOrDefault('siku_lpj_exceptions', isSupabaseConfigured ? [] : DEMO_LPJ_EXCEPTIONS)
+  );
 
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(isSupabaseConfigured);
 
   // Sync to local storage
   useEffect(() => {
@@ -774,46 +737,51 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return;
 
+    const applyDataset = (data: NonNullable<Awaited<ReturnType<typeof fetchAllDataFromSupabase>>['data']>) => {
+      if (data.kasList) setKasList(data.kasList);
+      if (data.storageAccounts) setStorageAccounts(data.storageAccounts);
+      if (data.categories) setCategories(data.categories);
+      if (data.transactions) setTransactions(data.transactions);
+      if (data.openingBalances) setOpeningBalances(data.openingBalances);
+      if (data.periodClosings) setPeriodClosings(data.periodClosings);
+      if (data.reconciliations) setReconciliations(data.reconciliations);
+      if (data.auditLogs) setAuditLogs(data.auditLogs);
+      if (data.profiles) setProfiles(data.profiles);
+      if (data.userKasAccessList) setUserKasAccessList(data.userKasAccessList);
+      if (data.fiscalYears) setFiscalYears(data.fiscalYears);
+      if (data.budgets) setBudgets(data.budgets);
+      if (data.budgetItems) setBudgetItems(data.budgetItems);
+      if (data.budgetReallocations) setBudgetReallocations(data.budgetReallocations);
+      if (data.openingSetup) setOpeningSetup(data.openingSetup);
+      if (data.openingEntries) setOpeningEntries(data.openingEntries);
+      if (data.openingAdjustments) setOpeningAdjustments(data.openingAdjustments);
+      if (data.openingOtherPositions) setOpeningOtherPositions(data.openingOtherPositions);
+      if (data.priorYearSummaries) setPriorYearSummaries(data.priorYearSummaries);
+      if (data.fixedAssets) setFixedAssets(data.fixedAssets);
+      if (data.advances) setAdvances(data.advances);
+      if (data.advanceSettlements) setAdvanceSettlements(data.advanceSettlements);
+      if (data.receivablesPayables) setReceivablesPayables(data.receivablesPayables);
+      if (data.lpjNotes) setLpjNotes(data.lpjNotes);
+      if (data.lpjSettings) setLpjSettings(data.lpjSettings);
+      if (data.auditBodyMembers) setAuditBodyMembers(data.auditBodyMembers);
+      if (data.auditEngagements) setAuditEngagements(data.auditEngagements);
+      if (data.auditReviews) setAuditReviews(data.auditReviews);
+      if (data.auditFindings) setAuditFindings(data.auditFindings);
+      if (data.auditFinalOpinions) setAuditFinalOpinions(data.auditFinalOpinions);
+      if (data.auditPeriodVerifications) setAuditPeriodVerifications(data.auditPeriodVerifications);
+      if (data.cashCounts) setCashCounts(data.cashCounts);
+      if (data.semesterReports) setSemesterReports(data.semesterReports);
+      if (data.lpjReports) setLpjReports(data.lpjReports);
+      if (data.lpjExceptions) setLpjExceptions(data.lpjExceptions);
+      if (data.settings) setSettings(data.settings);
+    };
+
     const loadDataFromSupabase = async () => {
       setLoading(true);
       try {
         const res = await fetchAllDataFromSupabase();
         if (res.success && res.data) {
-          if (res.data.kasList) setKasList(res.data.kasList);
-          if (res.data.storageAccounts) setStorageAccounts(res.data.storageAccounts);
-          if (res.data.categories) setCategories(res.data.categories);
-          if (res.data.transactions) setTransactions(res.data.transactions);
-          if (res.data.openingBalances) setOpeningBalances(res.data.openingBalances);
-          if (res.data.periodClosings) setPeriodClosings(res.data.periodClosings);
-          if (res.data.reconciliations) setReconciliations(res.data.reconciliations);
-          if (res.data.auditLogs) setAuditLogs(res.data.auditLogs);
-          if (res.data.profiles) setProfiles(res.data.profiles);
-          if (res.data.userKasAccessList) setUserKasAccessList(res.data.userKasAccessList);
-          if (res.data.budgets) setBudgets(res.data.budgets);
-          if (res.data.budgetItems) setBudgetItems(res.data.budgetItems);
-          if (res.data.budgetReallocations) setBudgetReallocations(res.data.budgetReallocations);
-          if (res.data.openingSetup) setOpeningSetup(res.data.openingSetup);
-          if (res.data.openingEntries) setOpeningEntries(res.data.openingEntries);
-          if (res.data.openingAdjustments) setOpeningAdjustments(res.data.openingAdjustments);
-          if (res.data.openingOtherPositions) setOpeningOtherPositions(res.data.openingOtherPositions);
-          if (res.data.priorYearSummaries) setPriorYearSummaries(res.data.priorYearSummaries);
-          if (res.data.fixedAssets) setFixedAssets(res.data.fixedAssets);
-          if (res.data.advances) setAdvances(res.data.advances);
-          if (res.data.advanceSettlements) setAdvanceSettlements(res.data.advanceSettlements);
-          if (res.data.receivablesPayables) setReceivablesPayables(res.data.receivablesPayables);
-          if (res.data.lpjNotes) setLpjNotes(res.data.lpjNotes);
-          if (res.data.lpjSettings) setLpjSettings(res.data.lpjSettings);
-          if (res.data.auditBodyMembers) setAuditBodyMembers(res.data.auditBodyMembers);
-          if (res.data.auditEngagements) setAuditEngagements(res.data.auditEngagements);
-          if (res.data.auditReviews) setAuditReviews(res.data.auditReviews);
-          if (res.data.auditFindings) setAuditFindings(res.data.auditFindings);
-          if (res.data.auditFinalOpinions) setAuditFinalOpinions(res.data.auditFinalOpinions);
-          if (res.data.auditPeriodVerifications) setAuditPeriodVerifications(res.data.auditPeriodVerifications);
-          if (res.data.cashCounts) setCashCounts(res.data.cashCounts);
-          if (res.data.semesterReports) setSemesterReports(res.data.semesterReports);
-          if (res.data.lpjReports) setLpjReports(res.data.lpjReports);
-          if (res.data.lpjExceptions) setLpjExceptions(res.data.lpjExceptions);
-          if (res.data.settings) setSettings(res.data.settings);
+          applyDataset(res.data);
         }
       } catch (err) {
         console.error('Failed to load data from Supabase:', err);
@@ -824,34 +792,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     loadDataFromSupabase();
 
-    // Realtime channel
+    // Debounced realtime refresh across all public tables
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel('public-db-realtime')
       .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-        fetchAllDataFromSupabase().then((res) => {
-          if (res.success && res.data) {
-            if (res.data.transactions) setTransactions(res.data.transactions);
-            if (res.data.openingBalances) setOpeningBalances(res.data.openingBalances);
-            if (res.data.kasList) setKasList(res.data.kasList);
-            if (res.data.storageAccounts) setStorageAccounts(res.data.storageAccounts);
-            if (res.data.categories) setCategories(res.data.categories);
-            if (res.data.budgets) setBudgets(res.data.budgets);
-            if (res.data.budgetItems) setBudgetItems(res.data.budgetItems);
-            if (res.data.periodClosings) setPeriodClosings(res.data.periodClosings);
-            if (res.data.reconciliations) setReconciliations(res.data.reconciliations);
-            if (res.data.auditFindings) setAuditFindings(res.data.auditFindings);
-            if (res.data.auditReviews) setAuditReviews(res.data.auditReviews);
-            if (res.data.auditPeriodVerifications) setAuditPeriodVerifications(res.data.auditPeriodVerifications);
-            if (res.data.cashCounts) setCashCounts(res.data.cashCounts);
-            if (res.data.profiles) setProfiles(res.data.profiles);
-            if (res.data.userKasAccessList) setUserKasAccessList(res.data.userKasAccessList);
-            if (res.data.settings) setSettings(res.data.settings);
-          }
-        });
+        if (refreshTimer) clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(() => {
+          fetchAllDataFromSupabase().then((res) => {
+            if (res.success && res.data) {
+              applyDataset(res.data);
+            }
+          });
+        }, 250);
       })
       .subscribe();
 
     return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
       supabase?.removeChannel(channel);
     };
   }, []);
@@ -867,7 +825,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
-  // Helper to log audit events
+  // Helper to log audit events (persisted directly to Supabase when configured)
   const addAuditLog = (
     tableName: string,
     recordId: string,
@@ -881,14 +839,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       table_name: tableName,
       record_id: recordId,
       action,
-      old_data: oldData,
-      new_data: newData,
+      old_data: oldData ?? null,
+      new_data: newData ?? null,
       changed_by: currentUser?.id || 'system',
       notes: notes || '',
       changed_at: new Date().toISOString(),
       user: currentUser || undefined,
     };
     setAuditLogs((prev) => [newLog, ...prev]);
+    if (isSupabaseConfigured) {
+      void syncInsert('audit_logs', newLog);
+    }
   };
 
   // Calculate official and projected balances for each Kas
@@ -1006,32 +967,47 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (tx.type === 'income') {
         totalPenerimaan += amt;
         const cat = categories.find((c) => c.id === tx.category_id);
-        const isExcluded = cat ? cat.is_sentralisasi === false : tx.is_sentralisasi === false;
+        const isExcluded =
+          tx.is_sentralisasi !== undefined ? tx.is_sentralisasi === false : cat?.is_sentralisasi === false;
 
         if (isExcluded) {
           totalDikecualikan += amt;
-          const exType = cat?.sentralisasi_exclusion_type || tx.sentralisasi_exclusion_type;
+          const exType = tx.sentralisasi_exclusion_type || cat?.sentralisasi_exclusion_type;
           if (exType === 'sosial_duka') {
             totalSosialDuka += amt;
           } else if (exType === 'beasiswa') {
             totalBeasiswa += amt;
           } else if (exType === 'pembangunan_lokal') {
             totalPembangunanLokal += amt;
-          } else {
+          } else if (exType !== 'transitoris' && exType !== 'lainnya') {
             const nameLower = (cat?.nama || tx.description || '').toLowerCase();
             if (nameLower.includes('sosial') || nameLower.includes('gariana') || cat?.kode?.includes('EX-01')) {
               totalSosialDuka += amt;
             } else if (nameLower.includes('beasiswa') || nameLower.includes('belajar') || cat?.kode?.includes('EX-02')) {
               totalBeasiswa += amt;
-            } else {
+            } else if (nameLower.includes('pembangunan') || cat?.kode?.includes('EX-03')) {
               totalPembangunanLokal += amt;
             }
           }
         } else {
-          // Objek Sentralisasi (55% / 45%)
+          // Objek Sentralisasi (55% Kas Sentralisasi BPSK / 45% Kas Tujuan Huria)
           totalObjekSentralisasi += amt;
-          const bpskPart = tx.bpsk_amount !== undefined ? Number(tx.bpsk_amount) : Math.round(amt * 0.55);
-          const huriaPart = tx.huria_amount !== undefined ? Number(tx.huria_amount) : (amt - bpskPart);
+          const bpskPart =
+            tx.sentralisasi_role === 'huria_share'
+              ? 0
+              : tx.sentralisasi_role === 'bpsk_share'
+              ? amt
+              : tx.bpsk_amount !== undefined
+              ? Number(tx.bpsk_amount)
+              : Math.round(amt * 0.55);
+          const huriaPart =
+            tx.sentralisasi_role === 'huria_share'
+              ? amt
+              : tx.sentralisasi_role === 'bpsk_share'
+              ? 0
+              : tx.huria_amount !== undefined
+              ? Number(tx.huria_amount)
+              : amt - bpskPart;
           totalBpskObligation += bpskPart;
           totalHuriaShare += huriaPart;
         }
@@ -1070,6 +1046,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return lpjReports.some((l) => l.tahun === year && l.status === 'approved');
   };
 
+  const inferExclusionTypeForKas = (
+    kasId: string,
+    explicit?: SentralisasiExclusionType | null,
+    catExclusion?: SentralisasiExclusionType | null
+  ): SentralisasiExclusionType => {
+    if (explicit) return explicit;
+    if (kasId === 'kas-8') return 'transitoris';
+    if (kasId === 'kas-2') return 'sosial_duka';
+    if (kasId === 'kas-7') return 'pembangunan_lokal';
+    return catExclusion || 'lainnya';
+  };
+
   const addTransaction = async (
     txInput: Omit<Transaction, 'id' | 'created_at' | 'updated_at' | 'is_reversal'>
   ): Promise<{ success: boolean; error?: string }> => {
@@ -1094,10 +1082,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // Check opening balance locked constraint
+    const targetKasObj = kasList.find((k) => k.id === txInput.kas_id);
     if (!isKasOpeningLocked(txInput.kas_id)) {
       return {
         success: false,
-        error: `Pembukaan buku untuk kas ini belum Dikunci (Locked). Selesaikan dan kunci saldo awal kas terlebih dahulu sebelum mencatat transaksi.`,
+        error: `Pembukaan buku untuk ${targetKasObj?.nama || 'kas ini'} belum Dikunci (Locked). Selesaikan dan kunci saldo awal kas terlebih dahulu sebelum mencatat transaksi.`,
       };
     }
 
@@ -1132,48 +1121,140 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // PPKU Sentralisasi Keuangan HKBP calculation (55% BPSK / 45% Huria)
-    let isSentralisasi = txInput.is_sentralisasi;
-    let bpskRate = txInput.bpsk_rate;
-    let huriaRate = txInput.huria_rate;
-    let bpskAmount = txInput.bpsk_amount;
-    let huriaAmount = txInput.huria_amount;
-    let exclusionType = txInput.sentralisasi_exclusion_type;
+    const cat = categories.find((c) => c.id === txInput.category_id);
+    const sentralisasiKas = kasList.find((k) => k.id === 'kas-9' || k.kode === 'KAS-SENTRAL');
+    const nowIso = new Date().toISOString();
 
     if (txInput.type === 'income') {
-      const cat = categories.find((c) => c.id === txInput.category_id);
-      if (cat && cat.is_sentralisasi === false) {
-        // Dikecualikan dari sentralisasi (100% Kas Huria / Peruntukan Khusus)
-        isSentralisasi = false;
-        bpskRate = 0;
-        huriaRate = 1.0;
-        bpskAmount = 0;
-        huriaAmount = txInput.amount;
-        exclusionType = cat.sentralisasi_exclusion_type || null;
-      } else {
-        // Objek Sentralisasi PPKU HKBP (55% Kas Pusat BPSK / 45% Kas Huria Lokal)
-        isSentralisasi = true;
-        bpskRate = 0.55;
-        huriaRate = 0.45;
-        bpskAmount = Math.round(txInput.amount * 0.55);
-        huriaAmount = txInput.amount - bpskAmount;
-        exclusionType = null;
+      // Per-transaction override takes precedence; otherwise follow category default
+      const isSentralisasi =
+        txInput.is_sentralisasi !== undefined
+          ? txInput.is_sentralisasi
+          : cat
+          ? cat.is_sentralisasi !== false
+          : true;
+
+      // Split automatically 55% to Kas Sentralisasi & 45% to target Kas Huria when sentralisasi is active
+      if (isSentralisasi && sentralisasiKas && txInput.kas_id !== sentralisasiKas.id) {
+        if (!isKasOpeningLocked(sentralisasiKas.id)) {
+          return {
+            success: false,
+            error: `Pembukaan buku untuk ${sentralisasiKas.nama} (${sentralisasiKas.kode}) belum Dikunci. Kunci saldo awal ${sentralisasiKas.nama} terlebih dahulu karena porsi 55% sentralisasi otomatis masuk ke kas tersebut.`,
+          };
+        }
+        if (isPeriodClosed(year, month, sentralisasiKas.id)) {
+          return {
+            success: false,
+            error: `Periode ${month}/${year} untuk ${sentralisasiKas.nama} sudah ditutup. Transaksi sentralisasi tidak dapat dibuat.`,
+          };
+        }
+
+        const bpskAmount = Math.round(txInput.amount * 0.55);
+        const huriaAmount = txInput.amount - bpskAmount;
+        const targetKasNama = targetKasObj?.nama || 'Kas Huria';
+        const groupId =
+          txInput.allocation_group_id || `alloc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+
+        const createdTxs: Transaction[] = [];
+
+        if (huriaAmount > 0) {
+          createdTxs.push({
+            ...txInput,
+            id: `tx-${Date.now()}-h-${Math.random().toString(36).substring(2, 6)}`,
+            amount: huriaAmount,
+            description: `${txInput.description} [45% Bagian Lokal -> ${targetKasNama}]`,
+            is_reversal: false,
+            is_sentralisasi: true,
+            sentralisasi_role: 'huria_share',
+            allocation_group_id: groupId,
+            bpsk_rate: 0.55,
+            huria_rate: 0.45,
+            bpsk_amount: 0,
+            huria_amount: huriaAmount,
+            sentralisasi_exclusion_type: null,
+            created_by: currentUser?.id || 'system',
+            created_at: nowIso,
+            updated_at: nowIso,
+          });
+        }
+
+        if (bpskAmount > 0) {
+          createdTxs.push({
+            ...txInput,
+            id: `tx-${Date.now()}-s-${Math.random().toString(36).substring(2, 6)}`,
+            kas_id: sentralisasiKas.id,
+            amount: bpskAmount,
+            description: `${txInput.description} [55% Otomatis Sentralisasi dari ${targetKasNama}]`,
+            is_reversal: false,
+            is_sentralisasi: true,
+            sentralisasi_role: 'bpsk_share',
+            allocation_group_id: groupId,
+            bpsk_rate: 0.55,
+            huria_rate: 0.45,
+            bpsk_amount: bpskAmount,
+            huria_amount: 0,
+            sentralisasi_exclusion_type: null,
+            created_by: currentUser?.id || 'system',
+            created_at: nowIso,
+            updated_at: nowIso,
+          });
+        }
+
+        setTransactions((prev) => [...createdTxs, ...prev]);
+        if (isSupabaseConfigured) {
+          await syncInsert('transactions', createdTxs);
+        }
+        addAuditLog(
+          'transactions',
+          groupId,
+          'INSERT_SENTRALISASI_SPLIT',
+          null,
+          { groupId, huriaAmount, bpskAmount, targetKasId: txInput.kas_id },
+          `Penerimaan sentralisasi Rp ${txInput.amount.toLocaleString('id-ID')} otomatis dibagi 45% (${targetKasNama}) & 55% (${sentralisasiKas.nama}) oleh ${currentUser?.full_name}`
+        );
+        return { success: true };
       }
+
+      // Single-row income (non-sentralisasi OR direct into kas-9)
+      const bpskAmount = isSentralisasi ? Math.round(txInput.amount * 0.55) : 0;
+      const huriaAmount = isSentralisasi ? txInput.amount - bpskAmount : txInput.amount;
+      const exclusionType = isSentralisasi
+        ? null
+        : inferExclusionTypeForKas(txInput.kas_id, txInput.sentralisasi_exclusion_type, cat?.sentralisasi_exclusion_type);
+
+      const newTx: Transaction = {
+        ...txInput,
+        id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        is_reversal: false,
+        is_sentralisasi: isSentralisasi,
+        sentralisasi_role: isSentralisasi ? 'bpsk_share' : 'non_sentralisasi',
+        bpsk_rate: isSentralisasi ? 0.55 : 0,
+        huria_rate: isSentralisasi ? 0.45 : 1.0,
+        bpsk_amount: bpskAmount,
+        huria_amount: huriaAmount,
+        sentralisasi_exclusion_type: exclusionType,
+        created_by: currentUser?.id || 'system',
+        created_at: nowIso,
+        updated_at: nowIso,
+      };
+
+      setTransactions((prev) => [newTx, ...prev]);
+      if (isSupabaseConfigured) {
+        await syncInsert('transactions', newTx);
+      }
+      addAuditLog('transactions', newTx.id, 'INSERT', null, newTx, `Transaksi baru dibuat oleh ${currentUser?.full_name}`);
+      return { success: true };
     }
 
+    // Expense or other transaction types
     const newTx: Transaction = {
       ...txInput,
       id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       is_reversal: false,
-      is_sentralisasi: isSentralisasi,
-      bpsk_rate: bpskRate,
-      huria_rate: huriaRate,
-      bpsk_amount: bpskAmount,
-      huria_amount: huriaAmount,
-      sentralisasi_exclusion_type: exclusionType,
+      is_sentralisasi: false,
       created_by: currentUser?.id || 'system',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: nowIso,
+      updated_at: nowIso,
     };
 
     setTransactions((prev) => [newTx, ...prev]);
@@ -1182,6 +1263,199 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     addAuditLog('transactions', newTx.id, 'INSERT', null, newTx, `Transaksi baru dibuat oleh ${currentUser?.full_name}`);
     return { success: true };
+  };
+
+  // Record compound multi-kas income (e.g., Ucapan Syukur divided into Huria 55/45, Pembangunan 100%, Sosial 100%, Transitoris 100%)
+  const addCompoundIncomeTransactions = async (params: {
+    tanggal: string;
+    storage_account_id: string;
+    category_id?: string | null;
+    description: string;
+    receipt_no?: string;
+    attachment_url?: string | null;
+    status: TransactionStatus;
+    allocations: CompoundIncomeAllocationItem[];
+  }): Promise<{ success: boolean; error?: string; createdCount?: number }> => {
+    const { tanggal, storage_account_id, category_id, description, receipt_no, attachment_url, status, allocations } = params;
+
+    if (!allocations || allocations.length === 0) {
+      return { success: false, error: 'Tambahkan minimal 1 baris alokasi kas tujuan.' };
+    }
+
+    const txDate = new Date(tanggal);
+    const year = txDate.getFullYear();
+    const month = txDate.getMonth() + 1;
+
+    if (isYearLockedByLpj(year)) {
+      return {
+        success: false,
+        error: `Tahun Anggaran ${year} telah disahkan LPJ-nya oleh Rapat Huria dan telah terkunci permanen. Transaksi baru tidak dapat dibuat.`,
+      };
+    }
+
+    if (openingSetup?.go_live_date && tanggal < openingSetup.go_live_date) {
+      return {
+        success: false,
+        error: `Tanggal transaksi (${tanggal}) tidak boleh sebelum Tanggal Mulai Pemakaian aplikasi (${openingSetup.go_live_date}).`,
+      };
+    }
+
+    const sentralisasiKas = kasList.find((k) => k.id === 'kas-9' || k.kode === 'KAS-SENTRAL');
+    const involvedKasIds = new Set<string>();
+
+    for (const item of allocations) {
+      if (!item.kas_id) {
+        return { success: false, error: 'Semua baris alokasi wajib memilih Kas Tujuan.' };
+      }
+      if (!item.amount || item.amount <= 0) {
+        return { success: false, error: 'Semua nominal alokasi harus lebih besar dari Rp 0.' };
+      }
+      involvedKasIds.add(item.kas_id);
+      if (item.is_sentralisasi && sentralisasiKas && item.kas_id !== sentralisasiKas.id) {
+        involvedKasIds.add(sentralisasiKas.id);
+      }
+    }
+
+    for (const kId of involvedKasIds) {
+      const kObj = kasList.find((k) => k.id === kId);
+      if (!isKasOpeningLocked(kId)) {
+        return {
+          success: false,
+          error: `Pembukaan buku untuk ${kObj?.nama || kId} belum Dikunci. Kunci saldo awal seluruh kas terkait terlebih dahulu.`,
+        };
+      }
+      if (isPeriodClosed(year, month, kId)) {
+        return {
+          success: false,
+          error: `Periode ${month}/${year} untuk ${kObj?.nama || kId} sudah ditutup.`,
+        };
+      }
+    }
+
+    const cat = categories.find((c) => c.id === category_id);
+    const groupId = `alloc-multi-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const nowIso = new Date().toISOString();
+    const createdTxs: Transaction[] = [];
+
+    allocations.forEach((item, idx) => {
+      const kObj = kasList.find((k) => k.id === item.kas_id);
+      const targetKasNama = kObj?.nama || 'Kas Huria';
+      const subLabel = item.sub_description?.trim();
+      const baseDesc = subLabel ? `${description.trim()} — ${subLabel}` : `${description.trim()} (${targetKasNama})`;
+      const rowReceipt = receipt_no?.trim() ? receipt_no.trim() : undefined;
+
+      if (item.is_sentralisasi && sentralisasiKas && item.kas_id !== sentralisasiKas.id) {
+        const bpskAmount = Math.round(item.amount * 0.55);
+        const huriaAmount = item.amount - bpskAmount;
+
+        if (huriaAmount > 0) {
+          createdTxs.push({
+            id: `tx-${Date.now()}-${idx}h-${Math.random().toString(36).substring(2, 6)}`,
+            tanggal,
+            kas_id: item.kas_id,
+            storage_account_id,
+            category_id: category_id || null,
+            type: 'income',
+            amount: huriaAmount,
+            description: `${baseDesc} [45% Bagian Lokal -> ${targetKasNama}]`,
+            receipt_no: rowReceipt,
+            attachment_url: attachment_url || null,
+            status,
+            is_reversal: false,
+            is_sentralisasi: true,
+            sentralisasi_role: 'huria_share',
+            allocation_group_id: groupId,
+            bpsk_rate: 0.55,
+            huria_rate: 0.45,
+            bpsk_amount: 0,
+            huria_amount: huriaAmount,
+            sentralisasi_exclusion_type: null,
+            created_by: currentUser?.id || 'system',
+            created_at: nowIso,
+            updated_at: nowIso,
+          });
+        }
+
+        if (bpskAmount > 0) {
+          createdTxs.push({
+            id: `tx-${Date.now()}-${idx}s-${Math.random().toString(36).substring(2, 6)}`,
+            tanggal,
+            kas_id: sentralisasiKas.id,
+            storage_account_id,
+            category_id: category_id || null,
+            type: 'income',
+            amount: bpskAmount,
+            description: `${baseDesc} [55% Otomatis Sentralisasi dari ${targetKasNama}]`,
+            receipt_no: rowReceipt,
+            attachment_url: attachment_url || null,
+            status,
+            is_reversal: false,
+            is_sentralisasi: true,
+            sentralisasi_role: 'bpsk_share',
+            allocation_group_id: groupId,
+            bpsk_rate: 0.55,
+            huria_rate: 0.45,
+            bpsk_amount: bpskAmount,
+            huria_amount: 0,
+            sentralisasi_exclusion_type: null,
+            created_by: currentUser?.id || 'system',
+            created_at: nowIso,
+            updated_at: nowIso,
+          });
+        }
+      } else {
+        const isSent = item.is_sentralisasi;
+        const bpskAmount = isSent ? Math.round(item.amount * 0.55) : 0;
+        const huriaAmount = isSent ? item.amount - bpskAmount : item.amount;
+        const exclusionType = isSent
+          ? null
+          : inferExclusionTypeForKas(item.kas_id, item.exclusion_type, cat?.sentralisasi_exclusion_type);
+
+        createdTxs.push({
+          id: `tx-${Date.now()}-${idx}d-${Math.random().toString(36).substring(2, 6)}`,
+          tanggal,
+          kas_id: item.kas_id,
+          storage_account_id,
+          category_id: category_id || null,
+          type: 'income',
+          amount: item.amount,
+          description: isSent
+            ? baseDesc
+            : `${baseDesc} [100% ${exclusionType === 'transitoris' ? 'Transitoris' : 'Non-Sentralisasi'} -> ${targetKasNama}]`,
+          receipt_no: rowReceipt,
+          attachment_url: attachment_url || null,
+          status,
+          is_reversal: false,
+          is_sentralisasi: isSent,
+          sentralisasi_role: isSent ? 'bpsk_share' : 'non_sentralisasi',
+          allocation_group_id: groupId,
+          bpsk_rate: isSent ? 0.55 : 0,
+          huria_rate: isSent ? 0.45 : 1.0,
+          bpsk_amount: bpskAmount,
+          huria_amount: huriaAmount,
+          sentralisasi_exclusion_type: exclusionType,
+          created_by: currentUser?.id || 'system',
+          created_at: nowIso,
+          updated_at: nowIso,
+        });
+      }
+    });
+
+    setTransactions((prev) => [...createdTxs, ...prev]);
+    if (isSupabaseConfigured) {
+      await syncInsert('transactions', createdTxs);
+    }
+    const grandTotal = allocations.reduce((s, a) => s + Number(a.amount || 0), 0);
+    addAuditLog(
+      'transactions',
+      groupId,
+      'INSERT_COMPOUND_INCOME',
+      null,
+      { groupId, grandTotal, allocationsCount: allocations.length, createdCount: createdTxs.length },
+      `Penerimaan rincian gabungan Rp ${grandTotal.toLocaleString('id-ID')} (${allocations.length} pos alokasi -> ${createdTxs.length} baris buku kas) dibuat oleh ${currentUser?.full_name}`
+    );
+
+    return { success: true, createdCount: createdTxs.length };
   };
 
   // Update transaction (draft/submitted only)
@@ -1211,17 +1485,47 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const finalType = updates.type || existing.type;
     const finalAmount = updates.amount !== undefined ? updates.amount : existing.amount;
     const finalCatId = updates.category_id !== undefined ? updates.category_id : existing.category_id;
+    const finalRole = updates.sentralisasi_role !== undefined ? updates.sentralisasi_role : existing.sentralisasi_role;
 
     if (finalType === 'income') {
       const cat = categories.find((c) => c.id === finalCatId);
-      if (cat && cat.is_sentralisasi === false) {
+      const isSent =
+        updates.is_sentralisasi !== undefined
+          ? updates.is_sentralisasi
+          : existing.is_sentralisasi !== undefined
+          ? existing.is_sentralisasi
+          : cat?.is_sentralisasi !== false;
+
+      if (!isSent) {
         computedSentralisasi = {
           is_sentralisasi: false,
+          sentralisasi_role: 'non_sentralisasi',
           bpsk_rate: 0,
           huria_rate: 1.0,
           bpsk_amount: 0,
           huria_amount: finalAmount,
-          sentralisasi_exclusion_type: cat.sentralisasi_exclusion_type || null,
+          sentralisasi_exclusion_type:
+            updates.sentralisasi_exclusion_type ?? existing.sentralisasi_exclusion_type ?? cat?.sentralisasi_exclusion_type ?? 'lainnya',
+        };
+      } else if (finalRole === 'huria_share') {
+        computedSentralisasi = {
+          is_sentralisasi: true,
+          sentralisasi_role: 'huria_share',
+          bpsk_rate: 0.55,
+          huria_rate: 0.45,
+          bpsk_amount: 0,
+          huria_amount: finalAmount,
+          sentralisasi_exclusion_type: null,
+        };
+      } else if (finalRole === 'bpsk_share') {
+        computedSentralisasi = {
+          is_sentralisasi: true,
+          sentralisasi_role: 'bpsk_share',
+          bpsk_rate: 0.55,
+          huria_rate: 0.45,
+          bpsk_amount: finalAmount,
+          huria_amount: 0,
+          sentralisasi_exclusion_type: null,
         };
       } else {
         const bpsk = Math.round(finalAmount * 0.55);
@@ -1327,18 +1631,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     if (isSupabaseConfigured) {
-      await syncUpdate(
-        'transactions',
-        {
-          status: newStatus,
-          approved_by: updatedTx.approved_by,
-          approved_at: updatedTx.approved_at,
-          reject_note: updatedTx.reject_note,
-          updated_at: updatedTx.updated_at,
-        },
-        'id',
-        id
-      );
+      const patch = {
+        status: newStatus,
+        approved_by: updatedTx.approved_by,
+        approved_at: updatedTx.approved_at,
+        reject_note: updatedTx.reject_note,
+        updated_at: updatedTx.updated_at,
+      };
+      await syncUpdate('transactions', patch, 'id', id);
+      if (tx.transfer_id && supabase) {
+        await supabase
+          .from('transactions')
+          .update(patch)
+          .eq('transfer_id', tx.transfer_id)
+          .eq('kas_id', tx.kas_id)
+          .neq('id', id);
+      }
     }
 
     addAuditLog(
@@ -1355,31 +1663,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Bulk Approve
   const bulkApprove = async (ids: string[]): Promise<{ success: boolean; count: number }> => {
-    let count = 0;
+    const approvableIds = transactions
+      .filter((tx) => ids.includes(tx.id) && tx.status === 'submitted' && tx.created_by !== currentUser?.id)
+      .map((tx) => tx.id);
+    const count = approvableIds.length;
+    const nowIso = new Date().toISOString();
+
     setTransactions((prev) =>
       prev.map((tx) => {
-        if (ids.includes(tx.id) && tx.status === 'submitted' && tx.created_by !== currentUser?.id) {
-          count++;
+        if (approvableIds.includes(tx.id)) {
           return {
             ...tx,
             status: 'approved',
             approved_by: currentUser?.id,
-            approved_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            approved_at: nowIso,
+            updated_at: nowIso,
           };
         }
         return tx;
       })
     );
-    if (isSupabaseConfigured && supabase) {
-      await supabase.from('transactions').update({
-        status: 'approved',
-        approved_by: currentUser?.id,
-        approved_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }).in('id', ids);
+    if (isSupabaseConfigured && supabase && approvableIds.length > 0) {
+      await supabase
+        .from('transactions')
+        .update({
+          status: 'approved',
+          approved_by: currentUser?.id,
+          approved_at: nowIso,
+          updated_at: nowIso,
+        })
+        .in('id', approvableIds);
     }
-    addAuditLog('transactions', 'bulk', 'BULK_APPROVE', null, { ids, count }, `${count} transaksi disetujui massal`);
+    addAuditLog('transactions', 'bulk', 'BULK_APPROVE', null, { ids: approvableIds, count }, `${count} transaksi disetujui massal`);
     return { success: true, count };
   };
 
@@ -1547,6 +1862,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       description: `[KOREKSI/PEMBALIK] ${original.description}. Alasan: ${reason}`,
       receipt_no: `KOR-${original.receipt_no || original.id.substring(0, 8)}`,
       status: 'approved', // Reversals are directly approved corrections
+      is_sentralisasi: original.is_sentralisasi,
+      sentralisasi_role: original.sentralisasi_role,
+      allocation_group_id: original.allocation_group_id,
+      bpsk_amount: original.bpsk_amount,
+      huria_amount: original.huria_amount,
+      sentralisasi_exclusion_type: original.sentralisasi_exclusion_type,
       reverses_id: original.id,
       is_reversal: true,
       created_by: currentUser?.id,
@@ -1557,6 +1878,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setTransactions((prev) => [reversalTx, ...prev]);
+    if (isSupabaseConfigured) {
+      await syncInsert('transactions', reversalTx);
+    }
     addAuditLog('transactions', reversalTx.id, 'REVERSAL_CREATED', original, reversalTx, `Transaksi koreksi pembalik dibuat`);
     return { success: true };
   };
@@ -1596,6 +1920,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setPeriodClosings((prev) => [newClosing, ...prev]);
+    if (isSupabaseConfigured) {
+      await syncInsert('period_closings', newClosing);
+    }
     addAuditLog('period_closings', newClosing.id, 'PERIOD_CLOSED', null, newClosing, `Periode ${month}/${year} ditutup`);
     return { success: true };
   };
@@ -1606,6 +1933,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Alasan pembukaan kembali buku wajib diisi untuk audit log.' };
     }
 
+    const reopenedAt = new Date().toISOString();
     setPeriodClosings((prev) =>
       prev.map((pc) =>
         pc.id === closingId
@@ -1613,12 +1941,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               ...pc,
               is_closed: false,
               reopened_by: currentUser?.id,
-              reopened_at: new Date().toISOString(),
+              reopened_at: reopenedAt,
               reopen_reason: reason,
             }
           : pc
       )
     );
+    if (isSupabaseConfigured) {
+      await syncUpdate(
+        'period_closings',
+        {
+          is_closed: false,
+          reopened_by: currentUser?.id,
+          reopened_at: reopenedAt,
+          reopen_reason: reason,
+        },
+        'id',
+        closingId
+      );
+    }
 
     addAuditLog('period_closings', closingId, 'PERIOD_REOPENED', null, { reason }, `Periode dibuka kembali dengan alasan: ${reason}`);
     return { success: true };
@@ -1638,6 +1979,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setReconciliations((prev) => [newRec, ...prev]);
+    if (isSupabaseConfigured) {
+      await syncInsert('reconciliations', newRec);
+    }
     addAuditLog('reconciliations', newRec.id, 'INSERT', null, newRec, 'Rekonsiliasi saldo disimpan');
     return { success: true };
   };
@@ -1822,31 +2166,84 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const saveCategory = async (data: Partial<Category>) => {
+    const nowIso = new Date().toISOString();
     if (data.id) {
-      setCategories((prev) => prev.map((c) => (c.id === data.id ? ({ ...c, ...data } as Category) : c)));
+      const existing = categories.find((c) => c.id === data.id);
+      const merged: Category = {
+        ...(existing || ({ id: data.id, nama: 'Kategori', tipe: 'income', is_active: true } as Category)),
+        ...data,
+        is_sentralisasi:
+          (data.tipe || existing?.tipe) === 'income'
+            ? data.is_sentralisasi !== undefined
+              ? data.is_sentralisasi
+              : existing?.is_sentralisasi !== false
+            : undefined,
+        sentralisasi_group:
+          (data.tipe || existing?.tipe) === 'income'
+            ? data.is_sentralisasi === false
+              ? 'dikecualikan_khusus'
+              : data.sentralisasi_group || existing?.sentralisasi_group || 'pelean_mingguan'
+            : null,
+        sentralisasi_exclusion_type:
+          (data.tipe || existing?.tipe) === 'income' && data.is_sentralisasi === false
+            ? data.sentralisasi_exclusion_type || existing?.sentralisasi_exclusion_type || 'lainnya'
+            : null,
+        default_kas_id: data.default_kas_id !== undefined ? data.default_kas_id || null : existing?.default_kas_id || null,
+        updated_at: nowIso,
+      };
+      setCategories((prev) => prev.map((c) => (c.id === data.id ? merged : c)));
       if (isSupabaseConfigured) {
-        const existing = categories.find((c) => c.id === data.id);
-        if (existing) await syncUpsert('categories', { ...existing, ...data });
+        await syncUpsert('categories', merged);
       }
+      addAuditLog('categories', merged.id, 'UPDATE', existing, merged, `Kategori "${merged.nama}" diperbarui oleh ${currentUser?.full_name}`);
     } else {
+      const isIncome = (data.tipe || 'income') === 'income';
+      const isSent = isIncome ? data.is_sentralisasi !== false : undefined;
       const newCat: Category = {
         id: `cat-${Date.now()}`,
         nama: data.nama || 'Kategori Baru',
         tipe: data.tipe || 'income',
         kode: data.kode,
         deskripsi: data.deskripsi,
-        is_active: true,
+        is_active: data.is_active !== undefined ? data.is_active : true,
+        is_sentralisasi: isSent,
+        sentralisasi_group: isIncome
+          ? isSent
+            ? data.sentralisasi_group || 'pelean_mingguan'
+            : 'dikecualikan_khusus'
+          : null,
+        sentralisasi_exclusion_type: isIncome && !isSent ? data.sentralisasi_exclusion_type || 'lainnya' : null,
+        default_kas_id: data.default_kas_id || null,
+        created_at: nowIso,
+        updated_at: nowIso,
       };
       setCategories((prev) => [...prev, newCat]);
       if (isSupabaseConfigured) {
         await syncUpsert('categories', newCat);
       }
+      addAuditLog('categories', newCat.id, 'INSERT', null, newCat, `Kategori baru "${newCat.nama}" dibuat oleh ${currentUser?.full_name}`);
     }
   };
 
   const saveOpeningBalance = async (data: Partial<OpeningBalance>) => {
+    const nowIso = new Date().toISOString();
     if (data.id) {
-      setOpeningBalances((prev) => prev.map((ob) => (ob.id === data.id ? ({ ...ob, ...data } as OpeningBalance) : ob)));
+      const existing = openingBalances.find((ob) => ob.id === data.id);
+      const updatedOb = existing
+        ? ({ ...existing, ...data, updated_at: nowIso } as OpeningBalance)
+        : ({
+            id: data.id,
+            tahun: data.tahun || settings.active_year,
+            kas_id: data.kas_id!,
+            storage_account_id: data.storage_account_id!,
+            amount: data.amount || 0,
+            notes: data.notes,
+            updated_at: nowIso,
+          } as OpeningBalance);
+      setOpeningBalances((prev) => prev.map((ob) => (ob.id === data.id ? updatedOb : ob)));
+      if (isSupabaseConfigured) {
+        await syncUpsert('opening_balances', updatedOb);
+      }
     } else {
       const newOb: OpeningBalance = {
         id: `ob-${Date.now()}`,
@@ -1855,8 +2252,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         storage_account_id: data.storage_account_id!,
         amount: data.amount || 0,
         notes: data.notes,
+        created_at: nowIso,
+        updated_at: nowIso,
       };
       setOpeningBalances((prev) => [...prev, newOb]);
+      if (isSupabaseConfigured) {
+        await syncUpsert('opening_balances', newOb);
+      }
     }
   };
 
@@ -1938,6 +2340,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     setFiscalYears(updatedList);
+    if (isSupabaseConfigured) {
+      await syncUpsert('fiscal_years', updatedList);
+    }
     addAuditLog('fiscal_years', newRecord.id, existingIndex >= 0 ? 'UPDATE' : 'INSERT', null, newRecord, `Tahun Anggaran ${yearNum} disimpan`);
     return { success: true };
   };
@@ -1955,6 +2360,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     setFiscalYears((prev) => prev.filter((f) => f.id !== id));
+    if (isSupabaseConfigured) {
+      await syncDelete('fiscal_years', 'id', id);
+    }
     addAuditLog('fiscal_years', id, 'DELETE', target, null, `Tahun Anggaran ${target.year} dihapus`);
     return { success: true };
   };
@@ -1970,6 +2378,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return f;
       });
       setFiscalYears(updatedList);
+      if (isSupabaseConfigured) {
+        await syncUpsert('fiscal_years', updatedList);
+      }
       await updateSettings({ active_year: year });
     }
     addAuditLog('settings', 'main', 'UPDATE', { active_year: settings.active_year }, { active_year: year }, `Tahun Anggaran Aktif dialihkan ke ${year}`);
@@ -1982,12 +2393,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const nextLocked = !target.is_budget_locked;
     const updatedList = fiscalYears.map((f) => (f.year === year ? { ...f, is_budget_locked: nextLocked } : f));
     setFiscalYears(updatedList);
+    if (isSupabaseConfigured) {
+      await syncUpdate('fiscal_years', { is_budget_locked: nextLocked }, 'id', target.id);
+    }
     addAuditLog('fiscal_years', target.id, 'UPDATE', { is_budget_locked: target.is_budget_locked }, { is_budget_locked: nextLocked }, `Kunci RAPB Tahun ${year} diubah ke ${nextLocked ? 'Terkunci' : 'Terbuka'}`);
     return { success: true };
   };
 
   const rollForwardBalancesToYear = async (fromYear: number, toYear: number): Promise<{ success: boolean; count: number; error?: string }> => {
     let createdCount = 0;
+    const createdRowsForTarget: OpeningBalance[] = [];
     const newOpeningBalances = [...openingBalances.filter((ob) => ob.tahun !== toYear)];
 
     for (const kas of kasList) {
@@ -2017,7 +2432,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const endingBalance = initialBal + income - expense + transferIn - transferOut;
 
-        newOpeningBalances.push({
+        const row: OpeningBalance = {
           id: `ob-${toYear}-${kas.id.slice(0, 6)}-${storage.id.slice(0, 6)}`,
           tahun: toYear,
           kas_id: kas.id,
@@ -2025,12 +2440,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           amount: Math.max(0, endingBalance),
           notes: `Roll-forward otomatis dari saldo akhir tahun buku ${fromYear}`,
           created_at: new Date().toISOString(),
-        });
+          updated_at: new Date().toISOString(),
+        };
+        newOpeningBalances.push(row);
+        createdRowsForTarget.push(row);
         createdCount++;
       }
     }
 
     setOpeningBalances(newOpeningBalances);
+    if (isSupabaseConfigured && supabase) {
+      await supabase.from('opening_balances').delete().eq('tahun', toYear);
+      if (createdRowsForTarget.length > 0) {
+        await syncUpsert('opening_balances', createdRowsForTarget);
+      }
+    }
     addAuditLog('opening_balances', `rollforward-${toYear}`, 'INSERT', null, { fromYear, toYear, count: createdCount }, `Roll-forward saldo awal dari ${fromYear} ke ${toYear}`);
     return { success: true, count: createdCount };
   };
@@ -2047,13 +2471,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: 'Anggaran yang sudah Disahkan Rapat Huria terkunci dan tidak dapat diedit langsung. Gunakan Perubahan Anggaran (APBG-P).' };
       }
 
-      setBudgets((prev) =>
-        prev.map((b) =>
-          b.id === budgetData.id
-            ? ({ ...b, ...budgetData, updated_at: new Date().toISOString() } as Budget)
-            : b
-        )
-      );
+      const updatedBudget = { ...existing, ...budgetData, updated_at: new Date().toISOString() } as Budget;
+      setBudgets((prev) => prev.map((b) => (b.id === budgetData.id ? updatedBudget : b)));
+      if (isSupabaseConfigured) {
+        await syncUpsert('budgets', updatedBudget);
+      }
       addAuditLog('budgets', budgetData.id, 'UPDATE', existing, budgetData, 'Anggaran diperbarui');
       return { success: true, id: budgetData.id };
     } else {
@@ -2132,20 +2554,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       dist = generateMonthlyDistribution(annual);
     }
 
+    const nowIso = new Date().toISOString();
     if (itemData.id) {
-      setBudgetItems((prev) =>
-        prev.map((item) =>
-          item.id === itemData.id
-            ? ({
-                ...item,
-                ...itemData,
-                annual_amount: annual,
-                monthly_distribution: dist,
-                updated_at: new Date().toISOString(),
-              } as BudgetItem)
-            : item
-        )
-      );
+      const existingItem = budgetItems.find((item) => item.id === itemData.id);
+      const updatedItem = {
+        ...existingItem,
+        ...itemData,
+        annual_amount: annual,
+        monthly_distribution: dist,
+        updated_at: nowIso,
+      } as BudgetItem;
+      setBudgetItems((prev) => prev.map((item) => (item.id === itemData.id ? updatedItem : item)));
+      if (isSupabaseConfigured) {
+        await syncUpsert('budget_items', updatedItem);
+      }
       addAuditLog('budget_items', itemData.id, 'UPDATE', null, itemData, 'Baris anggaran diperbarui');
     } else {
       const newItem: BudgetItem = {
@@ -2156,10 +2578,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: itemData.description || '',
         annual_amount: annual,
         monthly_distribution: dist,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        created_at: nowIso,
+        updated_at: nowIso,
       };
       setBudgetItems((prev) => [...prev, newItem]);
+      if (isSupabaseConfigured) {
+        await syncUpsert('budget_items', newItem);
+      }
       addAuditLog('budget_items', newItem.id, 'INSERT', null, newItem, 'Baris anggaran ditambahkan');
     }
 
@@ -2176,6 +2601,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     setBudgetItems((prev) => prev.filter((i) => i.id !== itemId));
+    if (isSupabaseConfigured) {
+      await syncDelete('budget_items', 'id', itemId);
+    }
     addAuditLog('budget_items', itemId, 'DELETE', item, null, 'Baris anggaran dihapus');
     return { success: true };
   };
@@ -2237,6 +2665,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
 
+    if (isSupabaseConfigured) {
+      await syncUpsert('budgets', updatedBudget);
+      if (newStatus === 'approved' && supabase) {
+        await supabase
+          .from('budgets')
+          .update({ is_current_active: false, updated_at: nowIso })
+          .eq('kas_id', budget.kas_id)
+          .eq('tahun', budget.tahun)
+          .neq('id', budgetId);
+      }
+    }
+
     addAuditLog(
       'budgets',
       budgetId,
@@ -2296,6 +2736,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setBudgets((prev) => [newBudget, ...prev]);
     setBudgetItems((prev) => [...prev, ...copiedItems]);
+
+    if (isSupabaseConfigured) {
+      await syncUpsert('budgets', newBudget);
+      if (copiedItems.length > 0) {
+        await syncInsert('budget_items', copiedItems);
+      }
+    }
 
     addAuditLog(
       'budgets',
@@ -2365,25 +2812,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const newFromDist = generateMonthlyDistribution(newFromAnnual);
     const newToDist = generateMonthlyDistribution(newToAnnual);
+    const nowIso = new Date().toISOString();
+
+    const updatedFromItem: BudgetItem = {
+      ...fromItem,
+      annual_amount: newFromAnnual,
+      monthly_distribution: newFromDist,
+      updated_at: nowIso,
+    };
+    const updatedToItem: BudgetItem = {
+      ...toItem,
+      annual_amount: newToAnnual,
+      monthly_distribution: newToDist,
+      updated_at: nowIso,
+    };
 
     setBudgetItems((prev) =>
       prev.map((item) => {
-        if (item.id === fromItemId) {
-          return {
-            ...item,
-            annual_amount: newFromAnnual,
-            monthly_distribution: newFromDist,
-            updated_at: new Date().toISOString(),
-          };
-        }
-        if (item.id === toItemId) {
-          return {
-            ...item,
-            annual_amount: newToAnnual,
-            monthly_distribution: newToDist,
-            updated_at: new Date().toISOString(),
-          };
-        }
+        if (item.id === fromItemId) return updatedFromItem;
+        if (item.id === toItemId) return updatedToItem;
         return item;
       })
     );
@@ -2400,13 +2847,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status: 'approved',
       proposed_by: currentUser?.id,
       approved_by: currentUser?.id,
-      approved_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
+      approved_at: nowIso,
+      created_at: nowIso,
       from_item: fromItem,
       to_item: toItem,
     };
 
     setBudgetReallocations((prev) => [newReallocation, ...prev]);
+
+    if (isSupabaseConfigured) {
+      await syncUpsert('budget_items', [updatedFromItem, updatedToItem]);
+      await syncInsert('budget_reallocations', newReallocation);
+    }
 
     addAuditLog(
       'budget_reallocations',
@@ -2461,6 +2913,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }));
 
     setBudgetItems((prev) => [...prev, ...newItems]);
+    if (isSupabaseConfigured && newItems.length > 0) {
+      await syncInsert('budget_items', newItems);
+    }
     addAuditLog('budget_items', targetBudgetId!, 'COPY_PREV_YEAR', null, { count: newItems.length }, `Menyalin ${newItems.length} baris anggaran dari tahun ${currentYear - 1}`);
 
     return { success: true, count: newItems.length };
@@ -2620,22 +3075,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const difference = physicalBalance - bookBalance;
 
     if (existing) {
-      setOpeningEntries((prev) =>
-        prev.map((e) =>
-          e.id === existing.id
-            ? {
-                ...e,
-                ...entryData,
-                amount,
-                book_balance: bookBalance,
-                physical_balance: physicalBalance,
-                difference,
-                status: 'drafting',
-                updated_at: nowIso,
-              }
-            : e
-        )
-      );
+      const updatedEntry: OpeningBalanceEntry = {
+        ...existing,
+        ...entryData,
+        amount,
+        book_balance: bookBalance,
+        physical_balance: physicalBalance,
+        difference,
+        status: 'drafting',
+        updated_at: nowIso,
+      };
+      setOpeningEntries((prev) => prev.map((e) => (e.id === existing.id ? updatedEntry : e)));
+      if (isSupabaseConfigured) {
+        await syncUpsert('opening_balance_entries', updatedEntry);
+      }
     } else {
       const newEntry: OpeningBalanceEntry = {
         id: `obe-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -2654,6 +3107,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updated_at: nowIso,
       };
       setOpeningEntries((prev) => [...prev, newEntry]);
+      if (isSupabaseConfigured) {
+        await syncUpsert('opening_balance_entries', newEntry);
+      }
     }
 
     return { success: true };
@@ -2686,6 +3142,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : e
       )
     );
+    if (isSupabaseConfigured && supabase) {
+      await supabase
+        .from('opening_balance_entries')
+        .update({
+          status: 'submitted',
+          submitted_at: nowIso,
+          return_note: null,
+          updated_at: nowIso,
+        })
+        .eq('kas_id', kasId);
+    }
 
     addAuditLog('opening_balance_entries', kasId, 'SUBMITTED', null, { kasId }, `Saldo awal kas ${kasId} diajukan ke Ketua Kas`);
     return { success: true };
@@ -2723,6 +3190,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             : e
         )
       );
+      if (isSupabaseConfigured && supabase) {
+        await supabase
+          .from('opening_balance_entries')
+          .update({
+            status: 'approved',
+            approved_by: currentUser?.id,
+            approved_at: nowIso,
+            return_note: null,
+            updated_at: nowIso,
+          })
+          .eq('kas_id', kasId);
+      }
       addAuditLog('opening_balance_entries', kasId, 'APPROVED', null, { kasId }, `Saldo awal kas ${kasId} disetujui Ketua Kas`);
     } else {
       if (!returnNote || returnNote.trim() === '') {
@@ -2740,6 +3219,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             : e
         )
       );
+      if (isSupabaseConfigured && supabase) {
+        await supabase
+          .from('opening_balance_entries')
+          .update({
+            status: 'drafting',
+            return_note: returnNote,
+            updated_at: nowIso,
+          })
+          .eq('kas_id', kasId);
+      }
       addAuditLog('opening_balance_entries', kasId, 'RETURNED', null, { kasId, returnNote }, `Saldo awal kas ${kasId} dikembalikan: ${returnNote}`);
     }
 
@@ -2748,13 +3237,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const lockOpeningBook = async (kasId?: string): Promise<{ success: boolean; count?: number; error?: string }> => {
     const targetKasList = kasId ? [kasId] : kasList.map((k) => k.id);
-    let lockedCount = 0;
     const nowIso = new Date().toISOString();
+
+    const entriesToSync = openingEntries.filter((e) => targetKasList.includes(e.kas_id));
+    const lockedCount = entriesToSync.length;
 
     setOpeningEntries((prev) =>
       prev.map((entry) => {
         if (targetKasList.includes(entry.kas_id)) {
-          lockedCount++;
           return {
             ...entry,
             status: 'locked',
@@ -2768,35 +3258,52 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     // Auto-sync into opening_balances so Phase 1 views work immediately
-    const entriesToSync = openingEntries.filter((e) => targetKasList.includes(e.kas_id));
-    setOpeningBalances((prev) => {
-      const updated = [...prev];
-      entriesToSync.forEach((entry) => {
-        const idx = updated.findIndex(
-          (ob) => ob.kas_id === entry.kas_id && ob.storage_account_id === entry.storage_account_id
-        );
-        if (idx >= 0) {
-          updated[idx] = {
-            ...updated[idx],
-            amount: entry.amount,
-            notes: entry.explanation || 'Saldo pindahan resmi dikunci',
-            updated_at: nowIso,
-          };
-        } else {
-          updated.push({
-            id: `ob-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            tahun: entry.tahun || 2026,
-            kas_id: entry.kas_id,
-            storage_account_id: entry.storage_account_id,
-            amount: entry.amount,
-            notes: entry.explanation || 'Saldo pindahan resmi dikunci',
-            created_at: nowIso,
-            updated_at: nowIso,
-          });
-        }
-      });
-      return updated;
+    const updatedOpeningBalances = [...openingBalances];
+    const upsertedBalances: OpeningBalance[] = [];
+    entriesToSync.forEach((entry) => {
+      const idx = updatedOpeningBalances.findIndex(
+        (ob) => ob.kas_id === entry.kas_id && ob.storage_account_id === entry.storage_account_id
+      );
+      if (idx >= 0) {
+        const nextOb: OpeningBalance = {
+          ...updatedOpeningBalances[idx],
+          amount: entry.amount,
+          notes: entry.explanation || 'Saldo pindahan resmi dikunci',
+          updated_at: nowIso,
+        };
+        updatedOpeningBalances[idx] = nextOb;
+        upsertedBalances.push(nextOb);
+      } else {
+        const nextOb: OpeningBalance = {
+          id: `ob-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          tahun: entry.tahun || 2026,
+          kas_id: entry.kas_id,
+          storage_account_id: entry.storage_account_id,
+          amount: entry.amount,
+          notes: entry.explanation || 'Saldo pindahan resmi dikunci',
+          created_at: nowIso,
+          updated_at: nowIso,
+        };
+        updatedOpeningBalances.push(nextOb);
+        upsertedBalances.push(nextOb);
+      }
     });
+    setOpeningBalances(updatedOpeningBalances);
+
+    if (isSupabaseConfigured && supabase) {
+      await supabase
+        .from('opening_balance_entries')
+        .update({
+          status: 'locked',
+          locked_by: currentUser?.id,
+          locked_at: nowIso,
+          updated_at: nowIso,
+        })
+        .in('kas_id', targetKasList);
+      if (upsertedBalances.length > 0) {
+        await syncUpsert('opening_balances', upsertedBalances);
+      }
+    }
 
     addAuditLog(
       'opening_balance_entries',
@@ -2846,6 +3353,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setOpeningAdjustments((prev) => [newAdj, ...prev]);
+    if (isSupabaseConfigured) {
+      await syncInsert('opening_balance_adjustments', newAdj);
+    }
     addAuditLog('opening_balance_adjustments', newAdj.id, 'ADJUSTMENT_SUBMITTED', null, newAdj, `Penyesuaian saldo awal diajukan: ${adjData.reason}`);
     return { success: true };
   };
@@ -2863,6 +3373,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setOpeningAdjustments((prev) =>
         prev.map((a) => (a.id === adjId ? { ...a, status: 'rejected', reject_note: rejectNote, updated_at: nowIso } : a))
       );
+      if (isSupabaseConfigured) {
+        await syncUpdate(
+          'opening_balance_adjustments',
+          { status: 'rejected', reject_note: rejectNote, updated_at: nowIso },
+          'id',
+          adjId
+        );
+      }
       addAuditLog('opening_balance_adjustments', adjId, 'ADJUSTMENT_REJECTED', adj, { rejectNote }, `Penyesuaian ditolak`);
       return { success: true };
     }
@@ -2881,6 +3399,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             : a
         )
       );
+      if (isSupabaseConfigured) {
+        await syncUpdate(
+          'opening_balance_adjustments',
+          {
+            status: 'approved_ketua',
+            approved_ketua_by: currentUser?.id,
+            approved_ketua_at: nowIso,
+            updated_at: nowIso,
+          },
+          'id',
+          adjId
+        );
+      }
       addAuditLog('opening_balance_adjustments', adjId, 'ADJUSTMENT_APPROVED_KETUA', null, null, `Penyesuaian disetujui Ketua Kas`);
     } else if (adj.status === 'approved_ketua') {
       setOpeningAdjustments((prev) =>
@@ -2897,33 +3428,51 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         )
       );
 
-      // Apply adjustment directly to opening_balances
+      // Apply adjustment directly to opening_balances & opening_balance_entries
+      const updatedObs = openingBalances
+        .filter((ob) => ob.kas_id === adj.kas_id && ob.storage_account_id === adj.storage_account_id)
+        .map((ob) => ({
+          ...ob,
+          amount: ob.amount + adj.amount,
+          notes: `${ob.notes || ''} [Disesuaikan Rp ${adj.amount.toLocaleString('id-ID')}: ${adj.reason}]`,
+          updated_at: nowIso,
+        }));
       setOpeningBalances((prev) =>
         prev.map((ob) => {
-          if (ob.kas_id === adj.kas_id && ob.storage_account_id === adj.storage_account_id) {
-            return {
-              ...ob,
-              amount: ob.amount + adj.amount,
-              notes: `${ob.notes || ''} [Disesuaikan Rp ${adj.amount.toLocaleString('id-ID')}: ${adj.reason}]`,
-              updated_at: nowIso,
-            };
-          }
-          return ob;
+          const match = updatedObs.find((u) => u.id === ob.id);
+          return match || ob;
         })
       );
 
+      const updatedObes = openingEntries
+        .filter((obe) => obe.kas_id === adj.kas_id && obe.storage_account_id === adj.storage_account_id)
+        .map((obe) => ({
+          ...obe,
+          amount: obe.amount + adj.amount,
+          updated_at: nowIso,
+        }));
       setOpeningEntries((prev) =>
         prev.map((obe) => {
-          if (obe.kas_id === adj.kas_id && obe.storage_account_id === adj.storage_account_id) {
-            return {
-              ...obe,
-              amount: obe.amount + adj.amount,
-              updated_at: nowIso,
-            };
-          }
-          return obe;
+          const match = updatedObes.find((u) => u.id === obe.id);
+          return match || obe;
         })
       );
+
+      if (isSupabaseConfigured) {
+        await syncUpdate(
+          'opening_balance_adjustments',
+          {
+            status: 'approved_bendum',
+            approved_bendum_by: currentUser?.id,
+            approved_bendum_at: nowIso,
+            updated_at: nowIso,
+          },
+          'id',
+          adjId
+        );
+        if (updatedObs.length > 0) await syncUpsert('opening_balances', updatedObs);
+        if (updatedObes.length > 0) await syncUpsert('opening_balance_entries', updatedObes);
+      }
 
       addAuditLog('opening_balance_adjustments', adjId, 'ADJUSTMENT_FINALIZED', null, null, `Penyesuaian saldo awal diterapkan ke buku kas`);
     }
@@ -2939,9 +3488,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const nowIso = new Date().toISOString();
     if (posData.id) {
-      setOpeningOtherPositions((prev) =>
-        prev.map((p) => (p.id === posData.id ? ({ ...p, ...posData } as OpeningOtherPosition) : p))
-      );
+      const existing = openingOtherPositions.find((p) => p.id === posData.id);
+      const updatedPos = existing
+        ? ({ ...existing, ...posData } as OpeningOtherPosition)
+        : ({
+            id: posData.id,
+            tahun: posData.tahun || openingSetup.first_year || 2026,
+            kas_id: posData.kas_id,
+            type: posData.type || 'asset',
+            name: posData.name,
+            amount: Number(posData.amount || 0),
+          } as OpeningOtherPosition);
+      setOpeningOtherPositions((prev) => prev.map((p) => (p.id === posData.id ? updatedPos : p)));
+      if (isSupabaseConfigured) {
+        await syncUpsert('opening_other_positions', updatedPos);
+      }
     } else {
       const newPos: OpeningOtherPosition = {
         id: `oop-${Date.now()}`,
@@ -2959,12 +3520,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         created_at: nowIso,
       };
       setOpeningOtherPositions((prev) => [newPos, ...prev]);
+      if (isSupabaseConfigured) {
+        await syncUpsert('opening_other_positions', newPos);
+      }
     }
     return { success: true };
   };
 
   const deleteOpeningOtherPosition = async (id: string): Promise<{ success: boolean; error?: string }> => {
     setOpeningOtherPositions((prev) => prev.filter((p) => p.id !== id));
+    if (isSupabaseConfigured) {
+      await syncDelete('opening_other_positions', 'id', id);
+    }
     return { success: true };
   };
 
@@ -2981,9 +3548,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         p.tahun === summaryData.tahun
     );
     if (existing) {
-      setPriorYearSummaries((prev) =>
-        prev.map((p) => (p.id === existing.id ? ({ ...p, ...summaryData } as PriorYearSummary) : p))
-      );
+      const updatedSummary = { ...existing, ...summaryData } as PriorYearSummary;
+      setPriorYearSummaries((prev) => prev.map((p) => (p.id === existing.id ? updatedSummary : p)));
+      if (isSupabaseConfigured) {
+        await syncUpsert('prior_year_summaries', updatedSummary);
+      }
     } else {
       const newSummary: PriorYearSummary = {
         id: `pys-${Date.now()}`,
@@ -2996,12 +3565,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         created_at: new Date().toISOString(),
       };
       setPriorYearSummaries((prev) => [...prev, newSummary]);
+      if (isSupabaseConfigured) {
+        await syncUpsert('prior_year_summaries', newSummary);
+      }
     }
     return { success: true };
   };
 
   const updateOpeningSetup = async (setupData: Partial<OpeningSetup>): Promise<{ success: boolean; error?: string }> => {
-    setOpeningSetup((prev) => ({ ...prev, ...setupData, updated_at: new Date().toISOString() }));
+    const updatedSetup: OpeningSetup = {
+      ...openingSetup,
+      ...setupData,
+      id: openingSetup.id || 'main',
+      updated_at: new Date().toISOString(),
+    };
+    setOpeningSetup(updatedSetup);
+    if (isSupabaseConfigured) {
+      await syncUpsert('opening_setup', updatedSetup);
+    }
     return { success: true };
   };
 
@@ -3043,9 +3624,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let assetId = assetData.id;
 
     if (assetId) {
-      setFixedAssets((prev) =>
-        prev.map((a) => (a.id === assetId ? ({ ...a, ...assetData, updated_at: nowIso } as FixedAsset) : a))
-      );
+      const existingAsset = fixedAssets.find((a) => a.id === assetId);
+      const updatedAsset = { ...existingAsset, ...assetData, updated_at: nowIso } as FixedAsset;
+      setFixedAssets((prev) => prev.map((a) => (a.id === assetId ? updatedAsset : a)));
+      if (isSupabaseConfigured) {
+        await syncUpsert('fixed_assets', updatedAsset);
+      }
       addAuditLog('fixed_assets', assetId, 'UPDATE', null, assetData, `Memperbarui aset ${assetData.nama}`);
     } else {
       assetId = `ast-${Date.now()}`;
@@ -3072,6 +3656,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updated_at: nowIso,
       };
       setFixedAssets((prev) => [newAsset, ...prev]);
+      if (isSupabaseConfigured) {
+        await syncUpsert('fixed_assets', newAsset);
+      }
       addAuditLog('fixed_assets', assetId, 'INSERT', null, newAsset, `Menambahkan aset inventaris ${newAsset.nama}`);
     }
 
@@ -3082,6 +3669,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const asset = fixedAssets.find((a) => a.id === id);
     if (!asset) return { success: false, error: 'Aset tidak ditemukan.' };
     setFixedAssets((prev) => prev.filter((a) => a.id !== id));
+    if (isSupabaseConfigured) {
+      await syncDelete('fixed_assets', 'id', id);
+    }
     addAuditLog('fixed_assets', id, 'DELETE', asset, null, `Menghapus aset ${asset.nama}`);
     return { success: true };
   };
@@ -3114,6 +3704,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : a
       )
     );
+    if (isSupabaseConfigured) {
+      await syncUpdate(
+        'fixed_assets',
+        {
+          status: actionType,
+          disposal_reason: reason,
+          disposal_proposed_by: currentUser?.id,
+          updated_at: nowIso,
+        },
+        'id',
+        id
+      );
+    }
     addAuditLog('fixed_assets', id, 'PROPOSE_DISPOSAL', null, { actionType, reason }, `Mengajukan ${actionType.replace('_', ' ')} aset ${asset.nama}`);
     return { success: true };
   };
@@ -3135,6 +3738,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (approve) {
       const finalStatus = asset.status === 'diajukan_penghapusan' ? 'dihapus' : 'dihibahkan';
+      const updatedNotes = notes ? `${asset.notes || ''}\nPersetujuan: ${notes}` : asset.notes;
       setFixedAssets((prev) =>
         prev.map((a) =>
           a.id === id
@@ -3144,14 +3748,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 disposal_date: todayStr,
                 disposal_approved_by: currentUser?.id,
                 disposal_approved_at: nowIso,
-                notes: notes ? `${a.notes || ''}\nPersetujuan: ${notes}` : a.notes,
+                notes: updatedNotes,
                 updated_at: nowIso,
               }
             : a
         )
       );
+      if (isSupabaseConfigured) {
+        await syncUpdate(
+          'fixed_assets',
+          {
+            status: finalStatus,
+            disposal_date: todayStr,
+            disposal_approved_by: currentUser?.id,
+            disposal_approved_at: nowIso,
+            notes: updatedNotes,
+            updated_at: nowIso,
+          },
+          'id',
+          id
+        );
+      }
       addAuditLog('fixed_assets', id, 'APPROVE_DISPOSAL', null, { status: finalStatus, notes }, `Menyetujui ${finalStatus} aset ${asset.nama}`);
     } else {
+      const updatedNotes = notes ? `${asset.notes || ''}\nPenolakan penghapusan: ${notes}` : asset.notes;
       setFixedAssets((prev) =>
         prev.map((a) =>
           a.id === id
@@ -3160,12 +3780,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 status: 'aktif',
                 disposal_reason: null,
                 disposal_proposed_by: null,
-                notes: notes ? `${a.notes || ''}\nPenolakan penghapusan: ${notes}` : a.notes,
+                notes: updatedNotes,
                 updated_at: nowIso,
               }
             : a
         )
       );
+      if (isSupabaseConfigured) {
+        await syncUpdate(
+          'fixed_assets',
+          {
+            status: 'aktif',
+            disposal_reason: null,
+            disposal_proposed_by: null,
+            notes: updatedNotes,
+            updated_at: nowIso,
+          },
+          'id',
+          id
+        );
+      }
       addAuditLog('fixed_assets', id, 'REJECT_DISPOSAL', null, { notes }, `Menolak usulan penghapusan aset ${asset.nama}`);
     }
 
@@ -3187,9 +3821,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let advId = advanceData.id;
 
     if (advId) {
-      setAdvances((prev) =>
-        prev.map((a) => (a.id === advId ? ({ ...a, ...advanceData, updated_at: nowIso } as Advance) : a))
-      );
+      const existingAdv = advances.find((a) => a.id === advId);
+      const updatedAdv = { ...existingAdv, ...advanceData, updated_at: nowIso } as Advance;
+      setAdvances((prev) => prev.map((a) => (a.id === advId ? updatedAdv : a)));
+      if (isSupabaseConfigured) {
+        await syncUpsert('advances', updatedAdv);
+      }
       addAuditLog('advances', advId, 'UPDATE', null, advanceData, `Memperbarui data panjar ${advanceData.kode}`);
     } else {
       advId = `adv-${Date.now()}`;
@@ -3211,6 +3848,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updated_at: nowIso,
       };
       setAdvances((prev) => [newAdv, ...prev]);
+      if (isSupabaseConfigured) {
+        await syncUpsert('advances', newAdv);
+      }
       addAuditLog('advances', advId, 'INSERT', null, newAdv, `Mencatat panjar kegiatan ${newAdv.purpose} (${newAdv.recipient_name})`);
     }
 
@@ -3222,6 +3862,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!adv) return { success: false, error: 'Data panjar tidak ditemukan.' };
     setAdvances((prev) => prev.filter((a) => a.id !== id));
     setAdvanceSettlements((prev) => prev.filter((s) => s.advance_id !== id));
+    if (isSupabaseConfigured) {
+      await syncDelete('advance_settlements', 'advance_id', id);
+      await syncDelete('advances', 'id', id);
+    }
     addAuditLog('advances', id, 'DELETE', adv, null, `Menghapus panjar ${adv.kode}`);
     return { success: true };
   };
@@ -3244,20 +3888,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let setlId = settlementData.id;
 
     if (setlId) {
-      setAdvanceSettlements((prev) =>
-        prev.map((s) =>
-          s.id === setlId
-            ? ({
-                ...s,
-                ...settlementData,
-                spent_amount: spent,
-                remaining_returned: remainingReturned,
-                deficit_reimbursed: deficitReimbursed,
-                updated_at: nowIso,
-              } as AdvanceSettlement)
-            : s
-        )
-      );
+      const existingSetl = advanceSettlements.find((s) => s.id === setlId);
+      const updatedSetl = {
+        ...existingSetl,
+        ...settlementData,
+        spent_amount: spent,
+        remaining_returned: remainingReturned,
+        deficit_reimbursed: deficitReimbursed,
+        updated_at: nowIso,
+      } as AdvanceSettlement;
+      setAdvanceSettlements((prev) => prev.map((s) => (s.id === setlId ? updatedSetl : s)));
+      if (isSupabaseConfigured) {
+        await syncUpsert('advance_settlements', updatedSetl);
+      }
     } else {
       setlId = `set-${Date.now()}`;
       const newSetl: AdvanceSettlement = {
@@ -3275,6 +3918,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updated_at: nowIso,
       };
       setAdvanceSettlements((prev) => [newSetl, ...prev]);
+      if (isSupabaseConfigured) {
+        await syncUpsert('advance_settlements', newSetl);
+      }
     }
 
     return { success: true, id: setlId };
@@ -3288,6 +3934,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAdvanceSettlements((prev) =>
       prev.map((s) => (s.id === settlementId ? { ...s, status: 'submitted', submitted_by: currentUser?.id, updated_at: nowIso } : s))
     );
+    if (isSupabaseConfigured) {
+      await syncUpdate(
+        'advance_settlements',
+        { status: 'submitted', submitted_by: currentUser?.id, updated_at: nowIso },
+        'id',
+        settlementId
+      );
+    }
     addAuditLog('advance_settlements', settlementId, 'SUBMIT', null, null, `Mengajukan SPJ panjar ke Ketua Kas`);
     return { success: true };
   };
@@ -3326,20 +3980,44 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         prev.map((a) => (a.id === setl.advance_id ? { ...a, status: 'settled', settled_at: nowIso, updated_at: nowIso } : a))
       );
 
+      if (isSupabaseConfigured) {
+        await syncUpdate(
+          'advance_settlements',
+          { status: 'approved', approved_by: currentUser?.id, approved_at: nowIso, updated_at: nowIso },
+          'id',
+          settlementId
+        );
+        await syncUpdate(
+          'advances',
+          { status: 'settled', settled_at: nowIso, updated_at: nowIso },
+          'id',
+          setl.advance_id
+        );
+      }
+
       addAuditLog('advance_settlements', settlementId, 'APPROVE', null, null, `Menyetujui SPJ panjar`);
     } else {
+      const finalRejectNote = rejectNote || 'Perlu perbaikan bukti kuitansi';
       setAdvanceSettlements((prev) =>
         prev.map((s) =>
           s.id === settlementId
             ? {
                 ...s,
                 status: 'rejected',
-                reject_note: rejectNote || 'Perlu perbaikan bukti kuitansi',
+                reject_note: finalRejectNote,
                 updated_at: nowIso,
               }
             : s
         )
       );
+      if (isSupabaseConfigured) {
+        await syncUpdate(
+          'advance_settlements',
+          { status: 'rejected', reject_note: finalRejectNote, updated_at: nowIso },
+          'id',
+          settlementId
+        );
+      }
       addAuditLog('advance_settlements', settlementId, 'REJECT', null, { rejectNote }, `Mengembalikan SPJ panjar`);
     }
 
@@ -3360,9 +4038,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let rpId = data.id;
 
     if (rpId) {
-      setReceivablesPayables((prev) =>
-        prev.map((rp) => (rp.id === rpId ? ({ ...rp, ...data, updated_at: nowIso } as ReceivablePayable) : rp))
-      );
+      const existingRp = receivablesPayables.find((rp) => rp.id === rpId);
+      const updatedRp = { ...existingRp, ...data, updated_at: nowIso } as ReceivablePayable;
+      setReceivablesPayables((prev) => prev.map((rp) => (rp.id === rpId ? updatedRp : rp)));
+      if (isSupabaseConfigured) {
+        await syncUpsert('receivables_payables', updatedRp);
+      }
       addAuditLog('receivables_payables', rpId, 'UPDATE', null, data, `Memperbarui ${data.type || 'piutang/utang'} ${data.kode}`);
     } else {
       rpId = `rp-${Date.now()}`;
@@ -3387,6 +4068,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         payments: [],
       };
       setReceivablesPayables((prev) => [newRp, ...prev]);
+      if (isSupabaseConfigured) {
+        await syncUpsert('receivables_payables', newRp);
+      }
       addAuditLog('receivables_payables', rpId, 'INSERT', null, newRp, `Mencatat ${newRp.type === 'receivable' ? 'piutang' : 'utang'} ${newRp.description}`);
     }
 
@@ -3397,6 +4081,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const item = receivablesPayables.find((rp) => rp.id === id);
     if (!item) return { success: false, error: 'Data tidak ditemukan.' };
     setReceivablesPayables((prev) => prev.filter((rp) => rp.id !== id));
+    if (isSupabaseConfigured) {
+      await syncDelete('receivable_payable_payments', 'parent_id', id);
+      await syncDelete('receivables_payables', 'id', id);
+    }
     addAuditLog('receivables_payables', id, 'DELETE', item, null, `Menghapus data ${item.type} ${item.kode}`);
     return { success: true };
   };
@@ -3447,6 +4135,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       )
     );
 
+    if (isSupabaseConfigured) {
+      await syncInsert('receivable_payable_payments', newPayment);
+      await syncUpdate(
+        'receivables_payables',
+        { remaining_amount: newRemaining, status: newStatus, updated_at: nowIso },
+        'id',
+        id
+      );
+    }
+
     addAuditLog(
       'receivable_payable_payments',
       newPayment.id,
@@ -3461,24 +4159,33 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const saveLpjNotes = async (notesData: Partial<LpjNotes>): Promise<{ success: boolean; error?: string }> => {
     const nowIso = new Date().toISOString();
-    setLpjNotes((prev) => ({
-      ...prev,
+    const updatedNotes: LpjNotes = {
+      ...lpjNotes,
       ...notesData,
       updated_by: currentUser?.id,
       updated_at: nowIso,
-    }));
-    addAuditLog('lpj_notes', lpjNotes.id, 'UPDATE', null, notesData, `Memperbarui Catatan atas Laporan Keuangan (CaLK)`);
+    };
+    setLpjNotes(updatedNotes);
+    if (isSupabaseConfigured) {
+      await syncUpsert('lpj_notes', updatedNotes);
+    }
+    addAuditLog('lpj_notes', updatedNotes.id, 'UPDATE', null, notesData, `Memperbarui Catatan atas Laporan Keuangan (CaLK)`);
     return { success: true };
   };
 
   const updateLpjSettings = async (newSettings: Partial<LpjSettings>): Promise<{ success: boolean; error?: string }> => {
     const nowIso = new Date().toISOString();
-    setLpjSettings((prev) => ({
-      ...prev,
+    const updatedLpjSettings: LpjSettings = {
+      ...lpjSettings,
       ...newSettings,
+      id: lpjSettings.id || 'main',
       updated_by: currentUser?.id,
       updated_at: nowIso,
-    }));
+    };
+    setLpjSettings(updatedLpjSettings);
+    if (isSupabaseConfigured) {
+      await syncUpsert('lpj_settings', updatedLpjSettings);
+    }
     addAuditLog('lpj_settings', 'main', 'UPDATE', null, newSettings, `Memperbarui pengaturan format dan kebijakan LPJ`);
     return { success: true };
   };
@@ -3489,18 +4196,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     restrictedPurpose?: string | null
   ): Promise<{ success: boolean; error?: string }> => {
     const nowIso = new Date().toISOString();
+    const existingKas = kasList.find((k) => k.id === kasId);
+    const nextRestrictedPurpose = fundType === 'restricted' ? restrictedPurpose || existingKas?.restricted_purpose : null;
     setKasList((prev) =>
       prev.map((k) =>
         k.id === kasId
           ? {
               ...k,
               fund_type: fundType,
-              restricted_purpose: fundType === 'restricted' ? restrictedPurpose || k.restricted_purpose : null,
+              restricted_purpose: nextRestrictedPurpose,
               updated_at: nowIso,
             }
           : k
       )
     );
+    if (isSupabaseConfigured) {
+      await syncUpdate(
+        'kas',
+        { fund_type: fundType, restricted_purpose: nextRestrictedPurpose, updated_at: nowIso },
+        'id',
+        kasId
+      );
+    }
     addAuditLog('kas', kasId, 'UPDATE_FUND_TYPE', null, { fundType, restrictedPurpose }, `Mengubah klasifikasi dana kas`);
     return { success: true };
   };
@@ -3510,115 +4227,122 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     count?: { assets: number; advances: number; rp: number };
     error?: string;
   }> => {
-    let addedAssets = 0;
-    let addedAdvances = 0;
-    let addedRp = 0;
     const nowIso = new Date().toISOString();
 
     // 1. Migrasi Aset
     const assetPositions = openingOtherPositions.filter((p) => p.type === 'asset');
-    setFixedAssets((prevAssets) => {
-      const nextAssets = [...prevAssets];
-      assetPositions.forEach((pos) => {
-        const exists = nextAssets.some((a) => a.nama.toLowerCase() === pos.name.toLowerCase());
-        if (!exists) {
-          const cat = pos.category?.toLowerCase() || '';
-          let kategori: FixedAssetCategory = 'lainnya';
-          if (cat.includes('tanah')) kategori = 'tanah';
-          else if (cat.includes('bangunan') || cat.includes('gedung')) kategori = 'bangunan';
-          else if (cat.includes('kendaraan') || cat.includes('mobil') || cat.includes('motor')) kategori = 'kendaraan';
-          else if (cat.includes('musik')) kategori = 'alat_musik';
-          else if (cat.includes('elektronik') || cat.includes('sound')) kategori = 'elektronik';
-          else if (cat.includes('perabot') || cat.includes('kursi')) kategori = 'perabot';
+    const nextAssets = [...fixedAssets];
+    const newlyCreatedAssets: FixedAsset[] = [];
+    assetPositions.forEach((pos) => {
+      const exists = nextAssets.some((a) => a.nama.toLowerCase() === pos.name.toLowerCase());
+      if (!exists) {
+        const cat = pos.category?.toLowerCase() || '';
+        let kategori: FixedAssetCategory = 'lainnya';
+        if (cat.includes('tanah')) kategori = 'tanah';
+        else if (cat.includes('bangunan') || cat.includes('gedung')) kategori = 'bangunan';
+        else if (cat.includes('kendaraan') || cat.includes('mobil') || cat.includes('motor')) kategori = 'kendaraan';
+        else if (cat.includes('musik')) kategori = 'alat_musik';
+        else if (cat.includes('elektronik') || cat.includes('sound')) kategori = 'elektronik';
+        else if (cat.includes('perabot') || cat.includes('kursi')) kategori = 'perabot';
 
-          const useful = lpjSettings.useful_life_defaults[kategori] ?? 5;
-          nextAssets.push({
-            id: `ast-mig-${pos.id}`,
-            kode: `AST-AWAL-${String(nextAssets.length + 1).padStart(3, '0')}`,
-            nama: pos.name,
-            kategori,
-            tanggal_perolehan: pos.acquisition_year ? `${pos.acquisition_year}-01-01` : '2023-01-01',
-            nilai_perolehan: Number(pos.amount),
-            kondisi: (pos.condition as FixedAssetCondition) || 'baik',
-            lokasi: pos.location || 'Kompleks Gereja HKBP Hutaraja',
-            kas_id: pos.kas_id,
-            status: 'aktif',
-            notes: pos.notes || 'Dipindahkan dari modul Saldo Awal',
-            useful_life_years: useful,
-            salvage_value: 0,
-            created_at: nowIso,
-            updated_at: nowIso,
-          });
-          addedAssets++;
-        }
-      });
-      return nextAssets;
+        const useful = lpjSettings.useful_life_defaults[kategori] ?? 5;
+        const newAsset: FixedAsset = {
+          id: `ast-mig-${pos.id}`,
+          kode: `AST-AWAL-${String(nextAssets.length + 1).padStart(3, '0')}`,
+          nama: pos.name,
+          kategori,
+          tanggal_perolehan: pos.acquisition_year ? `${pos.acquisition_year}-01-01` : '2023-01-01',
+          nilai_perolehan: Number(pos.amount),
+          kondisi: (pos.condition as FixedAssetCondition) || 'baik',
+          lokasi: pos.location || 'Kompleks Gereja HKBP Hutaraja',
+          kas_id: pos.kas_id,
+          status: 'aktif',
+          notes: pos.notes || 'Dipindahkan dari modul Saldo Awal',
+          useful_life_years: useful,
+          salvage_value: 0,
+          created_at: nowIso,
+          updated_at: nowIso,
+        };
+        nextAssets.push(newAsset);
+        newlyCreatedAssets.push(newAsset);
+      }
     });
+    if (newlyCreatedAssets.length > 0) setFixedAssets(nextAssets);
 
     // 2. Migrasi Panjar
     const advancePositions = openingOtherPositions.filter((p) => p.type === 'advance');
-    setAdvances((prevAdvances) => {
-      const nextAdvances = [...prevAdvances];
-      advancePositions.forEach((pos) => {
-        const exists = nextAdvances.some((a) => a.purpose.toLowerCase() === pos.name.toLowerCase());
-        if (!exists) {
-          nextAdvances.push({
-            id: `adv-mig-${pos.id}`,
-            kode: `PJR-AWAL-${String(nextAdvances.length + 1).padStart(3, '0')}`,
-            kas_id: pos.kas_id,
-            recipient_name: pos.section_manager || 'Pengurus Kegiatan',
-            amount: Number(pos.amount),
-            advance_date: '2026-01-01',
-            due_date: '2026-01-20',
-            purpose: pos.name,
-            status: 'active',
-            created_at: nowIso,
-            updated_at: nowIso,
-          });
-          addedAdvances++;
-        }
-      });
-      return nextAdvances;
+    const nextAdvances = [...advances];
+    const newlyCreatedAdvances: Advance[] = [];
+    advancePositions.forEach((pos) => {
+      const exists = nextAdvances.some((a) => a.purpose.toLowerCase() === pos.name.toLowerCase());
+      if (!exists) {
+        const newAdv: Advance = {
+          id: `adv-mig-${pos.id}`,
+          kode: `PJR-AWAL-${String(nextAdvances.length + 1).padStart(3, '0')}`,
+          kas_id: pos.kas_id,
+          recipient_name: pos.section_manager || 'Pengurus Kegiatan',
+          amount: Number(pos.amount),
+          advance_date: '2026-01-01',
+          due_date: '2026-01-20',
+          purpose: pos.name,
+          status: 'active',
+          created_at: nowIso,
+          updated_at: nowIso,
+        };
+        nextAdvances.push(newAdv);
+        newlyCreatedAdvances.push(newAdv);
+      }
     });
+    if (newlyCreatedAdvances.length > 0) setAdvances(nextAdvances);
 
     // 3. Migrasi Piutang & Utang
     const rpPositions = openingOtherPositions.filter((p) => p.type === 'receivable' || p.type === 'payable');
-    setReceivablesPayables((prevRp) => {
-      const nextRp = [...prevRp];
-      rpPositions.forEach((pos) => {
-        const exists = nextRp.some((r) => r.description.toLowerCase() === pos.name.toLowerCase());
-        if (!exists) {
-          const type = pos.type as ReceivablePayableType;
-          nextRp.push({
-            id: `rp-mig-${pos.id}`,
-            type,
-            kode: `${type === 'receivable' ? 'PIU' : 'UTG'}-AWAL-${String(nextRp.length + 1).padStart(3, '0')}`,
-            kas_id: pos.kas_id,
-            counterparty_name: pos.section_manager || 'Pihak Ketiga',
-            amount: Number(pos.amount),
-            remaining_amount: Number(pos.amount),
-            issue_date: '2026-01-01',
-            status: 'active',
-            description: pos.name,
-            created_at: nowIso,
-            updated_at: nowIso,
-            payments: [],
-          });
-          addedRp++;
-        }
-      });
-      return nextRp;
+    const nextRps = [...receivablesPayables];
+    const newlyCreatedRps: ReceivablePayable[] = [];
+    rpPositions.forEach((pos) => {
+      const exists = nextRps.some((r) => r.description.toLowerCase() === pos.name.toLowerCase());
+      if (!exists) {
+        const type = pos.type as ReceivablePayableType;
+        const newRp: ReceivablePayable = {
+          id: `rp-mig-${pos.id}`,
+          type,
+          kode: `${type === 'receivable' ? 'PIU' : 'UTG'}-AWAL-${String(nextRps.length + 1).padStart(3, '0')}`,
+          kas_id: pos.kas_id,
+          counterparty_name: pos.section_manager || 'Pihak Ketiga',
+          amount: Number(pos.amount),
+          remaining_amount: Number(pos.amount),
+          issue_date: '2026-01-01',
+          status: 'active',
+          description: pos.name,
+          created_at: nowIso,
+          updated_at: nowIso,
+          payments: [],
+        };
+        nextRps.push(newRp);
+        newlyCreatedRps.push(newRp);
+      }
     });
+    if (newlyCreatedRps.length > 0) setReceivablesPayables(nextRps);
 
     // 4. Update fund_type untuk kas yang memiliki posisi restricted_fund
     const restrictedKasIds = openingOtherPositions.filter((p) => p.type === 'restricted_fund').map((p) => p.kas_id);
-    if (restrictedKasIds.length > 0) {
-      setKasList((prevKas) =>
-        prevKas.map((k) =>
-          restrictedKasIds.includes(k.id) ? { ...k, fund_type: 'restricted', restricted_purpose: k.restricted_purpose || 'Dana Terikat per Saldo Awal' } : k
-        )
-      );
+    const updatedRestrictedKas = kasList
+      .filter((k) => restrictedKasIds.includes(k.id))
+      .map((k) => ({ ...k, fund_type: 'restricted' as FundType, restricted_purpose: k.restricted_purpose || 'Dana Terikat per Saldo Awal', updated_at: nowIso }));
+    if (updatedRestrictedKas.length > 0) {
+      setKasList((prevKas) => prevKas.map((k) => updatedRestrictedKas.find((u) => u.id === k.id) || k));
     }
+
+    if (isSupabaseConfigured) {
+      if (newlyCreatedAssets.length > 0) await syncUpsert('fixed_assets', newlyCreatedAssets);
+      if (newlyCreatedAdvances.length > 0) await syncUpsert('advances', newlyCreatedAdvances);
+      if (newlyCreatedRps.length > 0) await syncUpsert('receivables_payables', newlyCreatedRps);
+      if (updatedRestrictedKas.length > 0) await syncUpsert('kas', updatedRestrictedKas);
+    }
+
+    const addedAssets = newlyCreatedAssets.length;
+    const addedAdvances = newlyCreatedAdvances.length;
+    const addedRp = newlyCreatedRps.length;
 
     addAuditLog(
       'data_lpj_migration',
@@ -3684,9 +4408,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let memberId = memberData.id;
 
     if (memberId) {
-      setAuditBodyMembers((prev) =>
-        prev.map((m) => (m.id === memberId ? ({ ...m, ...memberData, updated_at: nowIso } as AuditBodyMember) : m))
-      );
+      const existingMember = auditBodyMembers.find((m) => m.id === memberId);
+      const updatedMember = { ...existingMember, ...memberData, updated_at: nowIso } as AuditBodyMember;
+      setAuditBodyMembers((prev) => prev.map((m) => (m.id === memberId ? updatedMember : m)));
+      if (isSupabaseConfigured) {
+        await syncUpsert('audit_body_members', updatedMember);
+      }
       addAuditLog('audit_body_members', memberId, 'UPDATE', null, memberData, `Memperbarui keanggotaan audit: ${targetUser.full_name}`);
     } else {
       memberId = `abm-${Date.now()}`;
@@ -3701,6 +4428,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updated_at: nowIso,
       };
       setAuditBodyMembers((prev) => [...prev, newMember]);
+      if (isSupabaseConfigured) {
+        await syncUpsert('audit_body_members', newMember);
+      }
       addAuditLog('audit_body_members', memberId, 'INSERT', null, newMember, `Menetapkan anggota audit: ${targetUser.full_name} (${newMember.jabatan})`);
     }
 
@@ -3711,7 +4441,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const existing = auditBodyMembers.find((m) => m.id === id);
     if (!existing) return { success: false, error: 'Data anggota audit tidak ditemukan.' };
 
-    setAuditBodyMembers((prev) => prev.map((m) => (m.id === id ? { ...m, aktif: false, updated_at: new Date().toISOString() } : m)));
+    const updatedAt = new Date().toISOString();
+    setAuditBodyMembers((prev) => prev.map((m) => (m.id === id ? { ...m, aktif: false, updated_at: updatedAt } : m)));
+    if (isSupabaseConfigured) {
+      await syncUpdate('audit_body_members', { aktif: false, updated_at: updatedAt }, 'id', id);
+    }
     addAuditLog('audit_body_members', id, 'DEACTIVATE', existing, null, 'Menonaktifkan masa jabatan anggota audit');
     return { success: true };
   };
@@ -3734,9 +4468,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let engId = engData.id;
 
     if (engId) {
-      setAuditEngagements((prev) =>
-        prev.map((e) => (e.id === engId ? ({ ...e, ...engData, updated_at: nowIso } as AuditEngagement) : e))
-      );
+      const existingEng = auditEngagements.find((e) => e.id === engId);
+      const updatedEng = { ...existingEng, ...engData, updated_at: nowIso } as AuditEngagement;
+      setAuditEngagements((prev) => prev.map((e) => (e.id === engId ? updatedEng : e)));
+      if (isSupabaseConfigured) {
+        await syncUpsert('audit_engagements', updatedEng);
+      }
       addAuditLog('audit_engagements', engId, 'UPDATE', null, engData, `Memperbarui penugasan audit ${engData.judul}`);
     } else {
       engId = `eng-${Date.now()}`;
@@ -3757,6 +4494,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updated_at: nowIso,
       };
       setAuditEngagements((prev) => [newEng, ...prev]);
+      if (isSupabaseConfigured) {
+        await syncUpsert('audit_engagements', newEng);
+      }
       addAuditLog('audit_engagements', engId, 'INSERT', null, newEng, `Membuka penugasan audit baru: ${newEng.judul}`);
     }
 
@@ -3782,21 +4522,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     if (existing) {
-      setAuditReviews((prev) =>
-        prev.map((r) =>
-          r.id === existing.id
-            ? {
-                ...r,
-                ...reviewData,
-                notes_per_section: reviewData.notes_per_section || r.notes_per_section,
-                general_notes: reviewData.general_notes !== undefined ? reviewData.general_notes : r.general_notes,
-                personal_opinion: reviewData.personal_opinion!,
-                submitted_at: nowIso,
-                updated_at: nowIso,
-              }
-            : r
-        )
-      );
+      const updatedRev: AuditReview = {
+        ...existing,
+        ...reviewData,
+        notes_per_section: reviewData.notes_per_section || existing.notes_per_section,
+        general_notes: reviewData.general_notes !== undefined ? reviewData.general_notes : existing.general_notes,
+        personal_opinion: reviewData.personal_opinion!,
+        submitted_at: nowIso,
+        updated_at: nowIso,
+      };
+      setAuditReviews((prev) => prev.map((r) => (r.id === existing.id ? updatedRev : r)));
+      if (isSupabaseConfigured) {
+        await syncUpsert('audit_reviews', updatedRev);
+      }
       addAuditLog('audit_reviews', existing.id, 'UPDATE', existing, reviewData, 'Memperbarui lembar kerja audit pribadi');
     } else {
       const newRev: AuditReview = {
@@ -3811,6 +4549,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updated_at: nowIso,
       };
       setAuditReviews((prev) => [newRev, ...prev]);
+      if (isSupabaseConfigured) {
+        await syncUpsert('audit_reviews', newRev);
+      }
       addAuditLog('audit_reviews', newRev.id, 'INSERT', null, newRev, 'Mengirim lembar kerja audit pribadi');
     }
 
@@ -3828,9 +4569,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let findId = findingData.id;
 
     if (findId) {
-      setAuditFindings((prev) =>
-        prev.map((f) => (f.id === findId ? ({ ...f, ...findingData, updated_at: nowIso } as AuditFinding) : f))
-      );
+      const existingFind = auditFindings.find((f) => f.id === findId);
+      const updatedFind = { ...existingFind, ...findingData, updated_at: nowIso } as AuditFinding;
+      setAuditFindings((prev) => prev.map((f) => (f.id === findId ? updatedFind : f)));
+      if (isSupabaseConfigured) {
+        await syncUpsert('audit_findings', updatedFind);
+      }
       addAuditLog('audit_findings', findId, 'UPDATE', null, findingData, `Memperbarui temuan audit ${findingData.kode}`);
     } else {
       findId = `find-${Date.now()}`;
@@ -3850,6 +4594,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updated_at: nowIso,
       };
       setAuditFindings((prev) => [newFind, ...prev]);
+      if (isSupabaseConfigured) {
+        await syncUpsert('audit_findings', newFind);
+      }
       addAuditLog('audit_findings', findId, 'INSERT', null, newFind, `Mencatat temuan audit baru: ${newFind.title} (${newFind.severity})`);
     }
 
@@ -3879,6 +4626,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : f
       )
     );
+    if (isSupabaseConfigured) {
+      await syncUpdate(
+        'audit_findings',
+        {
+          response_notes: responseNotes,
+          response_by: currentUser?.id,
+          responded_at: nowIso,
+          status: 'ditanggapi',
+          updated_at: nowIso,
+        },
+        'id',
+        id
+      );
+    }
     addAuditLog('audit_findings', id, 'RESPOND', null, { responseNotes }, 'Memberikan tanggapan tindak lanjut temuan audit');
     return { success: true };
   };
@@ -3911,6 +4672,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : f
       )
     );
+    if (isSupabaseConfigured) {
+      await syncUpdate(
+        'audit_findings',
+        {
+          status: newStatus,
+          closed_by: currentUser?.id,
+          closed_at: nowIso,
+          closing_notes: closingNotes,
+          updated_at: nowIso,
+        },
+        'id',
+        id
+      );
+    }
     addAuditLog('audit_findings', id, 'CLOSE', null, { status: newStatus, closingNotes }, `Menutup temuan audit dengan status ${newStatus}`);
     return { success: true };
   };
@@ -3995,6 +4770,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       prev.map((e) => (e.id === engagementId ? { ...e, status: 'completed', updated_at: nowIso } : e))
     );
 
+    if (isSupabaseConfigured) {
+      await syncUpsert('audit_final_opinions', finalOpObj);
+      await syncUpdate('audit_engagements', { status: 'completed', updated_at: nowIso }, 'id', engagementId);
+    }
+
     addAuditLog(
       'audit_final_opinions',
       finalOpObj.id,
@@ -4035,6 +4815,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setCashCounts((prev) => [newCC, ...prev]);
+    if (isSupabaseConfigured) {
+      await syncInsert('cash_counts', newCC);
+    }
     let createdFindingId: string | undefined;
 
     // Automatic Draft Audit Finding Creation if discrepancy exists!
@@ -4071,8 +4854,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const tx = transactions.find((t) => t.id === transactionId);
     if (!tx) return { success: false, error: 'Transaksi tidak ditemukan.' };
 
-    const auditedAt = status === 'unverified' ? null : new Date().toISOString();
+    const nowIso = new Date().toISOString();
+    const auditedAt = status === 'unverified' ? null : nowIso;
     const auditedBy = status === 'unverified' ? null : (currentUser?.id || 'user-audit-ketua');
+    const finalAuditNote = note || (status === 'verified' ? 'Telah diverifikasi dan dokumen fisik valid.' : null);
 
     setTransactions((prev) =>
       prev.map((t) => {
@@ -4082,12 +4867,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             audit_status: status,
             audited_by: auditedBy,
             audited_at: auditedAt,
-            audit_note: note || (status === 'verified' ? 'Telah diverifikasi dan dokumen fisik valid.' : null),
+            audit_note: finalAuditNote,
+            updated_at: nowIso,
           };
         }
         return t;
       })
     );
+
+    if (isSupabaseConfigured) {
+      await syncUpdate(
+        'transactions',
+        {
+          audit_status: status,
+          audited_by: auditedBy,
+          audited_at: auditedAt,
+          audit_note: finalAuditNote,
+          updated_at: nowIso,
+        },
+        'id',
+        transactionId
+      );
+    }
 
     // If marked as flagged and finding details provided, automatically create an audit finding
     if (status === 'flagged' && finding) {
@@ -4122,24 +4923,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!periodCode) return { success: false, error: 'Kode periode audit wajib diisi.' };
 
     const nowIso = new Date().toISOString();
-    setAuditPeriodVerifications((prev) => {
-      const existing = prev.find(
-        (p) => p.period_code === periodCode && p.tahun === (data.tahun || settings.active_year)
-      );
-      if (existing) {
-        return prev.map((p) =>
-          p.id === existing.id
-            ? ({
-                ...p,
-                ...data,
-                updated_at: nowIso,
-              } as AuditPeriodVerification)
-            : p
-        );
-      } else {
-        const newApv: AuditPeriodVerification = {
+    const targetYear = data.tahun || settings.active_year;
+    const existing = auditPeriodVerifications.find(
+      (p) => p.period_code === periodCode && p.tahun === targetYear
+    );
+
+    const savedApv: AuditPeriodVerification = existing
+      ? ({
+          ...existing,
+          ...data,
+          updated_at: nowIso,
+        } as AuditPeriodVerification)
+      : {
           id: `apv-${Date.now()}`,
-          tahun: data.tahun || settings.active_year,
+          tahun: targetYear,
           period_type: data.period_type || 'triwulan',
           period_code: periodCode,
           period_title: data.period_title || 'Pemeriksaan Berkala',
@@ -4165,9 +4962,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           created_at: nowIso,
           updated_at: nowIso,
         };
-        return [newApv, ...prev];
-      }
-    });
+
+    setAuditPeriodVerifications((prev) =>
+      existing ? prev.map((p) => (p.id === existing.id ? savedApv : p)) : [savedApv, ...prev]
+    );
+
+    if (isSupabaseConfigured) {
+      await syncUpsert('audit_period_verifications', savedApv);
+    }
 
     addAuditLog('audit_period_verifications', periodCode, 'UPSERT', null, data, `Pemeriksaan berkala ${periodCode} disimpan`);
     return { success: true };
@@ -4179,6 +4981,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!currentUser) return { success: false, error: 'Pengguna tidak terautentikasi.' };
 
     const nowIso = new Date().toISOString();
+    const updatedRecords: AuditPeriodVerification[] = [];
+
     setAuditPeriodVerifications((prev) =>
       prev.map((p) => {
         if (p.period_code === periodCode) {
@@ -4213,6 +5017,39 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return p;
       })
     );
+
+    auditPeriodVerifications.forEach((p) => {
+      if (p.period_code === periodCode) {
+        const alreadySigned = p.verified_signatures?.some((s) => s.member_id === currentUser.id);
+        const memberObj = auditBodyMembers.find((m) => m.user_id === currentUser.id);
+        const roleLabel = memberObj?.jabatan === 'ketua' ? 'Ketua Badan Audit' : 'Anggota Badan Audit';
+        const newSig = {
+          member_id: currentUser.id,
+          member_name: currentUser.full_name,
+          jabatan: roleLabel,
+          signed_at: nowIso,
+        };
+        const updatedSignatures = alreadySigned
+          ? p.verified_signatures
+          : [...(p.verified_signatures || []), newSig];
+        const updatedVerifiedBy = p.verified_by.includes(currentUser.id)
+          ? p.verified_by
+          : [...p.verified_by, currentUser.id];
+        const isVerified = (updatedSignatures?.length || 0) >= 2;
+        updatedRecords.push({
+          ...p,
+          verified_by: updatedVerifiedBy,
+          verified_signatures: updatedSignatures,
+          status: isVerified ? 'diverifikasi' : p.status,
+          verified_at: isVerified ? nowIso : p.verified_at,
+          updated_at: nowIso,
+        });
+      }
+    });
+
+    if (isSupabaseConfigured && updatedRecords.length > 0) {
+      await syncUpsert('audit_period_verifications', updatedRecords);
+    }
 
     addAuditLog(
       'audit_period_verifications',
@@ -4347,6 +5184,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : r
       )
     );
+    if (isSupabaseConfigured) {
+      await syncUpdate(
+        'semester_reports',
+        { status: 'drafted', snapshot_data: snapshot, checklist_result: check.checklist, updated_at: nowIso },
+        'id',
+        reportId
+      );
+    }
 
     addAuditLog('semester_reports', reportId, 'LOCK_SNAPSHOT', null, snapshot, `Mengunci snapshot angka Laporan Semester ${report.semester} Tahun ${report.tahun}`);
     return { success: true };
@@ -4361,6 +5206,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const nowIso = new Date().toISOString();
+    const sentDate = nowIso.split('T')[0];
     setSemesterReports((prev) =>
       prev.map((r) =>
         r.id === reportId
@@ -4368,12 +5214,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               ...r,
               status: 'sent_to_pastor',
               sent_ref: sentRef,
-              sent_to_pastor_date: nowIso.split('T')[0],
+              sent_to_pastor_date: sentDate,
               updated_at: nowIso,
             }
           : r
       )
     );
+    if (isSupabaseConfigured) {
+      await syncUpdate(
+        'semester_reports',
+        { status: 'sent_to_pastor', sent_ref: sentRef, sent_to_pastor_date: sentDate, updated_at: nowIso },
+        'id',
+        reportId
+      );
+    }
     addAuditLog('semester_reports', reportId, 'FORWARD_TO_PASTOR', null, { sentRef }, 'Meneruskan Laporan Semester ke Pendeta Ressort');
     return { success: true };
   };
@@ -4400,6 +5254,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : r
       )
     );
+    if (isSupabaseConfigured) {
+      await syncUpdate(
+        'semester_reports',
+        { pastor_ack_by: currentUser?.id, pastor_ack_at: nowIso, pastor_note: pastorNote, updated_at: nowIso },
+        'id',
+        reportId
+      );
+    }
     addAuditLog('semester_reports', reportId, 'PASTOR_ACKNOWLEDGE', null, { pastorNote }, 'Pendeta Ressort menerima dan memeriksa Laporan Semester');
     return { success: true };
   };
@@ -4410,13 +5272,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     text: string
   ): Promise<{ success: boolean; error?: string }> => {
     const nowIso = new Date().toISOString();
+    const announcedDate = nowIso.split('T')[0];
     setSemesterReports((prev) =>
       prev.map((r) =>
         r.id === reportId
           ? {
               ...r,
               status: 'announced',
-              announced_date: nowIso.split('T')[0],
+              announced_date: announcedDate,
               announcement_medium: medium,
               announcement_text: text,
               updated_at: nowIso,
@@ -4424,6 +5287,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : r
       )
     );
+    if (isSupabaseConfigured) {
+      await syncUpdate(
+        'semester_reports',
+        { status: 'announced', announced_date: announcedDate, announcement_medium: medium, announcement_text: text, updated_at: nowIso },
+        'id',
+        reportId
+      );
+    }
     addAuditLog('semester_reports', reportId, 'ANNOUNCE', null, { medium, text }, 'Mencatat pewartaan laporan keuangan kepada jemaat');
     return { success: true };
   };
@@ -4445,6 +5316,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : r
       )
     );
+    if (isSupabaseConfigured) {
+      await syncUpdate(
+        'semester_reports',
+        { status: 'returned', return_notes: returnNotes, updated_at: nowIso },
+        'id',
+        reportId
+      );
+    }
     addAuditLog('semester_reports', reportId, 'RETURN', null, { returnNotes }, 'Mengembalikan Laporan Semester dengan catatan perbaikan');
     return { success: true };
   };
@@ -4561,6 +5440,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : l
       )
     );
+    if (isSupabaseConfigured) {
+      await syncUpdate(
+        'lpj_reports',
+        { status: 'drafted', snapshot_data: snapshot, checklist_result: check.checklist, updated_at: nowIso },
+        'id',
+        lpjId
+      );
+    }
 
     addAuditLog('lpj_reports', lpjId, 'LOCK_SNAPSHOT', null, snapshot, `Mengunci snapshot angka LPJ ISAK 35 Tahun ${lpj.tahun}`);
     return { success: true };
@@ -4585,6 +5472,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : l
       )
     );
+    if (isSupabaseConfigured) {
+      await syncUpdate(
+        'lpj_reports',
+        { status: 'submitted_to_meeting', meeting_date: meetingDate, meeting_ref: meetingRef, updated_at: nowIso },
+        'id',
+        lpjId
+      );
+    }
     addAuditLog('lpj_reports', lpjId, 'SUBMIT_TO_MEETING', null, { meetingDate, meetingRef }, 'Mengajukan LPJ ke Rapat Huria');
     return { success: true };
   };
@@ -4613,6 +5508,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : l
       )
     );
+    if (isSupabaseConfigured) {
+      await syncUpdate(
+        'lpj_reports',
+        {
+          status: 'approved',
+          meeting_notes: meetingNotes,
+          meeting_attendees_count: attendeesCount,
+          approved_by: currentUser?.id,
+          approved_at: nowIso,
+          updated_at: nowIso,
+        },
+        'id',
+        lpjId
+      );
+    }
 
     addAuditLog(
       'lpj_reports',
@@ -4643,6 +5553,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : l
       )
     );
+    if (isSupabaseConfigured) {
+      await syncUpdate(
+        'lpj_reports',
+        { status: 'returned', return_notes: returnNotes, updated_at: nowIso },
+        'id',
+        lpjId
+      );
+    }
     addAuditLog('lpj_reports', lpjId, 'RETURN_LPJ', null, { returnNotes }, 'Mengembalikan LPJ dengan catatan perbaikan Rapat Huria');
     return { success: true };
   };
@@ -4669,6 +5587,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setLpjExceptions((prev) => [...prev, newExc]);
+    if (isSupabaseConfigured) {
+      await syncInsert('lpj_exceptions', newExc);
+    }
     addAuditLog('lpj_exceptions', newExc.id, 'INSERT', null, newExc, `Memberikan dispensasi aturan ${ruleCode}: ${reason}`);
     return { success: true };
   };
@@ -4960,6 +5881,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isPeriodClosed,
         getPendingTransactionsCount,
         addTransaction,
+        addCompoundIncomeTransactions,
         updateTransaction,
         deleteTransaction,
         changeStatus,

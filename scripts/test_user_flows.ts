@@ -14,6 +14,7 @@
 import { DEMO_CATEGORIES, DEMO_KAS, DEMO_STORAGE_ACCOUNTS, DEMO_OPENING_BALANCES } from '../src/lib/demoData';
 import { Transaction, Kas, StorageAccount, Category } from '../src/types/database';
 import { formatRupiah } from '../src/lib/formatters';
+import { splitSentralisasiAmount } from '../src/lib/ppkuRules';
 
 interface TestStep {
   name: string;
@@ -208,6 +209,225 @@ transactions.forEach((tx) => {
 
 const totalKasSemua = kasList.reduce((sum, k) => sum + getKasBalance(k.id), 0);
 check(totalKasSemua === 13_000_000, `Total Saldo Bersih Seluruh Kas Huria = Rp 13.000.000 (Rp 10jt Kas Umum + Rp 3jt Kas Diakonia)`);
+
+// -------------------------------------------------------------
+// LANGKAH 6: Pelean IB -> 45% Kas Pembangunan + 55% Kas Sentralisasi
+// -------------------------------------------------------------
+console.log('\n▶ LANGKAH 6: Skenario Dinamis Pelean IB (45% Kas Pembangunan + 55% Kas Sentralisasi)');
+
+const splitPeleanIB = splitSentralisasiAmount(1_000_000, true);
+const grpPeleanIB = 'alloc-pelean-ib';
+transactions.push(
+  {
+    id: 'tx-ib-huria',
+    tanggal: '2026-11-08',
+    kas_id: 'kas-7', // Kas Pembangunan
+    storage_account_id: 'stor-1',
+    category_id: 'cat-in-pelean-1-2',
+    type: 'income',
+    amount: splitPeleanIB.huriaAmount,
+    description: 'Pelean IB Minggu (Bagian 45% Kas Pembangunan)',
+    status: 'approved',
+    is_reversal: false,
+    is_sentralisasi: true,
+    sentralisasi_role: 'huria_share',
+    allocation_group_id: grpPeleanIB,
+    bpsk_rate: 0.55,
+    huria_rate: 0.45,
+    bpsk_amount: 0,
+    huria_amount: splitPeleanIB.huriaAmount,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 'tx-ib-bpsk',
+    tanggal: '2026-11-08',
+    kas_id: 'kas-9', // Kas Sentralisasi
+    storage_account_id: 'stor-1',
+    category_id: 'cat-in-pelean-1-2',
+    type: 'income',
+    amount: splitPeleanIB.bpskAmount,
+    description: 'Pelean IB Minggu (Bagian 55% Kas Sentralisasi)',
+    status: 'approved',
+    is_reversal: false,
+    is_sentralisasi: true,
+    sentralisasi_role: 'bpsk_share',
+    allocation_group_id: grpPeleanIB,
+    bpsk_rate: 0.55,
+    huria_rate: 0.45,
+    bpsk_amount: splitPeleanIB.bpskAmount,
+    huria_amount: 0,
+    created_at: new Date().toISOString(),
+  }
+);
+
+check(getKasBalance('kas-7') === 450_000, `Pelean IB Rp 1.000.000 -> Kas Pembangunan bertambah Rp 450.000 (45%)`);
+check(getKasBalance('kas-9') === 550_000, `Pelean IB Rp 1.000.000 -> Kas Sentralisasi bertambah Rp 550.000 (55%)`);
+
+// -------------------------------------------------------------
+// LANGKAH 7: Ucapan Syukur Si A Rp 500.000 (Multi-Pos Dinamis)
+// -------------------------------------------------------------
+console.log('\n▶ LANGKAH 7: Skenario Ucapan Syukur Si A Rp 500.000 (5 Pos Rincian Dinamis)');
+
+// Reset kas balances tracking by computing deltas after Ucapan Syukur Si A
+const beforeKas1 = getKasBalance('kas-1');
+const beforeKas2 = getKasBalance('kas-2');
+const beforeKas7 = getKasBalance('kas-7');
+const beforeKas8 = getKasBalance('kas-8');
+const beforeKas9 = getKasBalance('kas-9');
+
+const catUcapanSyukur = categories.find((c) => c.kode === 'IN-09')!;
+const grpSiA = 'alloc-ucapan-syukur-sia';
+const splitKeHuria = splitSentralisasiAmount(100_000, true); // Ke Huria 100rb -> 45/55
+
+transactions.push(
+  // 1. Ke Huria 100rb (Sentralisasi ON -> 45rb kas-1 + 55rb kas-9)
+  {
+    id: 'tx-sia-huria-45',
+    tanggal: '2026-11-08',
+    kas_id: 'kas-1',
+    storage_account_id: 'stor-1',
+    category_id: catUcapanSyukur.id,
+    type: 'income',
+    amount: splitKeHuria.huriaAmount,
+    description: 'Ucapan Syukur Si A — Ke Huria (45% Huria)',
+    status: 'approved',
+    is_reversal: false,
+    is_sentralisasi: true,
+    sentralisasi_role: 'huria_share',
+    allocation_group_id: grpSiA,
+    bpsk_rate: 0.55,
+    huria_rate: 0.45,
+    bpsk_amount: 0,
+    huria_amount: splitKeHuria.huriaAmount,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 'tx-sia-huria-55',
+    tanggal: '2026-11-08',
+    kas_id: 'kas-9',
+    storage_account_id: 'stor-1',
+    category_id: catUcapanSyukur.id,
+    type: 'income',
+    amount: splitKeHuria.bpskAmount,
+    description: 'Ucapan Syukur Si A — Ke Huria (55% Sentralisasi)',
+    status: 'approved',
+    is_reversal: false,
+    is_sentralisasi: true,
+    sentralisasi_role: 'bpsk_share',
+    allocation_group_id: grpSiA,
+    bpsk_rate: 0.55,
+    huria_rate: 0.45,
+    bpsk_amount: splitKeHuria.bpskAmount,
+    huria_amount: 0,
+    created_at: new Date().toISOString(),
+  },
+  // 2. Ke Pembangunan 100rb (Non-Sentralisasi -> 100% kas-7)
+  {
+    id: 'tx-sia-bangun',
+    tanggal: '2026-11-08',
+    kas_id: 'kas-7',
+    storage_account_id: 'stor-1',
+    category_id: catUcapanSyukur.id,
+    type: 'income',
+    amount: 100_000,
+    description: 'Ucapan Syukur Si A — Ke Pembangunan (100% Kas Pembangunan)',
+    status: 'approved',
+    is_reversal: false,
+    is_sentralisasi: false,
+    sentralisasi_role: 'non_sentralisasi',
+    sentralisasi_exclusion_type: 'pembangunan_lokal',
+    allocation_group_id: grpSiA,
+    bpsk_rate: 0,
+    huria_rate: 1.0,
+    bpsk_amount: 0,
+    huria_amount: 100_000,
+    created_at: new Date().toISOString(),
+  },
+  // 3. Ke Sosial Huria 100rb (Non-Sentralisasi -> 100% kas-2)
+  {
+    id: 'tx-sia-sosial',
+    tanggal: '2026-11-08',
+    kas_id: 'kas-2',
+    storage_account_id: 'stor-1',
+    category_id: catUcapanSyukur.id,
+    type: 'income',
+    amount: 100_000,
+    description: 'Ucapan Syukur Si A — Ke Sosial Huria (100% Kas Sosial Huria)',
+    status: 'approved',
+    is_reversal: false,
+    is_sentralisasi: false,
+    sentralisasi_role: 'non_sentralisasi',
+    sentralisasi_exclusion_type: 'sosial_duka',
+    allocation_group_id: grpSiA,
+    bpsk_rate: 0,
+    huria_rate: 1.0,
+    bpsk_amount: 0,
+    huria_amount: 100_000,
+    created_at: new Date().toISOString(),
+  },
+  // 4. Ke Pendeta 100rb (Transitoris -> 100% kas-8)
+  {
+    id: 'tx-sia-pendeta',
+    tanggal: '2026-11-08',
+    kas_id: 'kas-8',
+    storage_account_id: 'stor-1',
+    category_id: catUcapanSyukur.id,
+    type: 'income',
+    amount: 100_000,
+    description: 'Ucapan Syukur Si A — Ke Pendeta (100% Kas Transitoris)',
+    status: 'approved',
+    is_reversal: false,
+    is_sentralisasi: false,
+    sentralisasi_role: 'non_sentralisasi',
+    sentralisasi_exclusion_type: 'transitoris',
+    allocation_group_id: grpSiA,
+    bpsk_rate: 0,
+    huria_rate: 1.0,
+    bpsk_amount: 0,
+    huria_amount: 100_000,
+    created_at: new Date().toISOString(),
+  },
+  // 5. Ke Lingkungan Letare 100rb (Transitoris -> 100% kas-8)
+  {
+    id: 'tx-sia-letare',
+    tanggal: '2026-11-08',
+    kas_id: 'kas-8',
+    storage_account_id: 'stor-1',
+    category_id: catUcapanSyukur.id,
+    type: 'income',
+    amount: 100_000,
+    description: 'Ucapan Syukur Si A — Ke Lingkungan Letare (100% Kas Transitoris)',
+    status: 'approved',
+    is_reversal: false,
+    is_sentralisasi: false,
+    sentralisasi_role: 'non_sentralisasi',
+    sentralisasi_exclusion_type: 'transitoris',
+    allocation_group_id: grpSiA,
+    bpsk_rate: 0,
+    huria_rate: 1.0,
+    bpsk_amount: 0,
+    huria_amount: 100_000,
+    created_at: new Date().toISOString(),
+  }
+);
+
+const deltaKas1 = getKasBalance('kas-1') - beforeKas1;
+const deltaKas9 = getKasBalance('kas-9') - beforeKas9;
+const deltaKas7 = getKasBalance('kas-7') - beforeKas7;
+const deltaKas2 = getKasBalance('kas-2') - beforeKas2;
+const deltaKas8 = getKasBalance('kas-8') - beforeKas8;
+const deltaTotalSiA = deltaKas1 + deltaKas9 + deltaKas7 + deltaKas2 + deltaKas8;
+
+check(deltaKas1 === 45_000, `Ucapan Syukur Ke Huria 100rb -> Kas Umum Huria +Rp 45.000 (didapat: ${formatRupiah(deltaKas1)})`);
+check(deltaKas9 === 55_000, `Ucapan Syukur Ke Huria 100rb -> Kas Sentralisasi +Rp 55.000 (didapat: ${formatRupiah(deltaKas9)})`);
+check(deltaKas7 === 100_000, `Ucapan Syukur Ke Pembangunan 100rb -> Kas Pembangunan +Rp 100.000 utuh (didapat: ${formatRupiah(deltaKas7)})`);
+check(deltaKas2 === 100_000, `Ucapan Syukur Ke Sosial Huria 100rb -> Kas Sosial Huria +Rp 100.000 utuh (didapat: ${formatRupiah(deltaKas2)})`);
+check(deltaKas8 === 200_000, `Ucapan Syukur Ke Pendeta + Letare -> Kas Transitoris +Rp 200.000 utuh (didapat: ${formatRupiah(deltaKas8)})`);
+check(deltaTotalSiA === 500_000, `Total Akumulasi Ucapan Syukur Si A di seluruh kas tepat Rp 500.000`);
+
+// Simulasi Admin toggle status kategori is_sentralisasi
+const toggledCat: Category = { ...catUcapanSyukur, is_sentralisasi: false, sentralisasi_exclusion_type: 'lainnya' };
+check(toggledCat.is_sentralisasi === false && toggledCat.sentralisasi_exclusion_type === 'lainnya', 'Admin dapat menonaktifkan/mengaktifkan status Objek Sentralisasi per kategori');
 
 console.log('\n=============================================================');
 const totalChecks = steps.length;

@@ -19,6 +19,7 @@ import { formatRupiah, formatDateIndo } from '../src/lib/formatters';
 import {
   getPpkuProcurementRule,
   evaluateBpskRemittanceCompliance,
+  splitSentralisasiAmount,
   PPKU_OFFICIAL_PELEAN_11,
   PPKU_PANJAR_DEADLINE_DAYS,
   PPKU_BPSK_DEADLINE_DAYS,
@@ -334,6 +335,89 @@ const h3PaidEval = evaluateBpskRemittanceCompliance(
   '2026-11-06'
 );
 assert(h3PaidEval.status === 'lunas' && h3PaidEval.outstandingBpsk === 0, 'Evaluasi H+3 berstatus LUNAS setelah 55% disetorkan ke BPSK');
+
+
+// -------------------------------------------------------------
+// PENGUJIAN 8: Split Otomatis Kas Sentralisasi (55% / 45%), Custom Kas & Override
+// -------------------------------------------------------------
+console.log('\n▶ UJI 8: Split Otomatis 55%/45%, Custom Kas Tujuan & Override Per-Transaksi');
+
+const split1 = splitSentralisasiAmount(1_000_000, true);
+assert(
+  split1.bpskAmount === 550_000 && split1.huriaAmount === 450_000,
+  'splitSentralisasiAmount(1.000.000, true) menghasilkan BPSK Rp 550.000 (55%) dan Huria Rp 450.000 (45%)'
+);
+
+const split0 = splitSentralisasiAmount(500_000, false);
+assert(
+  split0.bpskAmount === 0 && split0.huriaAmount === 500_000,
+  'splitSentralisasiAmount(500.000, false) menghasilkan BPSK Rp 0 dan Huria Rp 500.000 (100%)'
+);
+
+// Simulasi 1 pemasukan terpecah menjadi 2 baris ledger (huria_share + bpsk_share) + 1 non_sentralisasi (Ucapan Syukur ke Pembangunan)
+const splitCompliance = evaluateBpskRemittanceCompliance(
+  [
+    {
+      id: 'tx-split-huria',
+      tanggal: '2026-11-08',
+      kas_id: 'kas-7', // Pelean IB ke Kas Pembangunan (45%)
+      storage_account_id: 'stor-1',
+      category_id: 'cat-in-pelean-1-2',
+      type: 'income',
+      amount: 450_000,
+      description: 'Pelean IB (Bagian 45% Kas Pembangunan)',
+      status: 'approved',
+      is_reversal: false,
+      is_sentralisasi: true,
+      sentralisasi_role: 'huria_share',
+      bpsk_amount: 0,
+      huria_amount: 450_000,
+    },
+    {
+      id: 'tx-split-bpsk',
+      tanggal: '2026-11-08',
+      kas_id: 'kas-9', // Bagian 55% masuk ke Kas Sentralisasi
+      storage_account_id: 'stor-1',
+      category_id: 'cat-in-pelean-1-2',
+      type: 'income',
+      amount: 550_000,
+      description: 'Pelean IB (Bagian 55% Kas Sentralisasi)',
+      status: 'approved',
+      is_reversal: false,
+      is_sentralisasi: true,
+      sentralisasi_role: 'bpsk_share',
+      bpsk_amount: 550_000,
+      huria_amount: 0,
+    },
+    {
+      id: 'tx-override-non',
+      tanggal: '2026-11-08',
+      kas_id: 'kas-7',
+      storage_account_id: 'stor-1',
+      category_id: 'cat-in-hamauliateon', // Kategori default sentralisasi=true, di-override per transaksi ke false
+      type: 'income',
+      amount: 100_000,
+      description: 'Ucapan Syukur Si A — Ke Pembangunan (Non-Sentralisasi)',
+      status: 'approved',
+      is_reversal: false,
+      is_sentralisasi: false,
+      sentralisasi_role: 'non_sentralisasi',
+      bpsk_amount: 0,
+      huria_amount: 100_000,
+    },
+  ],
+  DEMO_CATEGORIES,
+  '2026-11-09'
+);
+
+assert(
+  splitCompliance.totalBpskObligation === 550_000,
+  `Split row tidak double-count & override non-sentralisasi dihitung akurat (kewajiban = ${formatRupiah(splitCompliance.totalBpskObligation)})`
+);
+assert(
+  splitCompliance.status === 'dalam_batas_h3' && splitCompliance.outstandingBpsk === 550_000,
+  `Evaluasi jatuh tempo H+1 mendeteksi sisa kewajiban BPSK tepat Rp 550.000`
+);
 
 
 // -------------------------------------------------------------

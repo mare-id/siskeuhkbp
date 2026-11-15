@@ -75,13 +75,7 @@ export const SettingsPage: React.FC = () => {
     setTestingSb(true);
     setSbStatusMsg(null);
 
-    // Save temporarily in localStorage to test live connection
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('siku_supabase_url', sbUrl.trim());
-      localStorage.setItem('siku_supabase_anon_key', sbKey.trim());
-    }
-
-    const test = await testSupabaseConnection();
+    const test = await testSupabaseConnection(sbUrl, sbKey);
     setTestingSb(false);
 
     if (test.success) {

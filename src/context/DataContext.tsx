@@ -360,6 +360,11 @@ interface DataContextType {
   forwardSemesterToPastor: (reportId: string, sentRef: string) => Promise<{ success: boolean; error?: string }>;
   acknowledgeSemesterReport: (reportId: string, pastorNote: string) => Promise<{ success: boolean; error?: string }>;
   announceSemesterReport: (reportId: string, medium: 'warta_jemaat' | 'mimbar' | 'papan_pengumuman' | 'lainnya', text: string) => Promise<{ success: boolean; error?: string }>;
+  saveSemesterWartaText: (
+    reportId: string,
+    period: { tahun: number; semester: 1 | 2 },
+    announcementText: string
+  ) => Promise<{ success: boolean; error?: string; report?: SemesterReport }>;
   returnSemesterReport: (reportId: string, returnNotes: string) => Promise<{ success: boolean; error?: string }>;
 
   evaluateLpjChecklist: (tahun: number) => {
@@ -5885,6 +5890,77 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
+  const saveSemesterWartaText = async (
+    reportId: string,
+    period: { tahun: number; semester: 1 | 2 },
+    announcementText: string
+  ): Promise<{ success: boolean; error?: string; report?: SemesterReport }> => {
+    const nowIso = new Date().toISOString();
+    const existing =
+      semesterReports.find((r) => r.id === reportId) ||
+      semesterReports.find((r) => r.tahun === period.tahun && r.semester === period.semester);
+
+    if (existing) {
+      if (isSupabaseConfigured) {
+        const syncRes = await syncUpdate(
+          'semester_reports',
+          { announcement_text: announcementText, updated_at: nowIso },
+          'id',
+          existing.id
+        );
+        if (!syncRes.success) {
+          return { success: false, error: `Gagal menyimpan teks Warta Jemaat: ${syncRes.error}` };
+        }
+      }
+      const updatedReport: SemesterReport = {
+        ...existing,
+        announcement_text: announcementText,
+        updated_at: nowIso,
+      };
+      setSemesterReports((prev) => prev.map((r) => (r.id === existing.id ? updatedReport : r)));
+      addAuditLog(
+        'semester_reports',
+        existing.id,
+        'UPDATE_WARTA_TEXT',
+        null,
+        { tahun: period.tahun, semester: period.semester },
+        `Memperbarui isi teks Warta Jemaat Semester ${period.semester} Tahun ${period.tahun}`
+      );
+      return { success: true, report: updatedReport };
+    }
+
+    const newReport: SemesterReport = {
+      id: reportId || `sem-rep-${period.tahun}-${period.semester}`,
+      tahun: period.tahun,
+      semester: period.semester,
+      status: 'preparation',
+      version: 1,
+      checklist_result: evaluateSemesterChecklist(period.tahun, period.semester).checklist,
+      announcement_text: announcementText,
+      created_by: currentUser?.id || 'user-admin',
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+
+    if (isSupabaseConfigured) {
+      const syncRes = await syncUpsert('semester_reports', newReport);
+      if (!syncRes.success) {
+        return { success: false, error: `Gagal menyimpan draf Warta Jemaat: ${syncRes.error}` };
+      }
+    }
+
+    setSemesterReports((prev) => [...prev, newReport]);
+    addAuditLog(
+      'semester_reports',
+      newReport.id,
+      'UPDATE_WARTA_TEXT',
+      null,
+      { tahun: period.tahun, semester: period.semester },
+      `Menyimpan isi teks Warta Jemaat Semester ${period.semester} Tahun ${period.tahun}`
+    );
+    return { success: true, report: newReport };
+  };
+
   const returnSemesterReport = async (
     reportId: string,
     returnNotes: string
@@ -6688,6 +6764,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         forwardSemesterToPastor,
         acknowledgeSemesterReport,
         announceSemesterReport,
+        saveSemesterWartaText,
         returnSemesterReport,
         evaluateLpjChecklist,
         runLpjChecklist,

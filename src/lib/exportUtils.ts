@@ -1069,6 +1069,75 @@ export function generateBeritaAcaraAuditPDF(params: {
   doc.save(`Berita_Acara_Audit_HKBP_Hutaraja_${engagement.tahun}_${engagement.jenis}.pdf`);
 }
 
+export interface WartaSemesterContent {
+  docTitle: string;
+  periodLabel: string;
+  previewHeading: string;
+  boxTitle: string;
+  bodyText: string;
+  closingQuote: string;
+  pdfFooterNote: string;
+}
+
+export function getDefaultWartaSemesterContent(
+  semester: 1 | 2,
+  tahun: number,
+  churchName?: string
+): WartaSemesterContent {
+  const church = churchName || 'HKBP Ressort Hutaraja';
+  return {
+    docTitle: `WARTA JEMAAT: LAPORAN KEUANGAN SEMESTER ${semester}`,
+    periodLabel: `Periode: ${semester === 1 ? '1 Januari - 30 Juni' : '1 Juli - 31 Desember'} Tahun ${tahun}`,
+    previewHeading: `LAPORAN KEUANGAN HURIA & SEKSI SEMESTER ${semester} TAHUN ${tahun}`,
+    boxTitle: 'Warta Keuangan Terbuka untuk Seluruh Warga Jemaat:',
+    bodyText: `Puji syukur kepada Tuhan Yang Maha Esa atas berkat dan penyertaan-Nya bagi pelayanan ${church}. Laporan Keuangan Semester ${semester} Tahun ${tahun} telah selesai diperiksa secara independen oleh Badan Audit Huria dan diterima oleh Pendeta Ressort. Seluruh persembahan (pelean) dan pengeluaran pelayanan dikelola dengan penuh tanggung jawab demi kemuliaan nama Tuhan.`,
+    closingQuote:
+      '"Segala kemuliaan bagi Allah Bapa, Anak, dan Roh Kudus. Terima kasih atas partisipasi dan persembahan seluruh warga jemaat."',
+    pdfFooterNote:
+      'Catatan: Rincian buku kas masing-masing seksi dan bukti kwitansi dapat dilihat di papan pengumuman sekretariat huria.',
+  };
+}
+
+export function parseWartaSemesterContent(
+  rawText: string | null | undefined,
+  semester: 1 | 2,
+  tahun: number,
+  churchName?: string
+): WartaSemesterContent {
+  const defaults = getDefaultWartaSemesterContent(semester, tahun, churchName);
+  if (!rawText || !rawText.trim()) return defaults;
+  const trimmed = rawText.trim();
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && parsed.__warta_v1) {
+        return {
+          docTitle: typeof parsed.docTitle === 'string' ? parsed.docTitle : defaults.docTitle,
+          periodLabel: typeof parsed.periodLabel === 'string' ? parsed.periodLabel : defaults.periodLabel,
+          previewHeading: typeof parsed.previewHeading === 'string' ? parsed.previewHeading : defaults.previewHeading,
+          boxTitle: typeof parsed.boxTitle === 'string' ? parsed.boxTitle : defaults.boxTitle,
+          bodyText: typeof parsed.bodyText === 'string' ? parsed.bodyText : defaults.bodyText,
+          closingQuote: typeof parsed.closingQuote === 'string' ? parsed.closingQuote : defaults.closingQuote,
+          pdfFooterNote: typeof parsed.pdfFooterNote === 'string' ? parsed.pdfFooterNote : defaults.pdfFooterNote,
+        };
+      }
+    } catch {
+      // Fallback to plain string
+    }
+  }
+  return {
+    ...defaults,
+    bodyText: rawText,
+  };
+}
+
+export function serializeWartaSemesterContent(content: WartaSemesterContent): string {
+  return JSON.stringify({
+    __warta_v1: true,
+    ...content,
+  });
+}
+
 /**
  * Generate Congregational Bulletin Summary (Ringkasan Warta Jemaat - 1 Halaman Ramah Publik)
  */
@@ -1079,38 +1148,55 @@ export function generateWartaJemaatPDF(params: {
 }) {
   const { report, settings, posisiSummary } = params;
   const doc = new jsPDF('p', 'mm', 'a4');
+  const warta = parseWartaSemesterContent(
+    report.announcement_text,
+    report.semester,
+    report.tahun,
+    settings.church_name
+  );
 
   const afterHeaderY = drawChurchHeader(doc, settings);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(31, 36, 64);
-  doc.text(`WARNA WARTA JEMAAT: LAPORAN KEUANGAN SEMESTER ${report.semester}`, 105, afterHeaderY + 2, { align: 'center' });
+  doc.text(warta.docTitle || `WARTA JEMAAT: LAPORAN KEUANGAN SEMESTER ${report.semester}`, 105, afterHeaderY + 2, {
+    align: 'center',
+    maxWidth: 180,
+  });
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Periode: ${report.semester === 1 ? '1 Januari - 30 Juni' : '1 Juli - 31 Desember'} Tahun ${report.tahun}`, 105, afterHeaderY + 7, { align: 'center' });
+  doc.text(
+    warta.periodLabel ||
+      `Periode: ${report.semester === 1 ? '1 Januari - 30 Juni' : '1 Juli - 31 Desember'} Tahun ${report.tahun}`,
+    105,
+    afterHeaderY + 8,
+    { align: 'center' }
+  );
 
-  // Announcement Box
-  const annY = afterHeaderY + 14;
+  // Announcement Box (dynamic height to fit custom text cleanly)
+  const annY = afterHeaderY + 15;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  const wrappedBody = doc.splitTextToSize(warta.bodyText || '', 170);
+  const boxHeight = Math.max(36, 17 + wrappedBody.length * 4.4);
+
   doc.setFillColor(245, 248, 255);
   doc.setDrawColor(200, 215, 245);
-  doc.roundedRect(15, annY, 180, 48, 2, 2, 'FD');
+  doc.roundedRect(15, annY, 180, boxHeight, 2, 2, 'FD');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(40, 70, 140);
-  doc.text('Warta Keuangan Terbuka untuk Seluruh Warga Jemaat:', 20, annY + 7);
+  doc.text(warta.boxTitle || 'Warta Keuangan Terbuka untuk Seluruh Warga Jemaat:', 20, annY + 7, { maxWidth: 170 });
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(40, 45, 70);
-  const textBody =
-    report.announcement_text ||
-    `Puji syukur kepada Tuhan Yang Maha Esa atas berkat dan penyertaan-Nya bagi pelayanan HKBP Ressort Hutaraja. Laporan Keuangan Semester ${report.semester} Tahun ${report.tahun} telah selesai diperiksa secara independen oleh Badan Audit Huria dan diterima oleh Pendeta Ressort. Seluruh persembahan (pelean) dan pengeluaran pelayanan dikelola dengan penuh tanggung jawab demi kemuliaan nama Tuhan.`;
-  doc.text(textBody, 20, annY + 13, { maxWidth: 170, lineHeightFactor: 1.4 });
+  doc.text(wrappedBody, 20, annY + 13, { lineHeightFactor: 1.4 });
 
   // Summary Table (Aggregate only - without individual donor privacy leak)
-  const tblY = annY + 54;
+  const tblY = annY + boxHeight + 7;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(31, 36, 64);
@@ -1140,14 +1226,24 @@ export function generateWartaJemaatPDF(params: {
     margin: { left: 15, right: 15 },
   });
 
-  const footerY = (doc as any).lastAutoTable.finalY + 10;
+  const afterTableY = (doc as any).lastAutoTable.finalY + 9;
   doc.setFont('helvetica', 'italic');
   doc.setFontSize(8);
   doc.setTextColor(110, 115, 135);
-  doc.text('Catatan: Rincian buku kas masing-masing seksi dan bukti kwitansi dapat dilihat di papan pengumuman sekretariat huria.', 15, footerY);
+  const footerNoteLines = warta.pdfFooterNote
+    ? doc.splitTextToSize(warta.pdfFooterNote, 180)
+    : [];
+  if (footerNoteLines.length > 0) {
+    doc.text(footerNoteLines, 15, afterTableY);
+  }
+  const quoteY = afterTableY + Math.max(0, footerNoteLines.length * 4) + (footerNoteLines.length > 0 ? 2 : 0);
+  const quoteLines = warta.closingQuote ? doc.splitTextToSize(warta.closingQuote, 180) : [];
+  if (quoteLines.length > 0) {
+    doc.text(quoteLines, 105, quoteY, { align: 'center' });
+  }
 
   // Signatures
-  const signY = footerY + 12;
+  const signY = quoteY + Math.max(6, quoteLines.length * 4 + 6);
   const todayIndo = formatDateIndo(report.announced_date || new Date());
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);

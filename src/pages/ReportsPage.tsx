@@ -33,6 +33,9 @@ import {
   Wallet,
   Unlock,
   X,
+  Edit2,
+  RotateCcw,
+  Save,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -47,6 +50,10 @@ import {
   generateLpjTahunanPDF,
   generateWartaKeuanganMingguanPDF,
   KasWeeklyReportData,
+  WartaSemesterContent,
+  getDefaultWartaSemesterContent,
+  parseWartaSemesterContent,
+  serializeWartaSemesterContent,
 } from '../lib/exportUtils';
 import { SemesterReport, LpjReport } from '../types/database';
 import {
@@ -81,6 +88,7 @@ export const ReportsPage: React.FC = () => {
     forwardSemesterToPastor,
     acknowledgeSemesterReport,
     announceSemesterReport,
+    saveSemesterWartaText,
     returnSemesterReport,
     evaluateLpjChecklist,
     lockLpjSnapshot,
@@ -195,6 +203,24 @@ export const ReportsPage: React.FC = () => {
   );
   const effectiveSemesterReportId = currentSemesterReport?.id || `sem-rep-${selectedYear}-${selectedSemester}`;
 
+  // Custom Warta Jemaat Semester Text State & Parsed Content
+  const currentWartaContent = useMemo(
+    () =>
+      parseWartaSemesterContent(
+        currentSemesterReport?.announcement_text,
+        selectedSemester,
+        selectedYear,
+        settings.church_name
+      ),
+    [currentSemesterReport?.announcement_text, selectedSemester, selectedYear, settings.church_name]
+  );
+  const [isEditingWartaText, setIsEditingWartaText] = useState<boolean>(false);
+  const [wartaDraft, setWartaDraft] = useState<WartaSemesterContent>(() =>
+    getDefaultWartaSemesterContent(selectedSemester, selectedYear, settings.church_name)
+  );
+  const [isSavingWartaText, setIsSavingWartaText] = useState<boolean>(false);
+  const canEditWartaText = isAdmin || isLeader || isSecretary || isPastor;
+
   // Find Current LPJ Report (exact match for year)
   const currentLpjReport = useMemo(
     () => lpjReports.find((l) => l.tahun === selectedYear),
@@ -208,6 +234,7 @@ export const ReportsPage: React.FC = () => {
     setLpjLockError(null);
     setActiveDispensationKey(null);
     setDispensationReason('');
+    setIsEditingWartaText(false);
   }, [selectedYear, selectedSemester, activeTab]);
 
   // Live Checklist Evaluations (always computed from live transactions/closings/reconciliations + exceptions)
@@ -409,9 +436,23 @@ export const ReportsPage: React.FC = () => {
 
   // Copy Warta Jemaat Text Handler
   const handleCopyWartaText = () => {
-    const textToCopy =
-      currentSemesterReport?.announcement_text ||
-      `Warta Keuangan Semester ${selectedSemester} Tahun ${selectedYear} ${settings.church_name || 'HKBP Ressort Hutaraja'}: Total Penerimaan ${formatRupiah(semesterSummary.totalPenerimaan)}, Total Pengeluaran ${formatRupiah(semesterSummary.totalPengeluaran)}, Surplus/Defisit ${formatRupiah(semesterSummary.surplus)}, Saldo Kas & Bank Akhir Periode ${formatRupiah(semesterSummary.totalKas)}.`;
+    const activeWarta = isEditingWartaText ? wartaDraft : currentWartaContent;
+    const textToCopy = [
+      activeWarta.previewHeading,
+      activeWarta.periodLabel,
+      '',
+      activeWarta.boxTitle,
+      activeWarta.bodyText,
+      '',
+      `1. Total Penerimaan Kas & Pelean: ${formatRupiah(semesterSummary.totalPenerimaan)}`,
+      `2. Total Pengeluaran Pelayanan: ${formatRupiah(semesterSummary.totalPengeluaran)}`,
+      `3. Surplus / (Defisit) Operasional Semester: ${formatRupiah(semesterSummary.surplus)}`,
+      `4. Saldo Kas & Bank Per Akhir Periode: ${formatRupiah(semesterSummary.totalKas)}`,
+      '',
+      activeWarta.closingQuote,
+    ]
+      .filter((line, idx, arr) => !(line === '' && arr[idx - 1] === ''))
+      .join('\n');
     navigator.clipboard.writeText(textToCopy);
     setCopiedWarta(true);
     setTimeout(() => setCopiedWarta(false), 3000);
@@ -1402,7 +1443,7 @@ export const ReportsPage: React.FC = () => {
 
               <button
                 onClick={() => {
-                  const reportForPdf: SemesterReport = currentSemesterReport || {
+                  const baseReport: SemesterReport = currentSemesterReport || {
                     id: effectiveSemesterReportId,
                     tahun: selectedYear,
                     semester: selectedSemester,
@@ -1410,6 +1451,9 @@ export const ReportsPage: React.FC = () => {
                     version: 1,
                     checklist_result: liveSemesterChecklist.checklist,
                   };
+                  const reportForPdf: SemesterReport = isEditingWartaText
+                    ? { ...baseReport, announcement_text: serializeWartaSemesterContent(wartaDraft) }
+                    : baseReport;
                   generateWartaJemaatPDF({
                     report: reportForPdf,
                     settings,
@@ -1661,66 +1705,249 @@ export const ReportsPage: React.FC = () => {
 
             {/* Warta Jemaat Public Preview Box */}
             <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-3">
                 <div className="flex items-center gap-2">
                   <Printer className="w-4 h-4 text-[#7C9CF5]" />
                   <h3 className="font-bold text-gray-900 text-sm">Pratinjau Ringkasan Warta Jemaat (Ramah Publik)</h3>
                 </div>
-                <span className="text-xs text-gray-500 font-medium">
-                  Status:{' '}
-                  {currentSemesterReport?.status === 'announced'
-                    ? 'Telah Diwartakan'
-                    : currentSemesterReport?.status === 'sent_to_pastor'
-                    ? 'Diteruskan ke Pendeta'
-                    : currentSemesterReport?.status === 'drafted'
-                    ? 'Snapshot Terkunci'
-                    : 'Draf Warta'}
-                </span>
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xs text-gray-500 font-medium">
+                    Status:{' '}
+                    {currentSemesterReport?.status === 'announced'
+                      ? 'Telah Diwartakan'
+                      : currentSemesterReport?.status === 'sent_to_pastor'
+                      ? 'Diteruskan ke Pendeta'
+                      : currentSemesterReport?.status === 'drafted'
+                      ? 'Snapshot Terkunci'
+                      : 'Draf Warta'}
+                  </span>
+                  {canEditWartaText && !isEditingWartaText && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWartaDraft({ ...currentWartaContent });
+                        setIsEditingWartaText(true);
+                      }}
+                      className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1.5 transition-colors"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>Ubah Teks Warta</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="p-4 rounded-xl bg-gray-50/70 border border-gray-200 text-xs text-gray-700 leading-relaxed space-y-3 font-serif">
-                <p className="font-bold text-gray-900 text-center uppercase tracking-wide">
-                  LAPORAN KEUANGAN HURIA & SEKSI SEMESTER {selectedSemester} TAHUN {selectedYear}
-                </p>
-
-                <p>
-                  {currentSemesterReport?.announcement_text ||
-                    `Puji syukur kepada Tuhan Yang Maha Esa atas berkat dan penyertaan-Nya bagi peribadahan dan pelayanan di HKBP Ressort Hutaraja. Laporan Keuangan Semester ${selectedSemester} Tahun ${selectedYear} telah diperiksa secara tertib oleh Badan Audit Huria dengan opini Wajar Tanpa Pengecualian dan telah diterima oleh Pendeta Ressort.`}
-                </p>
-
-                <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-1.5 font-sans">
-                  <div className="flex justify-between font-semibold">
-                    <span>1. Total Penerimaan Kas & Pelean:</span>
-                    <span className="text-emerald-700 font-mono tabular-nums">
-                      {formatRupiah(semesterSummary.totalPenerimaan)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between font-semibold">
-                    <span>2. Total Pengeluaran Pelayanan:</span>
-                    <span className="text-rose-700 font-mono tabular-nums">
-                      {formatRupiah(semesterSummary.totalPengeluaran)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between font-bold pt-1 border-t border-gray-100">
-                    <span>3. Surplus / (Defisit) Operasional Semester:</span>
-                    <span
-                      className={`font-mono tabular-nums ${
-                        semesterSummary.surplus >= 0 ? 'text-blue-700' : 'text-rose-700'
-                      }`}
+              {isEditingWartaText && canEditWartaText ? (
+                <div className="p-4 rounded-xl bg-blue-50/40 border border-blue-200 space-y-3 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="font-bold text-blue-950">Sesuaikan Isi Teks Warta Jemaat Semester</p>
+                      <p className="text-[11px] text-blue-800/80">
+                        Perubahan akan diterapkan pada pratinjau layar, teks salinan, dan file PDF Warta Jemaat.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setWartaDraft(
+                          getDefaultWartaSemesterContent(selectedSemester, selectedYear, settings.church_name)
+                        )
+                      }
+                      className="px-2.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1"
                     >
-                      {formatRupiah(semesterSummary.surplus)}
-                    </span>
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Reset Standar</span>
+                    </button>
                   </div>
-                  <div className="flex justify-between font-bold text-gray-900 pt-1">
-                    <span>4. Saldo Kas & Bank Per Akhir Periode:</span>
-                    <span className="font-mono tabular-nums">{formatRupiah(semesterSummary.totalKas)}</span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Judul Dokumen Warta (Header PDF)
+                      </label>
+                      <input
+                        type="text"
+                        value={wartaDraft.docTitle}
+                        onChange={(e) => setWartaDraft((prev) => ({ ...prev, docTitle: e.target.value }))}
+                        className="w-full p-2 rounded-xl border border-slate-200 bg-white text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Keterangan Periode
+                      </label>
+                      <input
+                        type="text"
+                        value={wartaDraft.periodLabel}
+                        onChange={(e) => setWartaDraft((prev) => ({ ...prev, periodLabel: e.target.value }))}
+                        className="w-full p-2 rounded-xl border border-slate-200 bg-white text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Judul Kotak Pengantar Warta
+                      </label>
+                      <input
+                        type="text"
+                        value={wartaDraft.boxTitle}
+                        onChange={(e) => setWartaDraft((prev) => ({ ...prev, boxTitle: e.target.value }))}
+                        className="w-full p-2 rounded-xl border border-slate-200 bg-white text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Judul Ringkasan Pratinjau
+                      </label>
+                      <input
+                        type="text"
+                        value={wartaDraft.previewHeading}
+                        onChange={(e) => setWartaDraft((prev) => ({ ...prev, previewHeading: e.target.value }))}
+                        className="w-full p-2 rounded-xl border border-slate-200 bg-white text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Isi Narasi / Pengantar Warta Keuangan Jemaat
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={wartaDraft.bodyText}
+                      onChange={(e) => setWartaDraft((prev) => ({ ...prev, bodyText: e.target.value }))}
+                      placeholder="Tuliskan redaksi warta keuangan untuk disampaikan kepada jemaat..."
+                      className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-xs leading-relaxed focus:outline-hidden focus:ring-2 focus:ring-blue-400"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Kalimat Penutup / Ayat (Pratinjau &amp; PDF)
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={wartaDraft.closingQuote}
+                        onChange={(e) => setWartaDraft((prev) => ({ ...prev, closingQuote: e.target.value }))}
+                        className="w-full p-2 rounded-xl border border-slate-200 bg-white text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Catatan Kaki Dokumen PDF
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={wartaDraft.pdfFooterNote}
+                        onChange={(e) => setWartaDraft((prev) => ({ ...prev, pdfFooterNote: e.target.value }))}
+                        className="w-full p-2 rounded-xl border border-slate-200 bg-white text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-blue-200/70">
+                    <button
+                      type="button"
+                      disabled={isSavingWartaText}
+                      onClick={() => setIsEditingWartaText(false)}
+                      className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-medium disabled:opacity-50"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSavingWartaText}
+                      onClick={async () => {
+                        setIsSavingWartaText(true);
+                        const serialized = serializeWartaSemesterContent({
+                          docTitle: wartaDraft.docTitle.trim() || getDefaultWartaSemesterContent(selectedSemester, selectedYear, settings.church_name).docTitle,
+                          periodLabel: wartaDraft.periodLabel.trim() || getDefaultWartaSemesterContent(selectedSemester, selectedYear, settings.church_name).periodLabel,
+                          previewHeading: wartaDraft.previewHeading.trim() || getDefaultWartaSemesterContent(selectedSemester, selectedYear, settings.church_name).previewHeading,
+                          boxTitle: wartaDraft.boxTitle.trim() || getDefaultWartaSemesterContent(selectedSemester, selectedYear, settings.church_name).boxTitle,
+                          bodyText: wartaDraft.bodyText.trim(),
+                          closingQuote: wartaDraft.closingQuote.trim(),
+                          pdfFooterNote: wartaDraft.pdfFooterNote.trim(),
+                        });
+                        const res = await saveSemesterWartaText(
+                          effectiveSemesterReportId,
+                          { tahun: selectedYear, semester: selectedSemester },
+                          serialized
+                        );
+                        setIsSavingWartaText(false);
+                        if (res.success) {
+                          setIsEditingWartaText(false);
+                          showToast('Teks Warta Jemaat Semester berhasil disimpan.');
+                        } else {
+                          showToast(res.error || 'Gagal menyimpan teks Warta Jemaat.', 'error');
+                        }
+                      }}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{isSavingWartaText ? 'Menyimpan...' : 'Simpan Teks Warta'}</span>
+                    </button>
                   </div>
                 </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-gray-50/70 border border-gray-200 text-xs text-gray-700 leading-relaxed space-y-3 font-serif">
+                  <div className="text-center space-y-0.5">
+                    <p className="font-bold text-gray-900 uppercase tracking-wide">
+                      {currentWartaContent.previewHeading}
+                    </p>
+                    <p className="text-[11px] font-sans text-gray-500">{currentWartaContent.periodLabel}</p>
+                  </div>
 
-                <p className="text-[11px] text-gray-500 italic text-center">
-                  "Segala kemuliaan bagi Allah Bapa, Anak, dan Roh Kudus. Terima kasih atas partisipasi dan persembahan seluruh warga jemaat."
-                </p>
-              </div>
+                  <div className="p-3 rounded-lg bg-blue-50/60 border border-blue-200/80 space-y-1 font-sans">
+                    <p className="text-[11px] font-bold text-blue-900">{currentWartaContent.boxTitle}</p>
+                    <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">
+                      {currentWartaContent.bodyText}
+                    </p>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-1.5 font-sans">
+                    <div className="flex justify-between font-semibold">
+                      <span>1. Total Penerimaan Kas & Pelean:</span>
+                      <span className="text-emerald-700 font-mono tabular-nums">
+                        {formatRupiah(semesterSummary.totalPenerimaan)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between font-semibold">
+                      <span>2. Total Pengeluaran Pelayanan:</span>
+                      <span className="text-rose-700 font-mono tabular-nums">
+                        {formatRupiah(semesterSummary.totalPengeluaran)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between font-bold pt-1 border-t border-gray-100">
+                      <span>3. Surplus / (Defisit) Operasional Semester:</span>
+                      <span
+                        className={`font-mono tabular-nums ${
+                          semesterSummary.surplus >= 0 ? 'text-blue-700' : 'text-rose-700'
+                        }`}
+                      >
+                        {formatRupiah(semesterSummary.surplus)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between font-bold text-gray-900 pt-1">
+                      <span>4. Saldo Kas & Bank Per Akhir Periode:</span>
+                      <span className="font-mono tabular-nums">{formatRupiah(semesterSummary.totalKas)}</span>
+                    </div>
+                  </div>
+
+                  {currentWartaContent.closingQuote && (
+                    <p className="text-[11px] text-gray-500 italic text-center">
+                      {currentWartaContent.closingQuote}
+                    </p>
+                  )}
+                  {currentWartaContent.pdfFooterNote && (
+                    <p className="text-[10px] font-sans text-gray-400 text-center">
+                      {currentWartaContent.pdfFooterNote}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Pastoral Forwarding / Announce button */}
               <div className="flex flex-wrap items-center justify-between gap-3 pt-2">

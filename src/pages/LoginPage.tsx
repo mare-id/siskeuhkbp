@@ -35,20 +35,20 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div className="relative min-h-screen flex flex-col justify-center px-4 py-10 overflow-hidden bg-slate-900">
-      {/* Background Foto Gereja HKBP Hutaraja */}
+      {/* Background Gereja HKBP Hutaraja (Warna Asli) */}
       <div className="pointer-events-none select-none absolute inset-0 z-0">
         <img
           src="/assets/aistudio/WhatsApp_Image_2025-05-14_at_16.01.56_15be8f1f_bea9a36b.jpg"
           alt="Gereja HKBP Hutaraja"
           aria-hidden="true"
-          className="w-full h-full object-cover object-center scale-[1.02]"
+          className="w-full h-full object-cover object-center brightness-[0.88] contrast-[1.05] scale-[1.02]"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/55 via-slate-900/35 to-slate-950/70" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/15 to-black/45" />
       </div>
 
       <div className="relative z-10 mx-auto w-full max-w-sm space-y-6">
         <div className="text-center space-y-2.5">
-          <div className="w-16 h-16 rounded-2xl bg-white/95 p-2 shadow-lg border border-white/80 flex items-center justify-center mx-auto">
+          <div className="w-16 h-16 rounded-2xl bg-white p-2 shadow-xl border border-white/90 flex items-center justify-center mx-auto">
             <img
               src="/assets/aistudio/Logo-HKBP_02090ed7.png"
               alt="Logo HKBP"
@@ -56,16 +56,16 @@ export const LoginPage: React.FC = () => {
             />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white tracking-tight drop-shadow-sm">
+            <h1 className="text-xl font-bold text-white tracking-tight drop-shadow-[0_2px_6px_rgba(15,23,42,0.75)]">
               SISKEU HKBP Hutaraja
             </h1>
-            <p className="text-xs text-slate-100 mt-0.5 font-medium drop-shadow-sm">
+            <p className="text-xs text-white mt-0.5 font-medium drop-shadow-[0_1px_4px_rgba(15,23,42,0.75)]">
               Masuk dengan akun pengurus &amp; pelayan gereja
             </p>
           </div>
         </div>
 
-        <div className="bg-white/95 backdrop-blur-md p-6 sm:p-7 rounded-2xl border border-white/80 shadow-2xl space-y-4">
+        <div className="bg-white/95 backdrop-blur-md p-6 sm:p-7 rounded-2xl border border-white shadow-[0_20px_50px_rgba(3,8,24,0.55)] space-y-4">
           {error && (
             <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -125,7 +125,7 @@ export const LoginPage: React.FC = () => {
           </form>
         </div>
 
-        <p className="text-center text-[11px] text-slate-100 font-medium drop-shadow-sm">
+        <p className="text-center text-[11px] text-white font-medium drop-shadow-[0_1px_4px_rgba(15,23,42,0.75)]">
           Pengelolaan akun oleh Administrator HKBP Hutaraja
         </p>
       </div>

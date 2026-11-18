@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { formatRupiah, formatDateIndo } from '../lib/formatters';
 import { generateBeritaAcaraAuditPDF } from '../lib/exportUtils';
 import {
@@ -59,6 +60,9 @@ export const AuditPage: React.FC = () => {
     cashCounts,
     kasList,
     storageAccounts,
+    openingBalances,
+    getKasBalances,
+    getStorageBalances,
     categories,
     profiles,
     settings,
@@ -79,6 +83,7 @@ export const AuditPage: React.FC = () => {
   } = useData();
 
   const { currentUser, isAdmin } = useAuth();
+  const globalToast = useToast();
 
   // Active sub-navigation
   const [activeTab, setActiveTab] = useState<'transaksi' | 'berkala' | 'pemeriksaan' | 'temuan' | 'opname' | 'anggota' | 'arsip'>('transaksi');
@@ -135,8 +140,27 @@ export const AuditPage: React.FC = () => {
   const [closingNotes, setClosingNotes] = useState<string>('');
 
   // Cash Count Calculator State
+  const cashStorages = useMemo(
+    () => storageAccounts.filter((s) => s.tipe === 'cash'),
+    [storageAccounts]
+  );
   const [ccKasId, setCcKasId] = useState<string>(kasList[0]?.id || '');
-  const [ccStorageId, setCcStorageId] = useState<string>(storageAccounts[0]?.id || '');
+  const [ccStorageId, setCcStorageId] = useState<string>(
+    storageAccounts.find((s) => s.tipe === 'cash')?.id || storageAccounts[0]?.id || ''
+  );
+
+  useEffect(() => {
+    if (kasList.length > 0 && !kasList.some((k) => k.id === ccKasId)) {
+      setCcKasId(kasList[0].id);
+    }
+  }, [kasList, ccKasId]);
+
+  useEffect(() => {
+    if (cashStorages.length > 0 && !cashStorages.some((s) => s.id === ccStorageId)) {
+      setCcStorageId(cashStorages[0].id);
+    }
+  }, [cashStorages, ccStorageId]);
+
   const [ccWitness, setCcWitness] = useState<string>('');
   const [ccExplanation, setCcExplanation] = useState<string>('');
   const [ccPhotoUrl, setCcPhotoUrl] = useState<string>('');
@@ -166,6 +190,7 @@ export const AuditPage: React.FC = () => {
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ text, type });
+    globalToast.showToast(text, type);
     setTimeout(() => setToastMessage(null), 4000);
   };
 
@@ -218,6 +243,42 @@ export const AuditPage: React.FC = () => {
     });
     return total;
   }, [cashDenominations]);
+
+  // Real Book Balance for selected Kas & Storage Account
+  const calculatedBookBalance = useMemo(() => {
+    if (!ccKasId || !ccStorageId) return 0;
+    const initial = openingBalances
+      .filter((ob) => ob.kas_id === ccKasId && ob.storage_account_id === ccStorageId)
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+    let mutasi = 0;
+    transactions
+      .filter(
+        (tx) =>
+          tx.kas_id === ccKasId &&
+          tx.storage_account_id === ccStorageId &&
+          tx.status === 'approved'
+      )
+      .forEach((tx) => {
+        const amt = Number(tx.amount || 0);
+        if (tx.type === 'income' || tx.type === 'transfer_in') mutasi += amt;
+        else if (tx.type === 'expense' || tx.type === 'transfer_out') mutasi -= amt;
+      });
+
+    return initial + mutasi;
+  }, [openingBalances, transactions, ccKasId, ccStorageId]);
+
+  const selectedKasBookTotal = useMemo(() => {
+    if (!ccKasId) return 0;
+    return getKasBalances().find((k) => k.kas_id === ccKasId)?.saldo_resmi || 0;
+  }, [getKasBalances, ccKasId]);
+
+  const selectedStorageBookTotal = useMemo(() => {
+    if (!ccStorageId) return 0;
+    return getStorageBalances().find((s) => s.storage_account_id === ccStorageId)?.saldo_saat_ini || 0;
+  }, [getStorageBalances, ccStorageId]);
+
+  const cashCountDifference = calculatedPhysicalBalance - calculatedBookBalance;
 
   // Period mapping helper
   const getTxPeriod = (tgl: string) => {
@@ -438,9 +499,7 @@ export const AuditPage: React.FC = () => {
 
   // Handle Record Cash Count
   const handleRecordCashCount = async () => {
-    // Look up current book balance from transactions
-    const targetKas = kasList.find((k) => k.id === ccKasId);
-    const bookBalance = targetKas ? 5450000 : 0; // fallback standard
+    const bookBalance = calculatedBookBalance;
 
     const res = await recordCashCount({
       kas_id: ccKasId,
@@ -1756,29 +1815,44 @@ export const AuditPage: React.FC = () => {
                 <div className="mt-4 space-y-3">
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-gray-500">Total Hitung Fisik:</span>
-                    <span className="font-bold text-base text-gray-900">{formatRupiah(calculatedPhysicalBalance)}</span>
+                    <span className="font-bold font-mono text-base text-gray-900 tabular-nums">
+                      {formatRupiah(calculatedPhysicalBalance)}
+                    </span>
                   </div>
 
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-gray-500">Saldo Buku Kas:</span>
-                    <span className="font-semibold text-sm text-gray-700">{formatRupiah(5450000)}</span>
+                    <span className="font-semibold font-mono text-sm text-gray-700 tabular-nums">
+                      {formatRupiah(calculatedBookBalance)}
+                    </span>
                   </div>
+
+                  {(selectedKasBookTotal !== calculatedBookBalance || selectedStorageBookTotal !== calculatedBookBalance) && (
+                    <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600 space-y-1">
+                      <div className="flex justify-between">
+                        <span>Total Saldo Kas ini (semua tempat):</span>
+                        <span className="font-mono font-semibold tabular-nums">{formatRupiah(selectedKasBookTotal)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Total Tunai di Brankas ini (semua kas):</span>
+                        <span className="font-mono font-semibold tabular-nums">{formatRupiah(selectedStorageBookTotal)}</span>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="pt-3 border-t border-gray-100 flex justify-between items-center text-xs">
                     <span className="font-semibold text-gray-700">Selisih Fisik:</span>
                     <span
-                      className={`font-bold text-sm ${
-                        calculatedPhysicalBalance - 5450000 === 0
-                          ? 'text-emerald-600'
-                          : 'text-rose-600'
+                      className={`font-bold font-mono text-sm tabular-nums ${
+                        cashCountDifference === 0 ? 'text-emerald-600' : 'text-rose-600'
                       }`}
                     >
-                      {formatRupiah(calculatedPhysicalBalance - 5450000)}
+                      {formatRupiah(cashCountDifference)}
                     </span>
                   </div>
                 </div>
 
-                {calculatedPhysicalBalance - 5450000 === 0 ? (
+                {cashCountDifference === 0 ? (
                   <div className="mt-4 p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
                     <span>Nihil Selisih. Fisik uang cocok persis dengan saldo buku.</span>

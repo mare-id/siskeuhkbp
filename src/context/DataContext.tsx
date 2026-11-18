@@ -2055,10 +2055,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       created_at: new Date().toISOString(),
     };
 
-    setReconciliations((prev) => [newRec, ...prev]);
     if (isSupabaseConfigured) {
-      await syncInsert('reconciliations', newRec);
+      const syncRes = await syncInsert('reconciliations', newRec);
+      if (!syncRes.success) {
+        return { success: false, error: `Gagal menyimpan rekonsiliasi ke database: ${syncRes.error}` };
+      }
     }
+    setReconciliations((prev) => [newRec, ...prev]);
     addAuditLog('reconciliations', newRec.id, 'INSERT', null, newRec, 'Rekonsiliasi saldo disimpan');
     return { success: true };
   };

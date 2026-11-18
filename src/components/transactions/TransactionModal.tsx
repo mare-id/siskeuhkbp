@@ -394,16 +394,20 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/60 backdrop-blur-xs">
       <div
-        className={`bg-white sm:rounded-2xl rounded-t-2xl w-full max-h-[92vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200 ${
+        className={`bg-white sm:rounded-2xl rounded-t-3xl w-full max-h-[92dvh] flex flex-col overflow-hidden shadow-2xl border border-slate-200 mobile-sheet-enter ${
           type === 'income' && incomeMode === 'multi' ? 'sm:max-w-2xl' : 'sm:max-w-lg'
         }`}
       >
+        {/* Mobile Drag Handle */}
+        <div className="sm:hidden flex justify-center pt-2.5 pb-1 shrink-0">
+          <div className="w-10 h-1 rounded-full bg-slate-300" />
+        </div>
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-3.5 border-b border-slate-100 shrink-0">
           <h3 className="font-bold text-sm sm:text-base text-slate-900">Catat Transaksi</h3>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+            className="p-2 sm:p-1.5 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
             aria-label="Tutup"
           >
             <X className="w-5 h-5" />
@@ -661,13 +665,13 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
 
           {/* MULTI-POS INCOME (UCAPAN SYUKUR / RINCIAN) */}
           {type === 'income' && incomeMode === 'multi' && (
-            <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2.5">
+            <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2.5 overflow-x-hidden">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs font-bold text-slate-800">Rincian Alokasi Kas</span>
                 <button
                   type="button"
                   onClick={handleApplyUcapanSyukurTemplate}
-                  className="px-3.5 py-2 min-h-[36px] bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white border border-emerald-700/20 rounded-lg text-xs font-semibold shadow-xs inline-flex items-center gap-1.5 cursor-pointer transition-all whitespace-nowrap"
+                  className="px-3.5 py-2 min-h-[44px] sm:min-h-[36px] bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white border border-emerald-700/20 rounded-lg text-xs font-semibold shadow-xs inline-flex items-center gap-1.5 cursor-pointer transition-all whitespace-nowrap"
                 >
                   <Sparkles className="w-3.5 h-3.5 shrink-0" />
                   <span>Contoh Ucapan Syukur</span>
@@ -683,7 +687,7 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
                   return (
                     <div
                       key={row.rowId}
-                      className="p-2.5 bg-white rounded-xl border border-slate-200 space-y-2 text-xs"
+                      className="p-2.5 bg-white rounded-xl border border-slate-200 space-y-2 text-xs min-w-0"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[11px] font-bold text-slate-500">#{idx + 1}</span>
@@ -924,11 +928,11 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
         </div>
 
         {/* Sticky Footer */}
-        <div className="px-5 py-3.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-2 shrink-0">
+        <div className="px-4 sm:px-5 pt-3.5 pb-[calc(0.875rem+env(safe-area-inset-bottom,0px))] sm:pb-3.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-2 shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="h-10 px-3.5 text-xs font-semibold text-slate-600 hover:bg-slate-200/60 rounded-xl transition-colors"
+            className="min-h-[44px] sm:min-h-0 sm:h-10 px-3.5 text-xs font-semibold text-slate-600 hover:bg-slate-200/60 rounded-xl transition-colors"
           >
             Batal
           </button>
@@ -937,7 +941,7 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
               type="button"
               disabled={isSubmitting}
               onClick={() => handleSave(false)}
-              className="h-10 px-3.5 text-xs font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 rounded-xl transition-colors"
+              className="min-h-[44px] sm:min-h-0 sm:h-10 px-3.5 text-xs font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 rounded-xl transition-colors"
             >
               Simpan Draft
             </button>
@@ -945,7 +949,7 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
               type="button"
               disabled={isSubmitting}
               onClick={() => handleSave(true)}
-              className="h-10 px-4 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors"
+              className="min-h-[44px] sm:min-h-0 sm:h-10 px-4 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors"
             >
               Ajukan
             </button>

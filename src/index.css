@@ -115,3 +115,58 @@ body {
     display: block !important;
   }
 }
+
+/* ======================================================================== */
+/* MOBILE-FIRST ADAPTIVE ERGONOMICS (Strictly scoped; Desktop untouched)   */
+/* ======================================================================== */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+@keyframes slideUpSheet {
+  from {
+    transform: translateY(24px);
+    opacity: 0.92;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 767px) {
+  /* Native-like tap feel & zero 300ms delay */
+  button, a, select, input, textarea, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /* Prevent iOS Safari auto-zoom when focusing form fields */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(.no-zoom-guard),
+  select:not(.no-zoom-guard),
+  textarea:not(.no-zoom-guard) {
+    font-size: 16px;
+  }
+
+  /* Comfortable thumb touch targets inside forms & modals on mobile */
+  form button,
+  form select,
+  form input:not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
+    min-height: 44px;
+  }
+
+  .mobile-sheet-enter {
+    animation: slideUpSheet 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-sheet-enter {
+    animation: none !important;
+  }
+}
+

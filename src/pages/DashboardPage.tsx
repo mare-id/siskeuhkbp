@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   Clock,
@@ -38,8 +38,11 @@ import {
 } from 'recharts';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
+import { Transaction } from '../types/database';
 import { formatRupiah, formatDateIndo } from '../lib/formatters';
 import { evaluateBpskRemittanceCompliance, PPKU_BPSK_DEADLINE_DAYS } from '../lib/ppkuRules';
+import { MobileTransactionDetailModal } from '../components/transactions/MobileTransactionDetailModal';
+import { AttachmentPreviewModal } from '../components/transactions/AttachmentPreviewModal';
 
 const CHART_COLORS = ['#1E3A8A', '#0D9488', '#B45309', '#BE123C', '#4F46E5', '#475569', '#0891B2'];
 
@@ -91,6 +94,9 @@ export const DashboardPage: React.FC = () => {
     semesterReports,
     isYearLockedByLpj,
   } = useData();
+
+  const [detailTx, setDetailTx] = useState<Transaction | null>(null);
+  const [previewAttachmentUrl, setPreviewAttachmentUrl] = useState<string | null>(null);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -222,7 +228,7 @@ export const DashboardPage: React.FC = () => {
   return (
     <div className="space-y-5 w-full max-w-7xl mx-auto min-w-0">
       {/* Compact Executive Header Banner */}
-      <div className="card-navy rounded-2xl p-5 sm:p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="card-navy rounded-2xl p-4 sm:p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="space-y-1 min-w-0">
           <div className="text-xs text-slate-300 flex items-center gap-2 flex-wrap">
             <span>{settings.church_name || 'HKBP Ressort Hutaraja'}</span>
@@ -242,11 +248,11 @@ export const DashboardPage: React.FC = () => {
           </h1>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0">
           {isAdmin && myPendingApprovals.length > 0 && (
             <NavLink
               to="/approvals"
-              className="px-3.5 py-2.5 min-h-[40px] bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
+              className="px-3.5 py-2.5 min-h-[44px] sm:min-h-[40px] bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
             >
               <Clock className="w-4 h-4 shrink-0" />
               <span>{myPendingApprovals.length} Antrean Persetujuan</span>
@@ -256,7 +262,7 @@ export const DashboardPage: React.FC = () => {
           {!isAdmin && canApproveAnyActiveKas && myPendingApprovals.length > 0 && (
             <NavLink
               to="/approvals"
-              className="px-3.5 py-2.5 min-h-[40px] bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
+              className="px-3.5 py-2.5 min-h-[44px] sm:min-h-[40px] bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
             >
               <Clock className="w-4 h-4 shrink-0" />
               <span>{myPendingApprovals.length} Menunggu Persetujuan</span>
@@ -266,7 +272,7 @@ export const DashboardPage: React.FC = () => {
           {isAuditor && pendingAuditFindings.length > 0 && (
             <NavLink
               to="/audit"
-              className="px-3.5 py-2.5 min-h-[40px] bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
+              className="px-3.5 py-2.5 min-h-[44px] sm:min-h-[40px] bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
             >
               <ShieldCheck className="w-4 h-4 shrink-0" />
               <span>{pendingAuditFindings.length} Temuan Audit</span>
@@ -276,7 +282,7 @@ export const DashboardPage: React.FC = () => {
           {canRecordAnyActiveKas && myActionNeeded.length > 0 && (
             <NavLink
               to="/transactions"
-              className="px-3.5 py-2.5 min-h-[40px] bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
+              className="px-3.5 py-2.5 min-h-[44px] sm:min-h-[40px] bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
             >
               <Clock className="w-4 h-4 shrink-0" />
               <span>{myActionNeeded.length} Draf/Revisi</span>
@@ -286,7 +292,7 @@ export const DashboardPage: React.FC = () => {
           {canRecordAnyActiveKas ? (
             <NavLink
               to="/transactions"
-              className="px-4 py-2.5 min-h-[40px] bg-white text-slate-900 hover:bg-slate-100 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
+              className="px-4 py-2.5 min-h-[44px] sm:min-h-[40px] bg-white text-slate-900 hover:bg-slate-100 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
             >
               <Receipt className="w-4 h-4 shrink-0 text-blue-700" />
               <span>Catat &amp; Kelola Transaksi</span>
@@ -294,7 +300,7 @@ export const DashboardPage: React.FC = () => {
           ) : isAuditor ? (
             <NavLink
               to="/audit"
-              className="px-4 py-2.5 min-h-[40px] bg-white text-slate-900 hover:bg-slate-100 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
+              className="px-4 py-2.5 min-h-[44px] sm:min-h-[40px] bg-white text-slate-900 hover:bg-slate-100 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
             >
               <ShieldCheck className="w-4 h-4 shrink-0 text-purple-700" />
               <span>Modul Badan Audit</span>
@@ -302,7 +308,7 @@ export const DashboardPage: React.FC = () => {
           ) : canApproveAnyActiveKas && !canRecordAnyActiveKas ? (
             <NavLink
               to="/approvals"
-              className="px-4 py-2.5 min-h-[40px] bg-white text-slate-900 hover:bg-slate-100 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
+              className="px-4 py-2.5 min-h-[44px] sm:min-h-[40px] bg-white text-slate-900 hover:bg-slate-100 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
             >
               <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-700" />
               <span>Persetujuan Kas</span>
@@ -310,7 +316,7 @@ export const DashboardPage: React.FC = () => {
           ) : isSekretaris ? (
             <NavLink
               to="/reports?tab=warta"
-              className="px-4 py-2.5 min-h-[40px] bg-white text-slate-900 hover:bg-slate-100 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
+              className="px-4 py-2.5 min-h-[44px] sm:min-h-[40px] bg-white text-slate-900 hover:bg-slate-100 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
             >
               <FileText className="w-4 h-4 shrink-0 text-blue-700" />
               <span>Warta Mingguan</span>
@@ -318,7 +324,7 @@ export const DashboardPage: React.FC = () => {
           ) : (
             <NavLink
               to="/reports?tab=semester"
-              className="px-4 py-2.5 min-h-[40px] bg-white text-slate-900 hover:bg-slate-100 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
+              className="px-4 py-2.5 min-h-[44px] sm:min-h-[40px] bg-white text-slate-900 hover:bg-slate-100 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
             >
               <FileText className="w-4 h-4 shrink-0 text-blue-700" />
               <span>Laporan Keuangan</span>
@@ -327,7 +333,7 @@ export const DashboardPage: React.FC = () => {
 
           <NavLink
             to="/guide"
-            className="px-3.5 py-2.5 min-h-[40px] bg-white/10 hover:bg-white/15 text-white border border-white/20 text-xs font-medium rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
+            className="px-3.5 py-2.5 min-h-[44px] sm:min-h-[40px] bg-white/10 hover:bg-white/15 text-white border border-white/20 text-xs font-medium rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
           >
             <BookOpen className="w-3.5 h-3.5 shrink-0" />
             <span>Panduan</span>
@@ -414,17 +420,17 @@ export const DashboardPage: React.FC = () => {
         )}
 
       {/* 4-Column Executive KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
+        <div className="col-span-2 sm:col-span-1 card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-2.5 sm:gap-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500">Total Kas &amp; Bank</span>
             <Wallet className="w-4 h-4 text-blue-700" />
           </div>
           <div>
-            <div className="text-xl sm:text-2xl font-bold text-slate-900 font-mono tabular-nums tracking-tight truncate">
+            <div className="text-xl sm:text-2xl font-bold text-slate-900 font-mono tabular-nums tracking-tight break-words">
               {formatRupiah(totalSaldoResmi)}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
+            <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between gap-2">
               <span>Proyeksi</span>
               <span className="font-mono font-semibold text-slate-700 tabular-nums">
                 {formatRupiah(totalSaldoProyeksi)}
@@ -433,13 +439,13 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Pemasukan Bulan Ini</span>
-            <ArrowUpRight className="w-4 h-4 text-emerald-700" />
+        <div className="card-hover bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-2 sm:gap-3 min-w-0">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] sm:text-xs font-semibold text-slate-500 leading-tight">Pemasukan Bulan Ini</span>
+            <ArrowUpRight className="w-4 h-4 text-emerald-700 shrink-0" />
           </div>
           <div>
-            <div className="text-xl sm:text-2xl font-bold text-emerald-700 font-mono tabular-nums tracking-tight truncate">
+            <div className="text-[13px] sm:text-2xl font-bold text-emerald-700 font-mono tabular-nums tracking-tight break-words">
               +{formatRupiah(totalBulanIniMasuk)}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
@@ -448,13 +454,13 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Pengeluaran Bulan Ini</span>
-            <ArrowDownRight className="w-4 h-4 text-rose-700" />
+        <div className="card-hover bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-2 sm:gap-3 min-w-0">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] sm:text-xs font-semibold text-slate-500 leading-tight">Pengeluaran Bulan Ini</span>
+            <ArrowDownRight className="w-4 h-4 text-rose-700 shrink-0" />
           </div>
           <div>
-            <div className="text-xl sm:text-2xl font-bold text-rose-700 font-mono tabular-nums tracking-tight truncate">
+            <div className="text-[13px] sm:text-2xl font-bold text-rose-700 font-mono tabular-nums tracking-tight break-words">
               -{formatRupiah(totalBulanIniKeluar)}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
@@ -464,7 +470,7 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         {isAuditor ? (
-          <div className="card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-3">
+          <div className="col-span-2 sm:col-span-1 card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-2.5 sm:gap-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-500">Temuan Audit</span>
               <ShieldCheck className="w-4 h-4 text-purple-700" />
@@ -480,7 +486,7 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
         ) : isSekretaris ? (
-          <div className="card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-3">
+          <div className="col-span-2 sm:col-span-1 card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-2.5 sm:gap-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-500">Warta Jemaat</span>
               <FileText className="w-4 h-4 text-blue-700" />
@@ -496,7 +502,7 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
         ) : isMajelis ? (
-          <div className="card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-3">
+          <div className="col-span-2 sm:col-span-1 card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-2.5 sm:gap-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-500">Pengawasan Kas</span>
               <Layers className="w-4 h-4 text-teal-700" />
@@ -512,13 +518,13 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
         ) : isBendaharaUmum ? (
-          <div className="card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-3">
+          <div className="col-span-2 sm:col-span-1 card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-2.5 sm:gap-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-500">Sisa Setor BPSK (55%)</span>
               <Landmark className="w-4 h-4 text-blue-800" />
             </div>
             <div>
-              <div className="text-xl sm:text-2xl font-bold text-blue-900 font-mono tabular-nums truncate">
+              <div className="text-xl sm:text-2xl font-bold text-blue-900 font-mono tabular-nums break-words">
                 {formatRupiah(bpskCompliance.outstandingBpsk)}
               </div>
               <NavLink
@@ -530,7 +536,7 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
         ) : canApproveAnyActiveKas ? (
-          <div className="card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-3">
+          <div className="col-span-2 sm:col-span-1 card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-2.5 sm:gap-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-500">Antrean Persetujuan</span>
               <Clock className="w-4 h-4 text-amber-700" />
@@ -549,7 +555,7 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
         ) : canRecordAnyActiveKas ? (
-          <div className="card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-3">
+          <div className="col-span-2 sm:col-span-1 card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-2.5 sm:gap-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-500">Draf &amp; Revisi Saya</span>
               <Receipt className="w-4 h-4 text-blue-700" />
@@ -568,7 +574,7 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-3">
+          <div className="col-span-2 sm:col-span-1 card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-2.5 sm:gap-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-500">Buku Kas Aktif</span>
               <Layers className="w-4 h-4 text-blue-700" />
@@ -888,8 +894,8 @@ export const DashboardPage: React.FC = () => {
       )}
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 min-w-0">
-        <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-slate-200/90 space-y-4 min-w-0">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5 min-w-0">
+        <div className="lg:col-span-2 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 space-y-4 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-bold text-slate-900">Tren Arus Kas {currentYear}</h3>
             <div className="flex items-center gap-4 text-xs text-slate-600">
@@ -904,10 +910,10 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="h-60 w-full min-w-0">
+          <div className="h-52 sm:h-60 w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={trendData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-                <XAxis dataKey="bulan" tick={{ fontSize: 11, fill: '#64748B' }} />
+              <BarChart data={trendData} margin={{ top: 8, right: 6, left: -22, bottom: 0 }}>
+                <XAxis dataKey="bulan" tick={{ fontSize: 10, fill: '#64748B' }} />
                 <YAxis
                   tick={{ fontSize: 10, fill: '#64748B' }}
                   tickFormatter={(val) => `${(val / 1000000).toFixed(0)}Jt`}
@@ -1049,9 +1055,9 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         {/* Mobile Cards */}
-        <div className="md:hidden divide-y divide-slate-100 px-4">
+        <div className="md:hidden divide-y divide-slate-100">
           {recentTransactions.length === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-400">Belum ada transaksi tercatat.</div>
+            <div className="py-8 px-4 text-center text-xs text-slate-400">Belum ada transaksi tercatat.</div>
           ) : (
             recentTransactions.map((tx) => {
               const kas = kasList.find((k) => k.id === tx.kas_id);
@@ -1060,7 +1066,12 @@ export const DashboardPage: React.FC = () => {
               const st = STATUS_TEXT[tx.status] || { label: tx.status, cls: 'text-slate-600' };
 
               return (
-                <div key={tx.id} className="py-3.5 space-y-1.5">
+                <button
+                  key={tx.id}
+                  type="button"
+                  onClick={() => setDetailTx(tx)}
+                  className="w-full text-left px-4 py-3.5 min-h-[48px] space-y-1.5 active:bg-slate-50 transition-colors"
+                >
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="font-mono text-slate-500 tabular-nums">{formatDateIndo(tx.tanggal)}</span>
                     <span className={`font-semibold ${st.cls}`}>{st.label}</span>
@@ -1070,21 +1081,43 @@ export const DashboardPage: React.FC = () => {
                     <span className="text-[11px] text-slate-500 truncate">
                       {kas?.nama} · {storage?.nama}
                     </span>
-                    <span
-                      className={`font-mono font-bold tabular-nums shrink-0 ${
-                        isInc ? 'text-emerald-700' : 'text-rose-700'
-                      }`}
-                    >
-                      {isInc ? '+' : '-'}
-                      {formatRupiah(tx.amount)}
+                    <span className="inline-flex items-center gap-1 shrink-0">
+                      <span
+                        className={`font-mono font-bold tabular-nums ${
+                          isInc ? 'text-emerald-700' : 'text-rose-700'
+                        }`}
+                      >
+                        {isInc ? '+' : '-'}
+                        {formatRupiah(tx.amount)}
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                     </span>
                   </div>
-                </div>
+                </button>
               );
             })
           )}
         </div>
       </div>
+
+      {/* Mobile Transaction Detail Sheet */}
+      <MobileTransactionDetailModal
+        isOpen={Boolean(detailTx)}
+        transaction={detailTx}
+        kasName={kasList.find((k) => k.id === detailTx?.kas_id)?.nama}
+        storageName={storageAccounts.find((s) => s.id === detailTx?.storage_account_id)?.nama}
+        categoryName={categories.find((c) => c.id === detailTx?.category_id)?.nama}
+        onClose={() => setDetailTx(null)}
+        onPreviewAttachment={(url) => {
+          setDetailTx(null);
+          setPreviewAttachmentUrl(url);
+        }}
+      />
+      <AttachmentPreviewModal
+        isOpen={Boolean(previewAttachmentUrl)}
+        imageUrl={previewAttachmentUrl}
+        onClose={() => setPreviewAttachmentUrl(null)}
+      />
     </div>
   );
 };

@@ -16,6 +16,8 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
+  SlidersHorizontal,
+  ChevronDown,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useToast } from '../context/ToastContext';
@@ -23,6 +25,7 @@ import { Transaction } from '../types/database';
 import { formatDateIndo, formatRupiah } from '../lib/formatters';
 import { AdminEditTransactionModal } from '../components/transactions/AdminEditTransactionModal';
 import { AttachmentPreviewModal } from '../components/transactions/AttachmentPreviewModal';
+import { MobileTransactionDetailModal } from '../components/transactions/MobileTransactionDetailModal';
 import { ConfirmActionModal, ConfirmSummaryRow } from '../components/common/ConfirmActionModal';
 
 const ITEMS_PER_PAGE = 15;
@@ -47,6 +50,10 @@ export const AdminTransactionsPage: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Mobile adaptive states
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [detailTargetTx, setDetailTargetTx] = useState<Transaction | null>(null);
 
   // Modal states
   const [editTargetTx, setEditTargetTx] = useState<Transaction | null>(null);
@@ -276,14 +283,40 @@ export const AdminTransactionsPage: React.FC = () => {
           </select>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-100 text-xs">
+        {/* Mobile Collapsible Filter Toggle */}
+        <div className="md:hidden pt-1">
+          <button
+            type="button"
+            onClick={() => setShowMobileFilters((v) => !v)}
+            className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 flex items-center justify-between"
+          >
+            <span className="inline-flex items-center gap-2">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
+              <span>Filter Lanjutan (Simpanan, Jenis, Tanggal)</span>
+              {(selectedStorage !== 'all' || selectedType !== 'all' || startDate || endDate) && (
+                <span className="px-1.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold">
+                  Aktif
+                </span>
+              )}
+            </span>
+            <ChevronDown
+              className={`w-4 h-4 text-slate-400 transition-transform ${showMobileFilters ? 'rotate-180' : ''}`}
+            />
+          </button>
+        </div>
+
+        <div
+          className={`${
+            showMobileFilters ? 'grid' : 'hidden'
+          } md:grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-slate-100 text-xs`}
+        >
           <select
             value={selectedStorage}
             onChange={(e) => {
               setSelectedStorage(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full text-xs p-2 rounded-xl border border-slate-200 bg-white"
+            className="w-full min-h-[44px] md:min-h-0 text-xs p-2 rounded-xl border border-slate-200 bg-white"
           >
             <option value="all">Semua Tempat Simpan</option>
             {storageAccounts.map((s) => (
@@ -299,7 +332,7 @@ export const AdminTransactionsPage: React.FC = () => {
               setSelectedType(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full text-xs p-2 rounded-xl border border-slate-200 bg-white"
+            className="w-full min-h-[44px] md:min-h-0 text-xs p-2 rounded-xl border border-slate-200 bg-white"
           >
             <option value="all">Semua Jenis</option>
             <option value="income">Pemasukan (+)</option>
@@ -315,7 +348,7 @@ export const AdminTransactionsPage: React.FC = () => {
               setStartDate(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full text-xs p-2 rounded-xl border border-slate-200"
+            className="w-full min-h-[44px] md:min-h-0 text-xs p-2 rounded-xl border border-slate-200"
             aria-label="Dari tanggal"
           />
 
@@ -326,7 +359,7 @@ export const AdminTransactionsPage: React.FC = () => {
               setEndDate(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full text-xs p-2 rounded-xl border border-slate-200"
+            className="w-full min-h-[44px] md:min-h-0 text-xs p-2 rounded-xl border border-slate-200"
             aria-label="Sampai tanggal"
           />
         </div>
@@ -470,48 +503,68 @@ export const AdminTransactionsPage: React.FC = () => {
 
               return (
                 <div key={tx.id} className="pt-3 first:pt-0 space-y-2 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono font-semibold text-slate-600 tabular-nums">
-                      {formatDateIndo(tx.tanggal)} · {tx.receipt_no || '-'}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded-md border text-[10px] font-bold ${badge.cls}`}>
-                      {badge.label}
-                    </span>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDetailTargetTx(tx)}
+                    className="w-full text-left space-y-2 active:opacity-80"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono font-semibold text-slate-600 tabular-nums truncate">
+                        {formatDateIndo(tx.tanggal)} · {tx.receipt_no || '-'}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-md border text-[10px] font-bold shrink-0 ${badge.cls}`}>
+                        {badge.label}
+                      </span>
+                    </div>
 
-                  <div className="font-semibold text-slate-900 text-sm">{tx.description}</div>
+                    <div className="font-semibold text-slate-900 text-sm">{tx.description}</div>
 
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500">
-                      {kas?.nama} · {storage?.nama}
-                    </span>
-                    <span
-                      className={`font-mono font-bold tabular-nums text-sm ${
-                        isInc ? 'text-emerald-700' : 'text-rose-700'
-                      }`}
-                    >
-                      {isInc ? '+' : '-'}
-                      {formatRupiah(tx.amount)}
-                    </span>
-                  </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-500 truncate">
+                        {kas?.nama} · {storage?.nama}
+                      </span>
+                      <span
+                        className={`font-mono font-bold tabular-nums text-sm shrink-0 ${
+                          isInc ? 'text-emerald-700' : 'text-rose-700'
+                        }`}
+                      >
+                        {isInc ? '+' : '-'}
+                        {formatRupiah(tx.amount)}
+                      </span>
+                    </div>
+                  </button>
 
-                  <div className="flex items-center justify-end gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setEditTargetTx(tx)}
-                      className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 font-semibold inline-flex items-center gap-1"
-                    >
-                      <FileEdit className="w-3.5 h-3.5" />
-                      <span>Edit</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTargetTx(tx)}
-                      className="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 font-semibold inline-flex items-center gap-1"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Hapus</span>
-                    </button>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <div>
+                      {tx.attachment_url && (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewAttachmentUrl(tx.attachment_url!)}
+                          className="px-2.5 py-1.5 min-h-[44px] sm:min-h-0 rounded-lg bg-slate-50 text-blue-700 border border-slate-200 font-semibold inline-flex items-center gap-1"
+                        >
+                          <Paperclip className="w-3.5 h-3.5" />
+                          <span>Bukti</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditTargetTx(tx)}
+                        className="px-3.5 py-1.5 min-h-[44px] sm:min-h-0 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 font-semibold inline-flex items-center gap-1"
+                      >
+                        <FileEdit className="w-3.5 h-3.5" />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTargetTx(tx)}
+                        className="px-3.5 py-1.5 min-h-[44px] sm:min-h-0 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 font-semibold inline-flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Hapus</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -532,18 +585,18 @@ export const AdminTransactionsPage: React.FC = () => {
               type="button"
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={safePage === 1}
-              className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40"
+              className="p-2 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="font-semibold tabular-nums">
+            <span className="font-semibold tabular-nums px-1">
               Halaman {safePage} / {totalPages}
             </span>
             <button
               type="button"
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={safePage === totalPages}
-              className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40"
+              className="p-2 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -586,6 +639,22 @@ export const AdminTransactionsPage: React.FC = () => {
         isOpen={Boolean(previewAttachmentUrl)}
         imageUrl={previewAttachmentUrl}
         onClose={() => setPreviewAttachmentUrl(null)}
+      />
+
+      {/* Mobile Transaction Detail Sheet */}
+      <MobileTransactionDetailModal
+        isOpen={Boolean(detailTargetTx)}
+        transaction={detailTargetTx}
+        kasName={kasList.find((k) => k.id === detailTargetTx?.kas_id)?.nama}
+        storageName={storageAccounts.find((s) => s.id === detailTargetTx?.storage_account_id)?.nama}
+        categoryName={categories.find((c) => c.id === detailTargetTx?.category_id)?.nama}
+        onClose={() => setDetailTargetTx(null)}
+        onPreviewAttachment={(url) => {
+          setDetailTargetTx(null);
+          setPreviewAttachmentUrl(url);
+        }}
+        onEdit={(tx) => setEditTargetTx(tx)}
+        onDelete={(tx) => setDeleteTargetTx(tx)}
       />
     </div>
   );

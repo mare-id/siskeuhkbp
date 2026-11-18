@@ -132,25 +132,30 @@ export const TransferModal: React.FC<Props> = ({ isOpen, onClose, defaultSourceK
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl max-w-xl w-full overflow-hidden shadow-2xl border border-slate-100 my-8">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-indigo-100 bg-indigo-50/40">
-          <div className="flex items-center gap-2">
-            <ArrowRightLeft className="w-5 h-5 text-indigo-600" />
-            <div>
-              <h3 className="font-semibold text-base text-slate-800">Transfer Dana Antar Kas / Rekening</h3>
-              <span className="text-xs text-slate-500">Mutasi atomik saldo (tidak mempengaruhi laporan pendapatan/beban)</span>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+      <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-xl w-full max-h-[92dvh] flex flex-col overflow-hidden shadow-2xl border border-slate-100 mobile-sheet-enter">
+        <div className="sm:hidden flex justify-center pt-2.5 pb-1 shrink-0 bg-indigo-50/40">
+          <div className="w-10 h-1 rounded-full bg-slate-300" />
+        </div>
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-indigo-100 bg-indigo-50/40 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <ArrowRightLeft className="w-5 h-5 text-indigo-600 shrink-0" />
+            <div className="min-w-0">
+              <h3 className="font-semibold text-sm sm:text-base text-slate-800 truncate">Transfer Dana Antar Kas / Rekening</h3>
+              <span className="text-[11px] sm:text-xs text-slate-500 block truncate">Mutasi atomik saldo (tidak mempengaruhi laporan pendapatan/beban)</span>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 rounded-lg transition-colors"
+            className="p-2 sm:p-1.5 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 rounded-lg transition-colors shrink-0"
+            aria-label="Tutup"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleTransfer} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+        <form onSubmit={handleTransfer} className="flex flex-col flex-1 min-h-0">
+          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
           {error && (
             <div className="flex items-start gap-2.5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -344,19 +349,20 @@ export const TransferModal: React.FC<Props> = ({ isOpen, onClose, defaultSourceK
             )}
           </div>
 
-          {/* Submit buttons */}
-          <div className="pt-2 flex items-center justify-end gap-2">
+          </div>
+          {/* Sticky Safe-Area Submit buttons */}
+          <div className="px-4 sm:px-6 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:py-3.5 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-2 shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+              className="px-4 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
             >
               Batal
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-xs"
+              className="px-5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-xs"
             >
               Ajukan Transfer Dana
             </button>

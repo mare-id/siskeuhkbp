@@ -20,6 +20,8 @@ import {
   ShieldCheck,
   BookOpen,
   List,
+  SlidersHorizontal,
+  ChevronDown,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -32,6 +34,7 @@ import { TransferModal } from '../components/transactions/TransferModal';
 import { AttachmentPreviewModal } from '../components/transactions/AttachmentPreviewModal';
 import { ReversalModal } from '../components/transactions/ReversalModal';
 import { AdminEditTransactionModal } from '../components/transactions/AdminEditTransactionModal';
+import { MobileTransactionDetailModal } from '../components/transactions/MobileTransactionDetailModal';
 import { ConfirmActionModal } from '../components/common/ConfirmActionModal';
 
 const ITEMS_PER_PAGE = 15;
@@ -92,7 +95,7 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
 };
 
 export const TransactionsPage: React.FC = () => {
-  const { kasList, storageAccounts, transactions, changeStatus, deleteTransaction, createReversalTransaction } = useData();
+  const { kasList, storageAccounts, categories, transactions, changeStatus, deleteTransaction, createReversalTransaction } = useData();
   const { toast } = useToast();
   const {
     currentUser,
@@ -108,6 +111,10 @@ export const TransactionsPage: React.FC = () => {
 
   // View Mode: Daftar Transaksi vs Buku Kas Bendahara
   const [viewMode, setViewMode] = useState<'list' | 'ledger'>('list');
+
+  // Mobile adaptive UI state
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [detailTargetTx, setDetailTargetTx] = useState<Transaction | null>(null);
 
   // Modals state
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
@@ -471,7 +478,7 @@ export const TransactionsPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setViewMode('list')}
-              className={`px-3 py-1.5 min-h-[34px] rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+              className={`px-3 py-1.5 min-h-[40px] sm:min-h-[34px] rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap ${
                 viewMode === 'list'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -483,7 +490,7 @@ export const TransactionsPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setViewMode('ledger')}
-              className={`px-3 py-1.5 min-h-[34px] rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+              className={`px-3 py-1.5 min-h-[40px] sm:min-h-[34px] rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap ${
                 viewMode === 'ledger'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -497,7 +504,7 @@ export const TransactionsPage: React.FC = () => {
           <button
             type="button"
             onClick={handleExportExcel}
-            className="px-3.5 py-2 min-h-[40px] bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
+            className="px-3.5 py-2 min-h-[44px] sm:min-h-[40px] bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
             <span>Ekspor Excel</span>
@@ -507,7 +514,7 @@ export const TransactionsPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsTransferModalOpen(true)}
-              className="px-3.5 py-2 min-h-[40px] bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
+              className="px-3.5 py-2 min-h-[44px] sm:min-h-[40px] bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
             >
               <ArrowRightLeft className="w-4 h-4 text-blue-700" />
               <span>Transfer</span>
@@ -518,7 +525,7 @@ export const TransactionsPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsTxModalOpen(true)}
-              className="px-4 py-2 min-h-[40px] bg-[#0B132B] hover:bg-slate-800 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
+              className="px-4 py-2 min-h-[44px] sm:min-h-[40px] bg-[#0B132B] hover:bg-slate-800 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
             >
               <Plus className="w-4 h-4" />
               <span>Catat Transaksi</span>
@@ -528,7 +535,7 @@ export const TransactionsPage: React.FC = () => {
           {isAuditor && (
             <NavLink
               to="/audit"
-              className="px-3.5 py-2 min-h-[40px] bg-purple-800 hover:bg-purple-900 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
+              className="px-3.5 py-2 min-h-[44px] sm:min-h-[40px] bg-purple-800 hover:bg-purple-900 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
             >
               <ShieldCheck className="w-4 h-4" />
               <span>Modul Audit</span>
@@ -624,14 +631,44 @@ export const TransactionsPage: React.FC = () => {
           </select>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-2 border-t border-slate-100 text-xs">
+        {/* Mobile Collapsible Filter Toggle */}
+        <div className="md:hidden pt-1">
+          <button
+            type="button"
+            onClick={() => setShowMobileFilters((v) => !v)}
+            className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 flex items-center justify-between"
+          >
+            <span className="inline-flex items-center gap-2">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
+              <span>Filter Lanjutan (Simpanan, Jenis, Tanggal)</span>
+              {(selectedStorage !== 'all' ||
+                selectedType !== 'all' ||
+                selectedPpku !== 'all' ||
+                startDate ||
+                endDate) && (
+                <span className="px-1.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold">
+                  Aktif
+                </span>
+              )}
+            </span>
+            <ChevronDown
+              className={`w-4 h-4 text-slate-400 transition-transform ${showMobileFilters ? 'rotate-180' : ''}`}
+            />
+          </button>
+        </div>
+
+        <div
+          className={`${
+            showMobileFilters ? 'grid' : 'hidden'
+          } md:grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5 pt-2 border-t border-slate-100 text-xs`}
+        >
           <select
             value={selectedStorage}
             onChange={(e) => {
               setSelectedStorage(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full h-9 px-2.5 text-xs rounded-lg border border-slate-200 bg-white"
+            className="w-full min-h-[44px] md:min-h-0 md:h-9 px-2.5 text-xs rounded-lg border border-slate-200 bg-white"
           >
             <option value="all">Semua Simpanan</option>
             {storageAccounts.map((s) => (
@@ -647,7 +684,7 @@ export const TransactionsPage: React.FC = () => {
               setSelectedType(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full h-9 px-2.5 text-xs rounded-lg border border-slate-200 bg-white"
+            className="w-full min-h-[44px] md:min-h-0 md:h-9 px-2.5 text-xs rounded-lg border border-slate-200 bg-white"
           >
             <option value="all">Semua Jenis</option>
             <option value="income">Pemasukan</option>
@@ -662,7 +699,7 @@ export const TransactionsPage: React.FC = () => {
               setSelectedPpku(e.target.value as 'all' | 'sentralisasi' | 'dikecualikan');
               setCurrentPage(1);
             }}
-            className="w-full h-9 px-2.5 text-xs rounded-lg border border-slate-200 bg-white"
+            className="w-full min-h-[44px] md:min-h-0 md:h-9 px-2.5 text-xs rounded-lg border border-slate-200 bg-white"
           >
             <option value="all">Semua Sentralisasi</option>
             <option value="sentralisasi">Sentralisasi (45/55)</option>
@@ -676,7 +713,7 @@ export const TransactionsPage: React.FC = () => {
               setStartDate(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full h-9 px-2.5 text-xs rounded-lg border border-slate-200"
+            className="w-full min-h-[44px] md:min-h-0 md:h-9 px-2.5 text-xs rounded-lg border border-slate-200"
             aria-label="Dari tanggal"
           />
 
@@ -687,7 +724,7 @@ export const TransactionsPage: React.FC = () => {
               setEndDate(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full h-9 px-2.5 text-xs rounded-lg border border-slate-200"
+            className="w-full min-h-[44px] md:min-h-0 md:h-9 px-2.5 text-xs rounded-lg border border-slate-200"
             aria-label="Sampai tanggal"
           />
         </div>
@@ -696,7 +733,7 @@ export const TransactionsPage: React.FC = () => {
       {/* ---------------- VIEW 1: BUKU KAS BENDAHARA (SPREADSHEET FORMAT) ---------------- */}
       {viewMode === 'ledger' ? (
         <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+          <div className="px-4 sm:px-5 py-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-sm font-bold text-slate-900">Buku Kas Bendahara</h2>
               <p className="text-[11px] text-slate-500">
@@ -706,6 +743,9 @@ export const TransactionsPage: React.FC = () => {
             <span className="text-[11px] text-slate-500 font-mono tabular-nums">
               {ledgerData.rows.filter((r) => !r.isSubRow).length} Pos Transaksi
             </span>
+          </div>
+          <div className="md:hidden px-4 py-1.5 bg-blue-50/70 border-b border-blue-100 text-[11px] text-blue-800 font-medium">
+            Geser tabel ke kiri/kanan untuk melihat semua kolom kas →
           </div>
 
           <div className="overflow-x-auto">
@@ -1023,53 +1063,59 @@ export const TransactionsPage: React.FC = () => {
 
                 return (
                   <div key={tx.id} className="py-3.5 space-y-2">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-mono text-slate-500 tabular-nums">
-                        {formatDateIndo(tx.tanggal)}
-                        {tx.receipt_no ? ` · ${tx.receipt_no}` : ''}
-                      </span>
-                      <span className={`font-semibold ${statusInfo.cls}`}>{statusInfo.label}</span>
-                    </div>
-
-                    <div className="font-semibold text-slate-900 text-sm leading-snug">
-                      {tx.description}
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2 text-xs">
-                      <span className="text-[11px] text-slate-500 truncate">
-                        {kas?.nama} · {storage?.nama}
-                      </span>
-
-                      <div className="text-right shrink-0">
-                        <span
-                          className={`font-mono font-bold tabular-nums text-sm block ${
-                            isInc ? 'text-emerald-700' : 'text-rose-700'
-                          }`}
-                        >
-                          {isInc ? '+' : '-'}
-                          {formatRupiah(tx.amount)}
+                    <button
+                      type="button"
+                      onClick={() => setDetailTargetTx(tx)}
+                      className="w-full text-left space-y-2 active:opacity-80"
+                    >
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-mono text-slate-500 tabular-nums">
+                          {formatDateIndo(tx.tanggal)}
+                          {tx.receipt_no ? ` · ${tx.receipt_no}` : ''}
                         </span>
-                        {tx.type === 'income' && (
-                          <span className="text-[10px] text-slate-500 block">
-                            {tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi'
-                              ? '100% Non-Sentralisasi'
-                              : tx.sentralisasi_role === 'bpsk_share'
-                              ? '55% Sentralisasi'
-                              : tx.sentralisasi_role === 'huria_share'
-                              ? '45% Lokal Huria'
-                              : `BPSK ${formatRupiah(tx.bpsk_amount ?? Math.round(tx.amount * 0.55))}`}
-                          </span>
-                        )}
+                        <span className={`font-semibold ${statusInfo.cls}`}>{statusInfo.label}</span>
                       </div>
-                    </div>
 
-                    <div className="flex items-center justify-between pt-1 text-xs">
-                      <div>
+                      <div className="font-semibold text-slate-900 text-sm leading-snug">
+                        {tx.description}
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="text-[11px] text-slate-500 truncate">
+                          {kas?.nama} · {storage?.nama}
+                        </span>
+
+                        <div className="text-right shrink-0">
+                          <span
+                            className={`font-mono font-bold tabular-nums text-sm block ${
+                              isInc ? 'text-emerald-700' : 'text-rose-700'
+                            }`}
+                          >
+                            {isInc ? '+' : '-'}
+                            {formatRupiah(tx.amount)}
+                          </span>
+                          {tx.type === 'income' && (
+                            <span className="text-[10px] text-slate-500 block">
+                              {tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi'
+                                ? '100% Non-Sentralisasi'
+                                : tx.sentralisasi_role === 'bpsk_share'
+                                ? '55% Sentralisasi'
+                                : tx.sentralisasi_role === 'huria_share'
+                                ? '45% Lokal Huria'
+                                : `BPSK ${formatRupiah(tx.bpsk_amount ?? Math.round(tx.amount * 0.55))}`}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+                      <div className="flex items-center gap-2">
                         {tx.attachment_url && (
                           <button
                             type="button"
                             onClick={() => setPreviewAttachmentUrl(tx.attachment_url!)}
-                            className="min-h-[36px] text-xs font-medium text-blue-700 inline-flex items-center gap-1"
+                            className="min-h-[44px] sm:min-h-[36px] px-2.5 text-xs font-medium text-blue-700 bg-blue-50/70 border border-blue-100 rounded-lg inline-flex items-center gap-1"
                           >
                             <Paperclip className="w-3.5 h-3.5" />
                             <span>Bukti</span>
@@ -1077,13 +1123,13 @@ export const TransactionsPage: React.FC = () => {
                         )}
                       </div>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
                         {isAdmin && (
                           <>
                             <button
                               type="button"
                               onClick={() => setEditTargetTx(tx)}
-                              className="px-3 min-h-[36px] text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg inline-flex items-center gap-1"
+                              className="px-3 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg inline-flex items-center gap-1"
                             >
                               <FileEdit className="w-3.5 h-3.5" />
                               <span>Edit</span>
@@ -1091,7 +1137,8 @@ export const TransactionsPage: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => setDeleteTargetTx(tx)}
-                              className="p-2 min-h-[36px] min-w-[36px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg inline-flex items-center justify-center"
+                              className="p-2 min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg inline-flex items-center justify-center"
+                              aria-label="Hapus"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -1105,7 +1152,7 @@ export const TransactionsPage: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => handleSubmitDraft(tx.id)}
-                                className="px-3 min-h-[36px] text-xs font-semibold text-white bg-blue-700 rounded-lg inline-flex items-center gap-1"
+                                className="px-3 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-white bg-blue-700 rounded-lg inline-flex items-center gap-1"
                               >
                                 <Send className="w-3.5 h-3.5" />
                                 <span>Ajukan</span>
@@ -1114,7 +1161,8 @@ export const TransactionsPage: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => setDeleteTargetTx(tx)}
-                                  className="p-2 min-h-[36px] min-w-[36px] text-rose-600 inline-flex items-center justify-center"
+                                  className="p-2 min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg inline-flex items-center justify-center"
+                                  aria-label="Hapus Draf"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
@@ -1122,11 +1170,23 @@ export const TransactionsPage: React.FC = () => {
                             </>
                           )}
 
+                        {tx.status === 'submitted' &&
+                          tx.created_by === currentUser?.id &&
+                          canInputKas(tx.kas_id) && (
+                            <button
+                              type="button"
+                              onClick={() => setRecallTargetTx(tx)}
+                              className="px-3 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg inline-flex items-center"
+                            >
+                              Tarik Draf
+                            </button>
+                          )}
+
                         {tx.status === 'approved' && !tx.is_reversal && canInputKas(tx.kas_id) && (
                           <button
                             type="button"
                             onClick={() => setReversalTargetTx(tx)}
-                            className="px-3 min-h-[36px] text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg inline-flex items-center gap-1"
+                            className="px-3 min-h-[44px] sm:min-h-[36px] text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg inline-flex items-center gap-1"
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
                             <span>Koreksi</span>
@@ -1152,18 +1212,18 @@ export const TransactionsPage: React.FC = () => {
                 type="button"
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={safePage === 1}
-                className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40"
+                className="p-2 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="font-semibold text-slate-700 tabular-nums">
+              <span className="font-semibold text-slate-700 tabular-nums px-1">
                 {safePage} / {totalPages}
               </span>
               <button
                 type="button"
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={safePage === totalPages}
-                className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40"
+                className="p-2 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -1241,6 +1301,52 @@ export const TransactionsPage: React.FC = () => {
         }
         confirmLabel="Ya, Tarik ke Draf"
         cancelLabel="Batal"
+      />
+      <MobileTransactionDetailModal
+        isOpen={Boolean(detailTargetTx)}
+        transaction={detailTargetTx}
+        kasName={kasList.find((k) => k.id === detailTargetTx?.kas_id)?.nama}
+        storageName={storageAccounts.find((s) => s.id === detailTargetTx?.storage_account_id)?.nama}
+        categoryName={categories.find((c) => c.id === detailTargetTx?.category_id)?.nama}
+        onClose={() => setDetailTargetTx(null)}
+        onPreviewAttachment={(url) => {
+          setDetailTargetTx(null);
+          setPreviewAttachmentUrl(url);
+        }}
+        onEdit={isAdmin ? (tx) => setEditTargetTx(tx) : undefined}
+        onDelete={
+          detailTargetTx &&
+          (isAdmin ||
+            (detailTargetTx.status === 'draft' &&
+              canInputKas(detailTargetTx.kas_id) &&
+              detailTargetTx.created_by === currentUser?.id))
+            ? (tx) => setDeleteTargetTx(tx)
+            : undefined
+        }
+        onSubmitDraft={
+          detailTargetTx &&
+          detailTargetTx.status === 'draft' &&
+          canInputKas(detailTargetTx.kas_id) &&
+          (isAdmin || detailTargetTx.created_by === currentUser?.id)
+            ? (id) => handleSubmitDraft(id)
+            : undefined
+        }
+        onRecallDraft={
+          detailTargetTx &&
+          detailTargetTx.status === 'submitted' &&
+          detailTargetTx.created_by === currentUser?.id &&
+          canInputKas(detailTargetTx.kas_id)
+            ? (tx) => setRecallTargetTx(tx)
+            : undefined
+        }
+        onReversal={
+          detailTargetTx &&
+          detailTargetTx.status === 'approved' &&
+          !detailTargetTx.is_reversal &&
+          canInputKas(detailTargetTx.kas_id)
+            ? (tx) => setReversalTargetTx(tx)
+            : undefined
+        }
       />
     </div>
   );

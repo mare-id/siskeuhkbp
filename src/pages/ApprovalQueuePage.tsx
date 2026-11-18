@@ -127,7 +127,7 @@ export const ApprovalQueuePage: React.FC = () => {
         {pendingApprovals.length > 0 && selectedTxIds.length > 0 && (
           <button
             onClick={handleBulkApprove}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
+            className="px-4 py-2.5 min-h-[44px] sm:min-h-0 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-colors shrink-0"
           >
             <CheckCheck className="w-4 h-4" />
             <span>Setujui {selectedTxIds.length} Transaksi Terpilih</span>
@@ -144,9 +144,9 @@ export const ApprovalQueuePage: React.FC = () => {
 
       {/* ---------------- Section 1: Transfer Receipt Confirmations ---------------- */}
       {pendingTransferConfirmations.length > 0 && (
-        <div className="bg-indigo-50/60 border border-indigo-200 p-5 rounded-2xl space-y-3">
+        <div className="bg-indigo-50/60 border border-indigo-200 p-3.5 sm:p-5 rounded-2xl space-y-3">
           <div className="flex items-center gap-2 text-indigo-900 font-bold text-sm">
-            <ArrowRightLeft className="w-4 h-4 text-indigo-600" />
+            <ArrowRightLeft className="w-4 h-4 text-indigo-600 shrink-0" />
             <span>Konfirmasi Penerimaan Transfer Masuk Antar Kas ({pendingTransferConfirmations.length})</span>
           </div>
           <p className="text-xs text-indigo-800">
@@ -162,29 +162,29 @@ export const ApprovalQueuePage: React.FC = () => {
               return (
                 <div
                   key={tx.id}
-                  className="bg-white p-4 rounded-xl border border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs"
+                  className="bg-white p-3.5 sm:p-4 rounded-xl border border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs"
                 >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs font-bold text-slate-900">{tx.description}</span>
                       <span className="text-[10px] px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-semibold">
                         Ke: {kas?.nama}
                       </span>
                     </div>
-                    <div className="text-xs text-slate-500 flex items-center gap-3">
+                    <div className="text-xs text-slate-500 flex flex-wrap items-center gap-x-3 gap-y-0.5">
                       <span>Tanggal: {formatDateIndo(tx.tanggal)}</span>
-                      <span>·</span>
+                      <span className="hidden sm:inline">·</span>
                       <span>Rekening Tujuan: {storage?.nama}</span>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                  <div className="flex flex-wrap items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                     <span className="text-base font-extrabold text-indigo-700 font-mono tabular-nums">
                       {formatRupiah(tx.amount)}
                     </span>
                     <button
                       onClick={() => handleConfirmTransfer(tx.transfer_id!)}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-2xs transition-colors flex items-center gap-1.5"
+                      className="px-4 py-2 min-h-[44px] sm:min-h-0 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-2xs transition-colors flex items-center gap-1.5"
                     >
                       <CheckCircle className="w-4 h-4" />
                       <span>Konfirmasi Terima</span>
@@ -211,8 +211,8 @@ export const ApprovalQueuePage: React.FC = () => {
       ) : (
         <div className="space-y-4">
           {/* Queue toolbar */}
-          <div className="flex items-center justify-between bg-white p-3.5 rounded-xl border border-slate-200/80 text-xs">
-            <label className="flex items-center gap-2 cursor-pointer font-semibold text-slate-700">
+          <div className="flex items-center justify-between gap-2 bg-white p-3.5 rounded-xl border border-slate-200/80 text-xs">
+            <label className="flex items-center gap-2.5 cursor-pointer font-semibold text-slate-700 min-h-[36px]">
               <input
                 type="checkbox"
                 checked={
@@ -220,12 +220,12 @@ export const ApprovalQueuePage: React.FC = () => {
                   selectedTxIds.length === pendingApprovals.filter((t) => t.created_by !== currentUser?.id).length
                 }
                 onChange={toggleSelectAll}
-                className="w-4 h-4 text-primary rounded-md focus:ring-primary/40"
+                className="w-5 h-5 sm:w-4 sm:h-4 text-primary rounded-md focus:ring-primary/40 shrink-0"
               />
               <span>Pilih Semua yang Dapat Disetujui ({pendingApprovals.length} Transaksi)</span>
             </label>
 
-            <span className="text-slate-400">
+            <span className="text-slate-400 shrink-0">
               {selectedTxIds.length} dipilih
             </span>
           </div>
@@ -244,14 +244,16 @@ export const ApprovalQueuePage: React.FC = () => {
                   className="card-hover bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
                 >
                   {/* Left: Checkbox & Info */}
-                  <div className="flex items-start gap-3">
+                  <div className="flex items-start gap-2.5 sm:gap-3 min-w-0">
                     {!isCreator && (
-                      <input
-                        type="checkbox"
-                        checked={selectedTxIds.includes(tx.id)}
-                        onChange={() => toggleSelectTx(tx.id)}
-                        className="w-4 h-4 text-primary rounded-md focus:ring-primary/40 mt-1"
-                      />
+                      <label className="p-1.5 -m-1.5 sm:p-0 sm:m-0 inline-flex items-center justify-center shrink-0 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedTxIds.includes(tx.id)}
+                          onChange={() => toggleSelectTx(tx.id)}
+                          className="w-5 h-5 sm:w-4 sm:h-4 text-primary rounded-md focus:ring-primary/40 mt-0.5 sm:mt-1"
+                        />
+                      </label>
                     )}
 
                     <div className="space-y-1.5">
@@ -387,7 +389,7 @@ export const ApprovalQueuePage: React.FC = () => {
                                   setTimeout(() => setActionSuccessMsg(''), 4000);
                                 }
                               }}
-                              className="px-3.5 py-2.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors flex items-center gap-1.5"
+                              className="px-3.5 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors flex items-center gap-1.5"
                             >
                               <CheckCheck className="w-4 h-4" />
                               <span>Setujui Paket ({groupApprovableIds.length})</span>
@@ -397,7 +399,7 @@ export const ApprovalQueuePage: React.FC = () => {
 
                       <button
                         onClick={() => setRejectingTx(tx)}
-                        className="px-4 py-2.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors flex items-center gap-1.5 active:scale-95"
+                        className="px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors flex items-center gap-1.5 active:scale-95"
                       >
                         <XCircle className="w-4 h-4" />
                         <span>Tolak</span>
@@ -406,7 +408,7 @@ export const ApprovalQueuePage: React.FC = () => {
                       <button
                         disabled={isCreator}
                         onClick={() => handleApprove(tx)}
-                        className={`px-5 py-2.5 text-xs font-semibold text-white rounded-xl shadow-xs transition-colors flex items-center gap-1.5 active:scale-95 ${
+                        className={`px-5 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-semibold text-white rounded-xl shadow-xs transition-colors flex items-center gap-1.5 active:scale-95 ${
                           isCreator
                             ? 'bg-slate-300 cursor-not-allowed opacity-60'
                             : 'bg-emerald-600 hover:bg-emerald-700'

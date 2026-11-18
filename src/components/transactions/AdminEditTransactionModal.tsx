@@ -380,30 +380,35 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
   return (
     <>
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs"
+        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs"
         role="dialog"
         aria-modal="true"
       >
-        <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200">
+        <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-2xl w-full max-h-[92dvh] flex flex-col overflow-hidden shadow-2xl border border-slate-200 mobile-sheet-enter">
+          <div className="sm:hidden flex justify-center pt-2.5 pb-1 shrink-0 bg-slate-50">
+            <div className="w-10 h-1 rounded-full bg-slate-300" />
+          </div>
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
-            <div>
-              <h3 className="font-bold text-base text-slate-900">Edit Transaksi Kas (Admin)</h3>
-              <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200 bg-slate-50 shrink-0">
+            <div className="min-w-0 pr-2">
+              <h3 className="font-bold text-sm sm:text-base text-slate-900">Edit Transaksi Kas (Admin)</h3>
+              <p className="text-[11px] text-slate-500 font-mono mt-0.5 truncate">
                 ID: {transaction.id} · Status Saat Ini: {STATUS_LABELS[transaction.status]}
               </p>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 rounded-lg transition-colors"
+              className="p-2 sm:p-1.5 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 rounded-lg transition-colors shrink-0"
+              aria-label="Tutup"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
           {/* Form Body */}
-          <form onSubmit={handleValidateAndAskConfirm} className="flex-1 overflow-y-auto p-6 space-y-4">
+          <form onSubmit={handleValidateAndAskConfirm} className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
             {transaction.status === 'approved' && (
               <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-center gap-2">
                 <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0" />
@@ -709,18 +714,19 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
               />
             </div>
 
-            {/* Footer Actions */}
-            <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+            </div>
+            {/* Sticky Footer Actions */}
+            <div className="px-4 sm:px-6 pt-3 pb-[calc(0.875rem+env(safe-area-inset-bottom,0px))] sm:py-3.5 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2 shrink-0">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors"
+                className="px-4 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors"
               >
                 Batal
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs flex items-center gap-1.5 transition-colors"
+                className="px-5 py-2 min-h-[44px] sm:min-h-0 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs flex items-center gap-1.5 transition-colors"
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>Simpan Perubahan</span>

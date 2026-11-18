@@ -488,9 +488,9 @@ export const AppLayout: React.FC = () => {
         </header>
 
         {/* Mobile Top Header */}
-        <header className="md:hidden bg-white border-b border-slate-200/80 sticky top-0 z-30 px-4 h-14 flex items-center justify-between w-full">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-white p-1 border border-slate-200 flex items-center justify-center shrink-0">
+        <header className="md:hidden bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-30 px-3.5 h-12 pt-safe flex items-center justify-between w-full">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-white p-0.5 border border-slate-200 flex items-center justify-center shrink-0">
               <img
                 src="/assets/aistudio/Logo-HKBP_02090ed7.png"
                 alt="Logo HKBP"
@@ -501,24 +501,27 @@ export const AppLayout: React.FC = () => {
               <h1 className="font-bold text-xs text-slate-900 leading-tight truncate">
                 {activeNavItem.label}
               </h1>
-              <p className="text-[10px] text-slate-500 truncate">
+              <p className="text-[10px] text-slate-500 leading-tight truncate">
                 HKBP Hutaraja · T.A. {settings.active_year}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             <NavLink
               to="/profile"
-              className="h-9 px-2.5 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-semibold capitalize flex items-center"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="min-h-[36px] px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200/80 text-slate-700 text-[11px] font-semibold capitalize flex items-center max-w-[115px] truncate"
             >
-              {currentUser?.role.replace('_', ' ')}
+              <span className="truncate">{currentUser?.role.replace('_', ' ')}</span>
             </NavLink>
 
             <button
+              type="button"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="h-10 w-10 text-slate-700 hover:bg-slate-100 rounded-lg flex items-center justify-center"
-              aria-label="Menu"
+              className="min-h-[40px] min-w-[40px] text-slate-700 hover:bg-slate-100 rounded-lg flex items-center justify-center active:scale-95 transition-transform"
+              aria-label={isMobileMenuOpen ? 'Tutup menu' : 'Buka menu'}
+              aria-expanded={isMobileMenuOpen}
             >
               {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -527,27 +530,29 @@ export const AppLayout: React.FC = () => {
 
         {/* Mobile Drawer */}
         {isMobileMenuOpen && (
-          <div className="md:hidden fixed inset-x-0 top-14 bottom-16 bg-white z-40 p-4 overflow-y-auto space-y-3 border-b border-slate-200">
+          <div className="md:hidden fixed inset-x-0 top-12 bottom-[calc(3.75rem+env(safe-area-inset-bottom,0px))] bg-white z-40 p-4 overflow-y-auto space-y-3 border-b border-slate-200 shadow-xl">
             <div className="grid grid-cols-2 gap-2">
               {showRecordAction ? (
                 <>
                   <button
+                    type="button"
                     onClick={() => {
                       setIsMobileMenuOpen(false);
                       setIsTxModalOpen(true);
                     }}
-                    className="h-11 px-3 bg-blue-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                    className="min-h-[44px] px-3 bg-blue-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Catat Transaksi</span>
                   </button>
                   {showTransferAction && (
                     <button
+                      type="button"
                       onClick={() => {
                         setIsMobileMenuOpen(false);
                         setIsTransferModalOpen(true);
                       }}
-                      className="h-11 px-3 bg-slate-100 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                      className="min-h-[44px] px-3 bg-slate-100 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform"
                     >
                       <ArrowRightLeft className="w-4 h-4 text-blue-600" />
                       <span>Transfer Kas</span>
@@ -559,7 +564,7 @@ export const AppLayout: React.FC = () => {
                   <NavLink
                     to="/audit"
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="h-11 px-3 bg-purple-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                    className="min-h-[44px] px-3 bg-purple-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
                   >
                     <ShieldCheck className="w-4 h-4" />
                     <span>Modul Audit</span>
@@ -567,7 +572,7 @@ export const AppLayout: React.FC = () => {
                   <NavLink
                     to="/transactions"
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="h-11 px-3 bg-slate-100 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                    className="min-h-[44px] px-3 bg-slate-100 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
                   >
                     <Search className="w-4 h-4" />
                     <span>Uji Bukti</span>
@@ -578,7 +583,7 @@ export const AppLayout: React.FC = () => {
                   <NavLink
                     to="/audit"
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="h-11 px-3 bg-purple-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                    className="min-h-[44px] px-3 bg-purple-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
                   >
                     <ShieldCheck className="w-4 h-4" />
                     <span>Badan Audit</span>
@@ -586,7 +591,7 @@ export const AppLayout: React.FC = () => {
                   <NavLink
                     to={showApprovalAction ? '/approvals' : '/reports?tab=semester'}
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="h-11 px-3 bg-slate-100 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                    className="min-h-[44px] px-3 bg-slate-100 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
                   >
                     {showApprovalAction ? (
                       <>
@@ -606,7 +611,7 @@ export const AppLayout: React.FC = () => {
                   <NavLink
                     to="/approvals"
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="h-11 px-3 bg-amber-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                    className="min-h-[44px] px-3 bg-amber-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
                   >
                     <CheckSquare className="w-4 h-4" />
                     <span>Persetujuan {pendingCount > 0 ? `(${pendingCount})` : ''}</span>
@@ -614,7 +619,7 @@ export const AppLayout: React.FC = () => {
                   <NavLink
                     to="/reports?tab=semester"
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="h-11 px-3 bg-slate-100 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                    className="min-h-[44px] px-3 bg-slate-100 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
                   >
                     <FileSpreadsheet className="w-4 h-4" />
                     <span>Laporan</span>
@@ -624,7 +629,7 @@ export const AppLayout: React.FC = () => {
                 <NavLink
                   to="/reports?tab=semester"
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="col-span-2 h-11 px-3 bg-slate-900 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                  className="col-span-2 min-h-[44px] px-3 bg-slate-900 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
                 >
                   <FileSpreadsheet className="w-4 h-4" />
                   <span>Laporan Huria</span>
@@ -645,13 +650,13 @@ export const AppLayout: React.FC = () => {
                       onClick={() => setIsMobileMenuOpen(false)}
                       className={({ isActive }) => {
                         const active = isNavItemActive(item.to, isActive);
-                        return `flex items-center justify-between px-3 py-2.5 rounded-xl text-xs ${
+                        return `flex items-center justify-between min-h-[44px] px-3.5 py-2.5 rounded-xl text-xs transition-colors ${
                           active ? 'bg-blue-50 text-blue-800 font-semibold' : 'text-slate-700 hover:bg-slate-50'
                         }`;
                       }}
                     >
                       <div className="flex items-center gap-3">
-                        <Icon className="w-4 h-4" />
+                        <Icon className="w-4 h-4 shrink-0" />
                         <span>{item.label}</span>
                       </div>
                       {item.badge && (
@@ -664,18 +669,19 @@ export const AppLayout: React.FC = () => {
                 })}
             </div>
 
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
               <NavLink
                 to="/profile"
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="h-10 px-2 text-xs text-slate-600 flex items-center gap-1.5 font-medium"
+                className="min-h-[44px] px-3 rounded-xl text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2 font-medium"
               >
                 <User className="w-4 h-4" />
                 <span>Profil Saya</span>
               </NavLink>
               <button
+                type="button"
                 onClick={handleLogout}
-                className="h-10 px-3 text-xs text-rose-600 flex items-center gap-1.5 font-semibold"
+                className="min-h-[44px] px-4 rounded-xl bg-rose-50 hover:bg-rose-100 text-xs text-rose-700 flex items-center gap-1.5 font-semibold"
               >
                 <LogOut className="w-4 h-4" />
                 <span>Keluar</span>
@@ -685,136 +691,172 @@ export const AppLayout: React.FC = () => {
         )}
 
         {/* Main Content Viewport */}
-        <main className="flex-1 p-3.5 sm:p-5 md:p-6 pb-20 md:pb-8 w-full max-w-7xl mx-auto min-w-0">
+        <main className="flex-1 p-3 sm:p-5 md:p-6 pb-[calc(5.25rem+env(safe-area-inset-bottom,0px))] md:pb-8 w-full max-w-7xl mx-auto min-w-0">
           <Outlet />
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 h-16 bg-white border-t border-slate-200 z-30 px-2 flex items-center justify-around">
-        <NavLink
-          to="/"
-          end
-          className={({ isActive }) =>
-            `flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[54px] h-12 ${
-              isActive ? 'text-blue-700 font-semibold' : 'text-slate-500'
-            }`
-          }
-        >
-          <LayoutDashboard className="w-5 h-5" />
-          <span>Beranda</span>
-        </NavLink>
-
-        <NavLink
-          to="/transactions"
-          className={({ isActive }) =>
-            `flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[54px] h-12 ${
-              isActive ? 'text-blue-700 font-semibold' : 'text-slate-500'
-            }`
-          }
-        >
-          <ReceiptText className="w-5 h-5" />
-          <span>Transaksi</span>
-        </NavLink>
-
-        {/* Center Role Action */}
-        {showRecordAction ? (
-          <button
-            onClick={() => setIsTxModalOpen(true)}
-            className="w-11 h-11 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-md active:scale-95 transition-transform"
-            title="Catat Transaksi"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
-        ) : isAuditor ? (
+      {/* Mobile Bottom Navigation (Thumb Zone + Safe Area) */}
+      <nav
+        aria-label="Navigasi Utama Mobile"
+        className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_20px_rgba(15,23,42,0.06)] z-30 pb-safe"
+      >
+        <div className="h-[60px] px-1.5 flex items-center justify-around">
           <NavLink
-            to="/audit"
-            className="w-11 h-11 rounded-full bg-purple-700 text-white flex items-center justify-center shadow-md"
-            title="Modul Audit"
-          >
-            <ShieldCheck className="w-5 h-5" />
-          </NavLink>
-        ) : showApprovalAction ? (
-          <NavLink
-            to="/approvals"
-            className="w-11 h-11 rounded-full bg-amber-600 text-white flex items-center justify-center shadow-md"
-            title="Persetujuan"
-          >
-            <CheckSquare className="w-5 h-5" />
-          </NavLink>
-        ) : (
-          <NavLink
-            to="/reports?tab=semester"
-            className="w-11 h-11 rounded-full bg-slate-800 text-white flex items-center justify-center shadow-md"
-            title="Laporan"
-          >
-            <FileSpreadsheet className="w-5 h-5" />
-          </NavLink>
-        )}
-
-        {isAuditor ? (
-          <NavLink
-            to="/audit"
+            to="/"
+            end
+            onClick={() => setIsMobileMenuOpen(false)}
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[54px] h-12 ${
-                isActive ? 'text-purple-700 font-semibold' : 'text-slate-500'
+              `relative flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[56px] min-h-[48px] px-1 rounded-xl transition-colors active:scale-95 ${
+                isActive && !isMobileMenuOpen ? 'text-blue-700 font-semibold' : 'text-slate-500'
               }`
             }
           >
-            <div className="relative">
-              <Shield className="w-5 h-5" />
-              {openFindingsCount > 0 && (
-                <span className="absolute -top-1 -right-2 px-1 min-w-[16px] h-4 bg-purple-600 text-white rounded-full text-[9px] flex items-center justify-center font-bold tabular-nums">
-                  {openFindingsCount}
-                </span>
-              )}
-            </div>
-            <span>Audit</span>
+            <LayoutDashboard className="w-5 h-5" />
+            <span>Beranda</span>
           </NavLink>
-        ) : showApprovalAction ? (
+
           <NavLink
-            to="/approvals"
+            to="/transactions"
+            onClick={() => setIsMobileMenuOpen(false)}
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[54px] h-12 ${
-                isActive ? 'text-blue-700 font-semibold' : 'text-slate-500'
+              `relative flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[56px] min-h-[48px] px-1 rounded-xl transition-colors active:scale-95 ${
+                isActive && !isMobileMenuOpen ? 'text-blue-700 font-semibold' : 'text-slate-500'
               }`
             }
           >
-            <div className="relative">
+            <ReceiptText className="w-5 h-5" />
+            <span>Transaksi</span>
+          </NavLink>
+
+          {/* Center Role Primary Action */}
+          {showRecordAction ? (
+            <button
+              type="button"
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                setIsTxModalOpen(true);
+              }}
+              className="w-12 h-12 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-md shadow-blue-600/25 active:scale-95 transition-transform"
+              title="Catat Transaksi"
+              aria-label="Catat Transaksi Baru"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+          ) : isAuditor ? (
+            <NavLink
+              to="/audit"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="w-12 h-12 rounded-full bg-purple-700 text-white flex items-center justify-center shadow-md active:scale-95 transition-transform"
+              title="Modul Audit"
+              aria-label="Modul Audit"
+            >
+              <ShieldCheck className="w-5 h-5" />
+            </NavLink>
+          ) : showApprovalAction ? (
+            <NavLink
+              to="/approvals"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="w-12 h-12 rounded-full bg-amber-600 text-white flex items-center justify-center shadow-md active:scale-95 transition-transform"
+              title="Persetujuan"
+              aria-label="Antrean Persetujuan"
+            >
               <CheckSquare className="w-5 h-5" />
-              {pendingCount > 0 && (
-                <span className="absolute -top-1 -right-2 px-1 min-w-[16px] h-4 bg-amber-500 text-white rounded-full text-[9px] flex items-center justify-center font-bold tabular-nums">
-                  {pendingCount}
-                </span>
-              )}
-            </div>
-            <span>Antrean</span>
-          </NavLink>
-        ) : (
-          <NavLink
-            to="/budget"
-            className={({ isActive }) =>
-              `flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[54px] h-12 ${
-                isActive ? 'text-blue-700 font-semibold' : 'text-slate-500'
-              }`
-            }
-          >
-            <Calculator className="w-5 h-5" />
-            <span>APBG</span>
-          </NavLink>
-        )}
+            </NavLink>
+          ) : (
+            <NavLink
+              to={canViewConsolidatedLpj ? '/reports?tab=semester' : '/reports?tab=warta'}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="w-12 h-12 rounded-full bg-slate-800 text-white flex items-center justify-center shadow-md active:scale-95 transition-transform"
+              title="Laporan"
+              aria-label="Buka Laporan"
+            >
+              <FileSpreadsheet className="w-5 h-5" />
+            </NavLink>
+          )}
 
-        <NavLink
-          to={canViewConsolidatedLpj ? '/reports?tab=semester' : '/reports?tab=warta'}
-          className={({ isActive }) =>
-            `flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[54px] h-12 ${
-              isActive ? 'text-blue-700 font-semibold' : 'text-slate-500'
-            }`
-          }
-        >
-          <FileSpreadsheet className="w-5 h-5" />
-          <span>{canViewConsolidatedLpj ? 'Laporan' : 'Warta'}</span>
-        </NavLink>
+          {isAuditor ? (
+            <NavLink
+              to="/audit"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={({ isActive }) =>
+                `relative flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[56px] min-h-[48px] px-1 rounded-xl transition-colors active:scale-95 ${
+                  isActive && !isMobileMenuOpen ? 'text-purple-700 font-semibold' : 'text-slate-500'
+                }`
+              }
+            >
+              <div className="relative">
+                <Shield className="w-5 h-5" />
+                {openFindingsCount > 0 && (
+                  <span className="absolute -top-1 -right-2 px-1 min-w-[16px] h-4 bg-purple-600 text-white rounded-full text-[9px] flex items-center justify-center font-bold tabular-nums">
+                    {openFindingsCount}
+                  </span>
+                )}
+              </div>
+              <span>Audit</span>
+            </NavLink>
+          ) : showApprovalAction ? (
+            <NavLink
+              to="/approvals"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={({ isActive }) =>
+                `relative flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[56px] min-h-[48px] px-1 rounded-xl transition-colors active:scale-95 ${
+                  isActive && !isMobileMenuOpen ? 'text-blue-700 font-semibold' : 'text-slate-500'
+                }`
+              }
+            >
+              <div className="relative">
+                <CheckSquare className="w-5 h-5" />
+                {pendingCount > 0 && (
+                  <span className="absolute -top-1 -right-2 px-1 min-w-[16px] h-4 bg-amber-500 text-white rounded-full text-[9px] flex items-center justify-center font-bold tabular-nums">
+                    {pendingCount}
+                  </span>
+                )}
+              </div>
+              <span>Antrean</span>
+            </NavLink>
+          ) : canViewAuditModule && isPendeta ? (
+            <NavLink
+              to="/audit"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={({ isActive }) =>
+                `relative flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[56px] min-h-[48px] px-1 rounded-xl transition-colors active:scale-95 ${
+                  isActive && !isMobileMenuOpen ? 'text-purple-700 font-semibold' : 'text-slate-500'
+                }`
+              }
+            >
+              <ShieldCheck className="w-5 h-5" />
+              <span>Audit</span>
+            </NavLink>
+          ) : (
+            <NavLink
+              to={canViewConsolidatedLpj ? '/reports?tab=semester' : canViewWarta ? '/reports?tab=warta' : '/budget'}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={({ isActive }) =>
+                `relative flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[56px] min-h-[48px] px-1 rounded-xl transition-colors active:scale-95 ${
+                  isActive && !isMobileMenuOpen ? 'text-blue-700 font-semibold' : 'text-slate-500'
+                }`
+              }
+            >
+              <FileSpreadsheet className="w-5 h-5" />
+              <span>{canViewConsolidatedLpj ? 'Laporan' : canViewWarta ? 'Warta' : 'APBG'}</span>
+            </NavLink>
+          )}
+
+          {/* Thumb-reachable Full Menu Drawer Toggle */}
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+            className={`relative flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[56px] min-h-[48px] px-1 rounded-xl transition-colors active:scale-95 ${
+              isMobileMenuOpen ? 'text-blue-700 font-semibold' : 'text-slate-500'
+            }`}
+            aria-label="Semua Menu"
+            aria-expanded={isMobileMenuOpen}
+          >
+            {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            <span>Menu</span>
+          </button>
+        </div>
       </nav>
 
       {/* Global Modals */}

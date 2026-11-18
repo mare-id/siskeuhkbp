@@ -179,6 +179,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     initAuth();
 
+    const handleLocalAccessUpdate = (evt: Event) => {
+      const customEvt = evt as CustomEvent<UserKasAccess[]>;
+      const updatedList = Array.isArray(customEvt.detail) ? customEvt.detail : [];
+      setCurrentUser((prev) => {
+        if (prev) setUserKasAccess(updatedList.filter((a) => a.user_id === prev.id));
+        return prev;
+      });
+    };
+
+    window.addEventListener('siku-user-kas-access-updated', handleLocalAccessUpdate);
+
     if (isSupabaseConfigured && supabase) {
       const channel = supabase
         .channel('auth-profiles-realtime')
@@ -211,9 +222,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .subscribe();
 
       return () => {
+        window.removeEventListener('siku-user-kas-access-updated', handleLocalAccessUpdate);
         supabase?.removeChannel(channel);
       };
     }
+
+    return () => {
+      window.removeEventListener('siku-user-kas-access-updated', handleLocalAccessUpdate);
+    };
   }, []);
 
   const getLocalProfiles = (): Profile[] => {
@@ -405,16 +421,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const hasBendaharaKasAccess = userKasAccess.some((a) => a.access_level === 'bendahara');
   const hasKetuaKasAccess = userKasAccess.some((a) => a.access_level === 'ketua');
 
+  // Kecuali admin, pencatat transaksi & penyetuju wajib ditetapkan pada Hak Akses Kas (user_kas_access)
   const canRecordTransactions = Boolean(
-    currentUser && (isAdmin || isBendaharaUmum || (isPengurusKas && hasBendaharaKasAccess))
+    currentUser && (isAdmin || hasBendaharaKasAccess)
   );
 
   const canTransfer = Boolean(
-    currentUser && (isAdmin || isBendaharaUmum || (isPengurusKas && hasBendaharaKasAccess))
+    currentUser && (isAdmin || hasBendaharaKasAccess)
   );
 
   const canApprove = Boolean(
-    currentUser && (isAdmin || isPendeta || isSekretaris || hasKetuaKasAccess)
+    currentUser && (isAdmin || hasKetuaKasAccess)
   );
 
   const canAudit = Boolean(currentUser && (isAdmin || isAuditor));
@@ -441,34 +458,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     currentUser && (isAdmin || isBendaharaUmum || isPendeta || isSekretaris || isPengurusKas)
   );
   const canManageLpjData = Boolean(
-    currentUser && (isAdmin || isBendaharaUmum || (isPengurusKas && hasBendaharaKasAccess))
+    currentUser && (isAdmin || isBendaharaUmum || hasBendaharaKasAccess)
   );
-
-  const BENDUM_KAS_IDS = ['kas-1', 'kas-2', 'kas-7', 'kas-8', 'kas-9'];
 
   const canInputKas = (kasId: string): boolean => {
     if (!currentUser) return false;
     if (currentUser.role === 'admin') return true;
-    if (currentUser.role === 'bendahara_umum') {
-      const assigned = userKasAccess.filter((a) => a.access_level === 'bendahara');
-      if (assigned.length > 0) {
-        return assigned.some((a) => a.kas_id === kasId);
-      }
-      return BENDUM_KAS_IDS.includes(kasId);
-    }
-    if (['auditor', 'pendeta_ressort', 'sekretaris', 'majelis'].includes(currentUser.role)) {
-      return false;
-    }
     return userKasAccess.some((a) => a.kas_id === kasId && a.access_level === 'bendahara');
   };
 
   const canApproveKas = (kasId: string): boolean => {
     if (!currentUser) return false;
     if (currentUser.role === 'admin') return true;
-    if (currentUser.role === 'auditor') return false;
-    if (currentUser.role === 'bendahara_umum') return false;
-    if (currentUser.role === 'pendeta_ressort') return true;
-    if (currentUser.role === 'sekretaris' && BENDUM_KAS_IDS.includes(kasId)) return true;
     return userKasAccess.some((a) => a.kas_id === kasId && a.access_level === 'ketua');
   };
 

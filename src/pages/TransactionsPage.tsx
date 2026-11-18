@@ -103,6 +103,7 @@ export const TransactionsPage: React.FC = () => {
     userKasAccess,
     canRecordTransactions,
     canTransfer,
+    canInputKas,
   } = useAuth();
 
   // View Mode: Daftar Transaksi vs Buku Kas Bendahara
@@ -502,7 +503,7 @@ export const TransactionsPage: React.FC = () => {
             <span>Ekspor Excel</span>
           </button>
 
-          {canTransfer && (
+          {(isAdmin || (canTransfer && kasList.some((k) => k.is_active && canInputKas(k.id)))) && (
             <button
               type="button"
               onClick={() => setIsTransferModalOpen(true)}
@@ -513,7 +514,7 @@ export const TransactionsPage: React.FC = () => {
             </button>
           )}
 
-          {canRecordTransactions && (
+          {(isAdmin || (canRecordTransactions && kasList.some((k) => k.is_active && canInputKas(k.id)))) && (
             <button
               type="button"
               onClick={() => setIsTxModalOpen(true)}
@@ -951,7 +952,7 @@ export const TransactionsPage: React.FC = () => {
                             )}
 
                             {tx.status === 'draft' &&
-                              canRecordTransactions &&
+                              canInputKas(tx.kas_id) &&
                               (isAdmin || tx.created_by === currentUser?.id) && (
                                 <>
                                   <button
@@ -977,7 +978,7 @@ export const TransactionsPage: React.FC = () => {
 
                             {tx.status === 'submitted' &&
                               tx.created_by === currentUser?.id &&
-                              canRecordTransactions && (
+                              canInputKas(tx.kas_id) && (
                                 <button
                                   type="button"
                                   onClick={() => setRecallTargetTx(tx)}
@@ -987,7 +988,7 @@ export const TransactionsPage: React.FC = () => {
                                 </button>
                               )}
 
-                            {tx.status === 'approved' && !tx.is_reversal && canRecordTransactions && (
+                            {tx.status === 'approved' && !tx.is_reversal && canInputKas(tx.kas_id) && (
                               <button
                                 type="button"
                                 onClick={() => setReversalTargetTx(tx)}
@@ -1098,7 +1099,7 @@ export const TransactionsPage: React.FC = () => {
                         )}
 
                         {tx.status === 'draft' &&
-                          canRecordTransactions &&
+                          canInputKas(tx.kas_id) &&
                           (isAdmin || tx.created_by === currentUser?.id) && (
                             <>
                               <button
@@ -1121,7 +1122,7 @@ export const TransactionsPage: React.FC = () => {
                             </>
                           )}
 
-                        {tx.status === 'approved' && !tx.is_reversal && canRecordTransactions && (
+                        {tx.status === 'approved' && !tx.is_reversal && canInputKas(tx.kas_id) && (
                           <button
                             type="button"
                             onClick={() => setReversalTargetTx(tx)}

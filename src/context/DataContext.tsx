@@ -252,7 +252,7 @@ interface DataContextType {
   saveStorageAccount: (data: Partial<StorageAccount>) => Promise<void>;
   saveCategory: (data: Partial<Category>) => Promise<void>;
   saveOpeningBalance: (data: Partial<OpeningBalance>) => Promise<void>;
-  saveUserKasAccess: (data: Omit<UserKasAccess, 'id'>) => Promise<void>;
+  saveUserKasAccess: (data: Omit<UserKasAccess, 'id'>) => Promise<{ success: boolean; error?: string }>;
   removeUserKasAccess: (id: string) => Promise<void>;
   updateSettings: (newSettings: Partial<AppSettings>) => Promise<void>;
 
@@ -748,7 +748,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.reconciliations) setReconciliations(data.reconciliations);
       if (data.auditLogs) setAuditLogs(data.auditLogs);
       if (data.profiles) setProfiles(data.profiles);
-      if (data.userKasAccessList) setUserKasAccessList(data.userKasAccessList);
+      if (data.userKasAccessList) {
+        setUserKasAccessList(data.userKasAccessList);
+        window.dispatchEvent(new CustomEvent('siku-user-kas-access-updated', { detail: data.userKasAccessList }));
+      }
       if (data.fiscalYears) setFiscalYears(data.fiscalYears);
       if (data.budgets) setBudgets(data.budgets);
       if (data.budgetItems) setBudgetItems(data.budgetItems);
@@ -2151,7 +2154,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setOpeningOtherPositions((prev) => prev.filter((op) => op.kas_id !== id));
     setPriorYearSummaries((prev) => prev.filter((ps) => ps.kas_id !== id));
     setPeriodClosings((prev) => prev.filter((pc) => pc.kas_id !== id));
-    setUserKasAccessList((prev) => prev.filter((u) => u.kas_id !== id));
+    setUserKasAccessList((prev) => {
+      const next = prev.filter((u) => u.kas_id !== id);
+      window.dispatchEvent(new CustomEvent('siku-user-kas-access-updated', { detail: next }));
+      return next;
+    });
     setBudgets((prev) => prev.filter((b) => b.kas_id !== id));
     setBudgetItems((prev) => prev.filter((bi) => !deletedBudgetIds.has(bi.budget_id)));
     setBudgetReallocations((prev) => prev.filter((br) => br.kas_id !== id && !deletedBudgetIds.has(br.budget_id)));
@@ -2442,28 +2449,47 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const saveUserKasAccess = async (data: Omit<UserKasAccess, 'id'>) => {
+  const saveUserKasAccess = async (
+    data: Omit<UserKasAccess, 'id'>
+  ): Promise<{ success: boolean; error?: string }> => {
     // Check constraint: Bendahara Umum cannot be ketua on Kas Umum
     const user = profiles.find((p) => p.id === data.user_id);
     const kas = kasList.find((k) => k.id === data.kas_id);
 
     if (user?.role === 'bendahara_umum' && kas?.kode === 'KAS-UMUM' && data.access_level === 'ketua') {
-      alert('Bendahara Umum tidak boleh ditugaskan sebagai Ketua pada Kas Umum demi integritas persetujuan.');
-      return;
+      return {
+        success: false,
+        error: 'Bendahara Umum tidak boleh ditugaskan sebagai Ketua pada Kas Umum demi integritas persetujuan.',
+      };
+    }
+
+    const exists = userKasAccessList.some(
+      (a) =>
+        a.user_id === data.user_id &&
+        a.kas_id === data.kas_id &&
+        a.access_level === data.access_level
+    );
+    if (exists) {
+      return { success: false, error: 'Penugasan akses tersebut sudah terdaftar.' };
     }
 
     const newAccess: UserKasAccess = {
       ...data,
       id: `uka-${Date.now()}`,
     };
-    setUserKasAccessList((prev) => [...prev, newAccess]);
+    const nextList = [...userKasAccessList, newAccess];
+    setUserKasAccessList(nextList);
+    window.dispatchEvent(new CustomEvent('siku-user-kas-access-updated', { detail: nextList }));
     if (isSupabaseConfigured) {
       await syncUpsert('user_kas_access', newAccess);
     }
+    return { success: true };
   };
 
   const removeUserKasAccess = async (id: string) => {
-    setUserKasAccessList((prev) => prev.filter((a) => a.id !== id));
+    const nextList = userKasAccessList.filter((a) => a.id !== id);
+    setUserKasAccessList(nextList);
+    window.dispatchEvent(new CustomEvent('siku-user-kas-access-updated', { detail: nextList }));
     if (isSupabaseConfigured) {
       await syncDelete('user_kas_access', 'id', id);
     }

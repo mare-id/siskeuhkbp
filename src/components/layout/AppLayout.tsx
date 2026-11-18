@@ -61,8 +61,10 @@ export const AppLayout: React.FC = () => {
     canViewConsolidatedLpj,
     canManageBudget,
     canManageOpeningBook,
+    canInputKas,
+    canApproveKas,
   } = useAuth();
-  const { getPendingTransactionsCount, settings, auditFindings } = useData();
+  const { kasList, transactions, settings, auditFindings } = useData();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -70,7 +72,16 @@ export const AppLayout: React.FC = () => {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const pendingCount = getPendingTransactionsCount();
+  const showRecordAction =
+    isAdmin || (canRecordTransactions && kasList.some((k) => k.is_active && canInputKas(k.id)));
+  const showTransferAction =
+    isAdmin || (canTransfer && kasList.some((k) => k.is_active && canInputKas(k.id)));
+  const showApprovalAction =
+    isAdmin || (canApprove && kasList.some((k) => k.is_active && canApproveKas(k.id)));
+
+  const pendingCount = showApprovalAction
+    ? transactions.filter((tx) => tx.status === 'submitted' && canApproveKas(tx.kas_id)).length
+    : 0;
   const openFindingsCount = auditFindings.filter(
     (f) => f.status === 'terbuka' || f.status === 'ditanggapi'
   ).length;
@@ -111,7 +122,7 @@ export const AppLayout: React.FC = () => {
       label: 'Persetujuan',
       icon: CheckSquare,
       badge: pendingCount > 0 ? pendingCount : null,
-      allowed: isAdmin || canApprove,
+      allowed: showApprovalAction,
     },
     {
       to: '/reports?tab=warta',
@@ -242,7 +253,7 @@ export const AppLayout: React.FC = () => {
 
         {/* Primary Role CTA */}
         <div className="p-3 space-y-1.5">
-          {canRecordTransactions ? (
+          {showRecordAction ? (
             <>
               <button
                 onClick={() => setIsTxModalOpen(true)}
@@ -251,7 +262,7 @@ export const AppLayout: React.FC = () => {
                 <Plus className="w-4 h-4" />
                 <span>Catat Transaksi</span>
               </button>
-              {canTransfer && (
+              {showTransferAction && (
                 <button
                   onClick={() => setIsTransferModalOpen(true)}
                   className="w-full h-8 px-3 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 border border-slate-800 transition-colors"
@@ -269,7 +280,7 @@ export const AppLayout: React.FC = () => {
               <ShieldCheck className="w-4 h-4 text-amber-300" />
               <span>Modul Audit</span>
             </NavLink>
-          ) : isPendeta || canApprove ? (
+          ) : showApprovalAction ? (
             <NavLink
               to="/approvals"
               className="w-full h-9 px-3 bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
@@ -384,7 +395,7 @@ export const AppLayout: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {canTransfer && (
+            {showTransferAction && (
               <button
                 onClick={() => setIsTransferModalOpen(true)}
                 className="h-8 px-3 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 border border-slate-200 transition-colors flex items-center gap-1.5"
@@ -394,7 +405,7 @@ export const AppLayout: React.FC = () => {
               </button>
             )}
 
-            {canRecordTransactions && (
+            {showRecordAction && (
               <button
                 onClick={() => setIsTxModalOpen(true)}
                 className="h-8 px-3.5 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors flex items-center gap-1.5"
@@ -414,7 +425,7 @@ export const AppLayout: React.FC = () => {
               </NavLink>
             )}
 
-            {(isPendeta || (canApprove && !canRecordTransactions && !isSekretaris)) && (
+            {showApprovalAction && !showRecordAction && (
               <NavLink
                 to="/approvals"
                 className="h-8 px-3 rounded-lg text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 transition-colors flex items-center gap-1.5"
@@ -486,7 +497,7 @@ export const AppLayout: React.FC = () => {
         {isMobileMenuOpen && (
           <div className="md:hidden fixed inset-x-0 top-14 bottom-16 bg-white z-40 p-4 overflow-y-auto space-y-3 border-b border-slate-200">
             <div className="grid grid-cols-2 gap-2">
-              {canRecordTransactions ? (
+              {showRecordAction ? (
                 <>
                   <button
                     onClick={() => {
@@ -498,7 +509,7 @@ export const AppLayout: React.FC = () => {
                     <Plus className="w-4 h-4" />
                     <span>Catat Transaksi</span>
                   </button>
-                  {canTransfer && (
+                  {showTransferAction && (
                     <button
                       onClick={() => {
                         setIsMobileMenuOpen(false);
@@ -530,7 +541,7 @@ export const AppLayout: React.FC = () => {
                     <span>Uji Bukti</span>
                   </NavLink>
                 </>
-              ) : canApprove ? (
+              ) : showApprovalAction ? (
                 <>
                   <NavLink
                     to="/approvals"
@@ -647,7 +658,7 @@ export const AppLayout: React.FC = () => {
         </NavLink>
 
         {/* Center Role Action */}
-        {canRecordTransactions ? (
+        {showRecordAction ? (
           <button
             onClick={() => setIsTxModalOpen(true)}
             className="w-11 h-11 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-md active:scale-95 transition-transform"
@@ -663,7 +674,7 @@ export const AppLayout: React.FC = () => {
           >
             <ShieldCheck className="w-5 h-5" />
           </NavLink>
-        ) : canApprove ? (
+        ) : showApprovalAction ? (
           <NavLink
             to="/approvals"
             className="w-11 h-11 rounded-full bg-amber-600 text-white flex items-center justify-center shadow-md"
@@ -700,7 +711,7 @@ export const AppLayout: React.FC = () => {
             </div>
             <span>Audit</span>
           </NavLink>
-        ) : canApprove || isAdmin ? (
+        ) : showApprovalAction ? (
           <NavLink
             to="/approvals"
             className={({ isActive }) =>

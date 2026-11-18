@@ -293,11 +293,15 @@ export const MasterDataPage: React.FC = () => {
   const handleAddAccess = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAccessUserId || !newAccessKasId) return;
-    await saveUserKasAccess({
+    const res = await saveUserKasAccess({
       user_id: newAccessUserId,
       kas_id: newAccessKasId,
       access_level: newAccessLevel,
     });
+    if (res && !res.success) {
+      showToast(res.error || 'Gagal menambahkan penugasan kas', 'error');
+      return;
+    }
     showToast('Penugasan kas berhasil ditambahkan');
     setNewAccessUserId('');
     setNewAccessKasId('');
@@ -1530,7 +1534,7 @@ export const MasterDataPage: React.FC = () => {
                   onChange={(e) => setNewAccessLevel(e.target.value as KasAccessLevel)}
                   className="p-2 rounded-xl border border-slate-200 bg-white"
                 >
-                  <option value="bendahara">Tingkat Akses: Bendahara (Pengaju)</option>
+                  <option value="bendahara">Tingkat Akses: Bendahara / Pencatat Transaksi (Pengaju)</option>
                   <option value="ketua">Tingkat Akses: Ketua (Penyetuju)</option>
                 </select>
 

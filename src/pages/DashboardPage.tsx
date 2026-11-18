@@ -61,6 +61,7 @@ export const DashboardPage: React.FC = () => {
     isSekretaris,
     isMajelis,
     userKasAccess,
+    canInputKas,
     canApproveKas,
     canRecordTransactions,
     canApprove,
@@ -172,8 +173,15 @@ export const DashboardPage: React.FC = () => {
     .filter((tx) => tx.type === 'expense')
     .reduce((sum, tx) => sum + Number(tx.amount), 0);
 
+  const canRecordAnyActiveKas =
+    isAdmin || (canRecordTransactions && kasList.some((k) => k.is_active && canInputKas(k.id)));
+  const canApproveAnyActiveKas =
+    isAdmin || (canApprove && kasList.some((k) => k.is_active && canApproveKas(k.id)));
+
   const pendingApprovals = transactions.filter((tx) => tx.status === 'submitted');
-  const myPendingApprovals = pendingApprovals.filter((tx) => canApproveKas(tx.kas_id));
+  const myPendingApprovals = canApproveAnyActiveKas
+    ? pendingApprovals.filter((tx) => canApproveKas(tx.kas_id))
+    : [];
 
   const myActionNeeded = visibleTransactions.filter(
     (tx) => tx.created_by === currentUser?.id && (tx.status === 'draft' || tx.status === 'rejected')
@@ -245,7 +253,7 @@ export const DashboardPage: React.FC = () => {
             </NavLink>
           )}
 
-          {!isAdmin && canApprove && myPendingApprovals.length > 0 && (
+          {!isAdmin && canApproveAnyActiveKas && myPendingApprovals.length > 0 && (
             <NavLink
               to="/approvals"
               className="px-3.5 py-2.5 min-h-[40px] bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
@@ -265,7 +273,7 @@ export const DashboardPage: React.FC = () => {
             </NavLink>
           )}
 
-          {canRecordTransactions && myActionNeeded.length > 0 && (
+          {canRecordAnyActiveKas && myActionNeeded.length > 0 && (
             <NavLink
               to="/transactions"
               className="px-3.5 py-2.5 min-h-[40px] bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
@@ -275,7 +283,7 @@ export const DashboardPage: React.FC = () => {
             </NavLink>
           )}
 
-          {canRecordTransactions ? (
+          {canRecordAnyActiveKas ? (
             <NavLink
               to="/transactions"
               className="px-4 py-2.5 min-h-[40px] bg-white text-slate-900 hover:bg-slate-100 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
@@ -291,13 +299,13 @@ export const DashboardPage: React.FC = () => {
               <ShieldCheck className="w-4 h-4 shrink-0 text-purple-700" />
               <span>Modul Badan Audit</span>
             </NavLink>
-          ) : isPendeta || (canApprove && !canRecordTransactions) ? (
+          ) : canApproveAnyActiveKas && !canRecordAnyActiveKas ? (
             <NavLink
               to="/approvals"
               className="px-4 py-2.5 min-h-[40px] bg-white text-slate-900 hover:bg-slate-100 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap"
             >
               <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-700" />
-              <span>Otorisasi Kas</span>
+              <span>Persetujuan Kas</span>
             </NavLink>
           ) : isSekretaris ? (
             <NavLink
@@ -521,7 +529,7 @@ export const DashboardPage: React.FC = () => {
               </NavLink>
             </div>
           </div>
-        ) : isAdmin || canApprove ? (
+        ) : canApproveAnyActiveKas ? (
           <div className="card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-500">Antrean Persetujuan</span>
@@ -540,7 +548,7 @@ export const DashboardPage: React.FC = () => {
               </NavLink>
             </div>
           </div>
-        ) : (
+        ) : canRecordAnyActiveKas ? (
           <div className="card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-500">Draf &amp; Revisi Saya</span>
@@ -556,6 +564,25 @@ export const DashboardPage: React.FC = () => {
                 className="text-[11px] font-semibold text-blue-700 hover:underline mt-1 inline-block"
               >
                 Buka Transaksi →
+              </NavLink>
+            </div>
+          </div>
+        ) : (
+          <div className="card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500">Buku Kas Aktif</span>
+              <Layers className="w-4 h-4 text-blue-700" />
+            </div>
+            <div>
+              <div className="text-xl sm:text-2xl font-bold text-slate-900 font-mono tabular-nums">
+                {visibleKasList.length}{' '}
+                <span className="text-xs font-sans font-medium text-slate-500">Buku Kas</span>
+              </div>
+              <NavLink
+                to="/transactions"
+                className="text-[11px] font-semibold text-blue-700 hover:underline mt-1 inline-block"
+              >
+                Lihat Mutasi Kas →
               </NavLink>
             </div>
           </div>

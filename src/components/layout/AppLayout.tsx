@@ -20,7 +20,6 @@ import {
   ArrowRightLeft,
   Menu,
   X,
-  Church,
   Shield,
   Calculator,
   BookOpen,
@@ -240,8 +239,12 @@ export const AppLayout: React.FC = () => {
       <aside className="hidden md:flex flex-col w-60 bg-[#0B132B] border-r border-slate-800/90 fixed inset-y-0 left-0 z-30">
         {/* Brand */}
         <div className="px-4 py-4 border-b border-slate-800/80 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-blue-950 border border-blue-800/70 text-amber-400 flex items-center justify-center shrink-0">
-            <Church className="w-4 h-4" />
+          <div className="w-9 h-9 rounded-xl bg-white p-1 border border-slate-700/40 flex items-center justify-center shrink-0">
+            <img
+              src="/assets/aistudio/Logo-HKBP_02090ed7.png"
+              alt="Logo HKBP"
+              className="w-full h-full object-contain"
+            />
           </div>
           <div className="min-w-0">
             <h1 className="font-bold text-white text-xs leading-tight truncate">
@@ -462,8 +465,12 @@ export const AppLayout: React.FC = () => {
         {/* Mobile Top Header */}
         <header className="md:hidden bg-white border-b border-slate-200/80 sticky top-0 z-30 px-4 h-14 flex items-center justify-between w-full">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-[#0B132B] text-amber-400 flex items-center justify-center shrink-0">
-              <Church className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-lg bg-white p-1 border border-slate-200 flex items-center justify-center shrink-0">
+              <img
+                src="/assets/aistudio/Logo-HKBP_02090ed7.png"
+                alt="Logo HKBP"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div className="min-w-0">
               <h1 className="font-bold text-xs text-slate-900 leading-tight truncate">

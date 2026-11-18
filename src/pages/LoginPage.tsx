@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Church, Lock, Mail, ArrowRight, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Lock, Mail, ArrowRight, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const LoginPage: React.FC = () => {
@@ -34,23 +34,38 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center px-4 py-10">
-      <div className="mx-auto w-full max-w-sm space-y-6">
-        <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-2xl bg-[#0B132B] text-amber-400 flex items-center justify-center mx-auto shadow-md">
-            <Church className="w-6 h-6" />
+    <div className="relative min-h-screen flex flex-col justify-center px-4 py-10 overflow-hidden bg-gradient-to-b from-slate-100 via-slate-50 to-blue-100/70">
+      {/* Silhouette Background of HKBP Hutaraja Church */}
+      <div className="pointer-events-none select-none absolute inset-0 z-0">
+        <img
+          src="/assets/aistudio/WhatsApp_Image_2025-05-14_at_16.01.56_15be8f1f_bea9a36b.jpg"
+          alt=""
+          aria-hidden="true"
+          className="w-full h-full object-cover object-center grayscale contrast-[2.2] brightness-[0.35] opacity-[0.22] mix-blend-multiply scale-[1.03]"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-white/75 via-slate-50/45 to-slate-200/65" />
+      </div>
+
+      <div className="relative z-10 mx-auto w-full max-w-sm space-y-6">
+        <div className="text-center space-y-2.5">
+          <div className="w-16 h-16 rounded-2xl bg-white/95 p-2 shadow-md border border-slate-200/90 flex items-center justify-center mx-auto">
+            <img
+              src="/assets/aistudio/Logo-HKBP_02090ed7.png"
+              alt="Logo HKBP"
+              className="w-full h-full object-contain"
+            />
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">
               SISKEU HKBP Hutaraja
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-600 mt-0.5 font-medium">
               Masuk dengan akun pengurus &amp; pelayan gereja
             </p>
           </div>
         </div>
 
-        <div className="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200/90 shadow-sm space-y-4">
+        <div className="bg-white/95 backdrop-blur-md p-6 sm:p-7 rounded-2xl border border-slate-200/90 shadow-lg space-y-4">
           {error && (
             <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -69,7 +84,7 @@ export const LoginPage: React.FC = () => {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="nama@hkbp-hutaraja.org"
                   autoComplete="email"
-                  className="w-full h-11 pl-10 pr-3.5 rounded-xl border border-slate-200 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                  className="w-full h-11 pl-10 pr-3.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                   required
                 />
               </div>
@@ -85,7 +100,7 @@ export const LoginPage: React.FC = () => {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Masukkan kata sandi"
                   autoComplete="current-password"
-                  className="w-full h-11 pl-10 pr-11 rounded-xl border border-slate-200 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                  className="w-full h-11 pl-10 pr-11 rounded-xl border border-slate-200 bg-white text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                   required
                 />
                 <button
@@ -110,7 +125,7 @@ export const LoginPage: React.FC = () => {
           </form>
         </div>
 
-        <p className="text-center text-[11px] text-slate-400">
+        <p className="text-center text-[11px] text-slate-600 font-medium">
           Pengelolaan akun oleh Administrator HKBP Hutaraja
         </p>
       </div>

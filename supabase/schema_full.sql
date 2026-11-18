@@ -847,7 +847,15 @@ create index if not exists idx_transactions_status on public.transactions(status
 create index if not exists idx_budgets_kas_tahun on public.budgets(kas_id, tahun);
 create index if not exists idx_audit_logs_changed_at on public.audit_logs(changed_at desc);
 
--- 9. ROW LEVEL SECURITY (RLS) & POLICIES
+-- 9. ROW LEVEL SECURITY (RLS), GRANTS & POLICIES
+-- Berikan hak akses dasar schema & tabel untuk role anon, authenticated, dan service_role
+grant usage on schema public to anon, authenticated, service_role;
+grant all on all tables in schema public to anon, authenticated, service_role;
+grant all on all sequences in schema public to anon, authenticated, service_role;
+grant all on all routines in schema public to anon, authenticated, service_role;
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+
 -- Buka akses tabel publik agar dashboard & RPC client berfungsi langsung
 do $$
 declare
@@ -865,6 +873,7 @@ declare
   ];
 begin
   foreach tbl in array tables loop
+    execute format('grant all on table public.%I to anon, authenticated, service_role;', tbl);
     execute format('alter table public.%I enable row level security;', tbl);
     execute format('drop policy if exists "Allow full access for all" on public.%I;', tbl);
     execute format('create policy "Allow full access for all" on public.%I for all using (true) with check (true);', tbl);

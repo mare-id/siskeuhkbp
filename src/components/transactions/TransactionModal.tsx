@@ -662,14 +662,14 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
           {/* MULTI-POS INCOME (UCAPAN SYUKUR / RINCIAN) */}
           {type === 'income' && incomeMode === 'multi' && (
             <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2.5">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs font-bold text-slate-800">Rincian Alokasi Kas</span>
                 <button
                   type="button"
                   onClick={handleApplyUcapanSyukurTemplate}
-                  className="px-2.5 py-1.5 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[11px] font-semibold flex items-center gap-1"
+                  className="px-3.5 py-2 min-h-[36px] bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white border border-emerald-700/20 rounded-lg text-xs font-semibold shadow-xs inline-flex items-center gap-1.5 cursor-pointer transition-all whitespace-nowrap"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
                   <span>Contoh Ucapan Syukur</span>
                 </button>
               </div>
@@ -685,26 +685,55 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
                       key={row.rowId}
                       className="p-2.5 bg-white rounded-xl border border-slate-200 space-y-2 text-xs"
                     >
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[11px] font-bold text-slate-500">#{idx + 1}</span>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setAllocations((prev) =>
-                                prev.map((r) =>
-                                  r.rowId === row.rowId ? { ...r, is_sentralisasi: !r.is_sentralisasi } : r
-                                )
-                              )
-                            }
-                            className={`px-2 py-1 rounded-md text-[10px] font-bold border transition-colors ${
-                              row.is_sentralisasi
-                                ? 'bg-blue-50 border-blue-300 text-blue-800'
-                                : 'bg-emerald-50 border-emerald-300 text-emerald-800'
-                            }`}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <div
+                            role="group"
+                            aria-label={`Status sentralisasi baris ${idx + 1}`}
+                            className="inline-flex items-center p-0.5 rounded-lg bg-slate-100 border border-slate-300/90"
                           >
-                            {row.is_sentralisasi ? 'Sentralisasi (45/55)' : 'Non-Sentralisasi (100%)'}
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setAllocations((prev) =>
+                                  prev.map((r) =>
+                                    r.rowId === row.rowId ? { ...r, is_sentralisasi: true } : r
+                                  )
+                                )
+                              }
+                              className={`px-2.5 py-1.5 min-h-[30px] rounded-md text-[11px] font-semibold cursor-pointer transition-all whitespace-nowrap ${
+                                row.is_sentralisasi
+                                  ? 'bg-blue-600 text-white shadow-2xs'
+                                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
+                              }`}
+                            >
+                              Sentralisasi (45/55)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setAllocations((prev) =>
+                                  prev.map((r) =>
+                                    r.rowId === row.rowId
+                                      ? {
+                                          ...r,
+                                          is_sentralisasi: false,
+                                          exclusion_type: r.exclusion_type || inferExclusionForKas(r.kas_id),
+                                        }
+                                      : r
+                                  )
+                                )
+                              }
+                              className={`px-2.5 py-1.5 min-h-[30px] rounded-md text-[11px] font-semibold cursor-pointer transition-all whitespace-nowrap ${
+                                !row.is_sentralisasi
+                                  ? 'bg-emerald-600 text-white shadow-2xs'
+                                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
+                              }`}
+                            >
+                              Non-Sentralisasi (100%)
+                            </button>
+                          </div>
 
                           {allocations.length > 1 && (
                             <button
@@ -712,8 +741,9 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
                               onClick={() =>
                                 setAllocations((prev) => prev.filter((r) => r.rowId !== row.rowId))
                               }
-                              className="p-1 text-rose-500 hover:bg-rose-50 rounded-md"
+                              className="p-1.5 min-h-[34px] min-w-[34px] text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg inline-flex items-center justify-center cursor-pointer transition-colors"
                               aria-label="Hapus baris"
+                              title="Hapus baris"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>

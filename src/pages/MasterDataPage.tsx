@@ -471,17 +471,13 @@ export const MasterDataPage: React.FC = () => {
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-1">
-            <Database className="w-4 h-4 text-primary" />
-            <span>Pengaturan Organisasi & Hak Akses SISKEU HKBP</span>
-          </div>
           <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
-            Kelola Data Master HKBP Hutaraja
+            Data Master
           </h2>
-          <p className="text-xs md:text-sm text-slate-500">
-            Atur daftar Kas (dana), Pengguna & Pelayan gereja, Rekening simpanan, Kategori, dan Saldo awal
+          <p className="text-xs text-slate-500">
+            Kelola kas, tahun anggaran, pengguna, rekening, kategori, saldo awal, dan kebijakan
           </p>
         </div>
       </div>
@@ -745,13 +741,13 @@ export const MasterDataPage: React.FC = () => {
                 <div className="absolute right-0 top-0 translate-x-12 -translate-y-8 w-64 h-64 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                        Tahun Anggaran Berjalan (Aktif)
+                    <div className="flex items-center gap-2 text-xs text-slate-300">
+                      <span className="font-semibold text-emerald-300">
+                        Tahun Anggaran Aktif
                       </span>
-                      <span className="text-xs text-slate-400">
-                        Periode: 01 Jan {currentActiveFY.year} — 31 Des {currentActiveFY.year}
+                      <span aria-hidden="true">·</span>
+                      <span className="text-slate-400">
+                        01 Jan {currentActiveFY.year} — 31 Des {currentActiveFY.year}
                       </span>
                     </div>
 
@@ -1309,9 +1305,9 @@ export const MasterDataPage: React.FC = () => {
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Kategori Jenis Penerimaan &amp; Pengeluaran</h3>
+              <h3 className="text-sm font-bold text-slate-900">Kategori Penerimaan &amp; Pengeluaran</h3>
               <p className="text-xs text-slate-500">
-                Admin dapat menentukan apakah tiap kategori penerimaan merupakan <strong>Objek Sentralisasi</strong> (otomatis 55% Kas Sentralisasi &amp; 45% Kas Tujuan) atau <strong>Bukan Sentralisasi</strong> (100% penuh ke Kas Tujuan).
+                Penentuan sentralisasi dilakukan langsung saat pencatatan transaksi.
               </p>
             </div>
             {isAdmin && (
@@ -1322,8 +1318,6 @@ export const MasterDataPage: React.FC = () => {
                     tipe: 'income',
                     kode: '',
                     is_active: true,
-                    is_sentralisasi: true,
-                    sentralisasi_group: 'pelean_mingguan',
                     default_kas_id: null,
                   })
                 }
@@ -1338,100 +1332,40 @@ export const MasterDataPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Income Categories */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
-              <div className="flex items-center justify-between border-b pb-2">
-                <h4 className="font-bold text-xs text-emerald-700 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span>Kategori Jenis Penerimaan ({categories.filter((c) => c.tipe === 'income').length})</span>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h4 className="font-bold text-xs text-emerald-700">
+                  Kategori Penerimaan ({categories.filter((c) => c.tipe === 'income').length})
                 </h4>
-                <span className="text-[10px] text-slate-400">
-                  {categories.filter((c) => c.tipe === 'income' && c.is_sentralisasi !== false).length} Sentralisasi ·{' '}
-                  {categories.filter((c) => c.tipe === 'income' && c.is_sentralisasi === false).length} Non-Sentralisasi
-                </span>
               </div>
               <div className="space-y-2">
                 {categories
                   .filter((c) => c.tipe === 'income')
                   .map((c) => {
-                    const isObjek = c.is_sentralisasi !== false;
                     const defaultKas = c.default_kas_id ? kasList.find((k) => k.id === c.default_kas_id) : null;
-                    const exLabel =
-                      c.sentralisasi_exclusion_type === 'sosial_duka'
-                        ? 'Sosial/Duka'
-                        : c.sentralisasi_exclusion_type === 'beasiswa'
-                        ? 'Beasiswa'
-                        : c.sentralisasi_exclusion_type === 'pembangunan_lokal'
-                        ? 'Pembangunan Lokal'
-                        : c.sentralisasi_exclusion_type === 'transitoris'
-                        ? 'Transitoris/Titipan'
-                        : c.sentralisasi_exclusion_type === 'lainnya'
-                        ? 'Non-Sentralisasi'
-                        : null;
 
                     return (
                       <div
                         key={c.id}
                         className="p-3 bg-slate-50/70 rounded-xl flex items-center justify-between text-xs gap-2 border border-slate-100 hover:border-slate-200 transition-colors"
                       >
-                        <div className="space-y-1 min-w-0">
+                        <div className="space-y-0.5 min-w-0">
                           <div className="font-semibold text-slate-800">{c.nama}</div>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {c.kode && <span className="text-[10px] font-mono text-slate-400">{c.kode}</span>}
-                            {isObjek ? (
-                              <span className="text-[9.5px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800">
-                                Objek Sentralisasi · 55% Kas Sentralisasi : 45% Huria
-                              </span>
-                            ) : (
-                              <span className="text-[9.5px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
-                                Non-Sentralisasi · 100% Kas Tujuan{exLabel ? ` (${exLabel})` : ''}
-                              </span>
-                            )}
+                          <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                            {c.kode && <span className="font-mono text-slate-400">{c.kode}</span>}
                             {defaultKas && (
-                              <span className="text-[9.5px] font-semibold px-2 py-0.5 rounded-md bg-slate-200/80 text-slate-700">
-                                Default: {defaultKas.nama}
-                              </span>
+                              <span>Kas default: {defaultKas.nama}</span>
                             )}
                           </div>
                         </div>
                         {isAdmin && (
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                const nextSent = !isObjek;
-                                await saveCategory({
-                                  ...c,
-                                  is_sentralisasi: nextSent,
-                                  sentralisasi_group: nextSent
-                                    ? c.sentralisasi_group && c.sentralisasi_group !== 'dikecualikan_khusus'
-                                      ? c.sentralisasi_group
-                                      : 'pelean_mingguan'
-                                    : 'dikecualikan_khusus',
-                                  sentralisasi_exclusion_type: nextSent ? null : c.sentralisasi_exclusion_type || 'lainnya',
-                                });
-                                showToast(
-                                  `"${c.nama}" diubah menjadi ${
-                                    nextSent ? 'Objek Sentralisasi (55% / 45%)' : 'Bukan Sentralisasi (100% Kas Tujuan)'
-                                  }`
-                                );
-                              }}
-                              title={isObjek ? 'Ubah ke Non-Sentralisasi (100% Lokal)' : 'Ubah ke Objek Sentralisasi (55%/45%)'}
-                              className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors ${
-                                isObjek
-                                  ? 'bg-white border-blue-200 text-blue-700 hover:bg-blue-50'
-                                  : 'bg-white border-emerald-200 text-emerald-700 hover:bg-emerald-50'
-                              }`}
-                            >
-                              {isObjek ? '55/45' : '100%'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingCategory(c)}
-                              title="Ubah Pengaturan Kategori"
-                              className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-white rounded-lg transition-colors"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setEditingCategory(c)}
+                            title="Ubah Kategori"
+                            className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-white rounded-lg transition-colors shrink-0"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
                         )}
                       </div>
                     );
@@ -2758,17 +2692,12 @@ export const MasterDataPage: React.FC = () => {
 
       {/* Modal Edit/Add Category */}
       {editingCategory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl p-6 space-y-4 my-8">
-            <div className="flex justify-between items-center border-b pb-3">
-              <div>
-                <h3 className="font-bold text-sm text-slate-900">
-                  {editingCategory.id ? 'Pengaturan Kategori Anggaran' : 'Tambah Kategori Anggaran Baru'}
-                </h3>
-                <p className="text-[11px] text-slate-500">
-                  Atur jenis pos penerimaan/pengeluaran dan ketentuan sentralisasi kas
-                </p>
-              </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl p-5 sm:p-6 space-y-4 my-8">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-sm text-slate-900">
+                {editingCategory.id ? 'Ubah Kategori' : 'Tambah Kategori'}
+              </h3>
               <button onClick={() => setEditingCategory(null)} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-4 h-4" />
               </button>
@@ -2780,15 +2709,15 @@ export const MasterDataPage: React.FC = () => {
                   type="text"
                   value={editingCategory.nama || ''}
                   onChange={(e) => setEditingCategory({ ...editingCategory, nama: e.target.value })}
-                  placeholder="Contoh: Pelean Partangiangan Wijk / Ucapan Syukur Khusus"
-                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                  placeholder="Contoh: Pelean Partangiangan / Ucapan Syukur"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Tipe Anggaran</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Tipe</label>
                   <select
                     value={editingCategory.tipe || 'income'}
                     onChange={(e) =>
@@ -2797,10 +2726,10 @@ export const MasterDataPage: React.FC = () => {
                         tipe: e.target.value as 'income' | 'expense',
                       })
                     }
-                    className="w-full p-2.5 rounded-xl border border-slate-200 bg-white"
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-white"
                   >
-                    <option value="income">Pemasukan (Pelean / Syukur / Dana)</option>
-                    <option value="expense">Pengeluaran (Operasional / Pelayanan)</option>
+                    <option value="income">Pemasukan</option>
+                    <option value="expense">Pengeluaran</option>
                   </select>
                 </div>
                 <div>
@@ -2809,142 +2738,36 @@ export const MasterDataPage: React.FC = () => {
                     type="text"
                     value={editingCategory.kode || ''}
                     onChange={(e) => setEditingCategory({ ...editingCategory, kode: e.target.value.toUpperCase() })}
-                    placeholder="Contoh: IN-15"
-                    className="w-full p-2.5 rounded-xl border border-slate-200 font-mono"
+                    placeholder="IN-15"
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 font-mono"
                   />
                 </div>
               </div>
 
-              {/* PPKU Sentralisasi Options for Income */}
               {editingCategory.tipe === 'income' && (
-                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
-                  <div>
-                    <label className="block font-bold text-slate-800 text-xs mb-2">
-                      Status Sentralisasi Keuangan HKBP
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setEditingCategory({
-                            ...editingCategory,
-                            is_sentralisasi: true,
-                            sentralisasi_group:
-                              editingCategory.sentralisasi_group && editingCategory.sentralisasi_group !== 'dikecualikan_khusus'
-                                ? editingCategory.sentralisasi_group
-                                : 'pelean_mingguan',
-                            sentralisasi_exclusion_type: null,
-                          })
-                        }
-                        className={`p-2.5 rounded-xl border text-left transition-all ${
-                          editingCategory.is_sentralisasi !== false
-                            ? 'bg-blue-50 border-blue-400 ring-1 ring-blue-400 text-blue-950'
-                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="font-bold text-[11px]">Objek Sentralisasi</div>
-                        <div className="text-[10px] opacity-80 mt-0.5">
-                          Otomatis 55% Kas Sentralisasi &amp; 45% Kas Huria/Tujuan
-                        </div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setEditingCategory({
-                            ...editingCategory,
-                            is_sentralisasi: false,
-                            sentralisasi_group: 'dikecualikan_khusus',
-                            sentralisasi_exclusion_type: editingCategory.sentralisasi_exclusion_type || 'lainnya',
-                          })
-                        }
-                        className={`p-2.5 rounded-xl border text-left transition-all ${
-                          editingCategory.is_sentralisasi === false
-                            ? 'bg-emerald-50 border-emerald-400 ring-1 ring-emerald-400 text-emerald-950'
-                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="font-bold text-[11px]">Bukan Sentralisasi</div>
-                        <div className="text-[10px] opacity-80 mt-0.5">
-                          100% masuk penuh ke Kas Tujuan (Tanpa potongan 55%)
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-
-                  {editingCategory.is_sentralisasi !== false ? (
-                    <div className="pt-2 border-t border-slate-200">
-                      <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
-                        Kelompok Rekapitulasi PPKU
-                      </label>
-                      <select
-                        value={
-                          editingCategory.sentralisasi_group && editingCategory.sentralisasi_group !== 'dikecualikan_khusus'
-                            ? editingCategory.sentralisasi_group
-                            : 'pelean_mingguan'
-                        }
-                        onChange={(e) =>
-                          setEditingCategory({
-                            ...editingCategory,
-                            sentralisasi_group: e.target.value as any,
-                          })
-                        }
-                        className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
-                      >
-                        <option value="pelean_mingguan">1. Persembahan Mingguan &amp; Ibadah Lainnya</option>
-                        <option value="pelean_syukur">2. Persembahan Syukur / Hamauliateon</option>
-                        <option value="badan_usaha_lembaga">3. Badan Usaha, Yayasan, Hibah &amp; Sumber Lain</option>
-                      </select>
-                    </div>
-                  ) : (
-                    <div className="pt-2 border-t border-slate-200">
-                      <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
-                        Klasifikasi Non-Sentralisasi (100% Kas Tujuan)
-                      </label>
-                      <select
-                        value={editingCategory.sentralisasi_exclusion_type || 'lainnya'}
-                        onChange={(e) =>
-                          setEditingCategory({
-                            ...editingCategory,
-                            sentralisasi_exclusion_type: e.target.value as any,
-                          })
-                        }
-                        className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
-                      >
-                        <option value="sosial_duka">Pelean Sosial / Duka (Kas Sosial Huria)</option>
-                        <option value="beasiswa">Pelean Beasiswa (Dana Belajar)</option>
-                        <option value="pembangunan_lokal">Dana Pembangunan Fisik Lokal</option>
-                        <option value="transitoris">Penerimaan Transitoris / Titipan (Pendeta, Wijk/Lingkungan)</option>
-                        <option value="lainnya">Non-Sentralisasi Lainnya (Kebijakan Huria)</option>
-                      </select>
-                    </div>
-                  )}
-
-                  {/* Kas Tujuan Default (Opsional) */}
-                  <div className="pt-2 border-t border-slate-200">
-                    <label className="block font-semibold text-slate-700 mb-1 text-[11px]">
-                      Kas Tujuan Lokal Default (Opsional — Tetap Dapat Diubah Saat Input Transaksi)
-                    </label>
-                    <select
-                      value={editingCategory.default_kas_id || ''}
-                      onChange={(e) =>
-                        setEditingCategory({
-                          ...editingCategory,
-                          default_kas_id: e.target.value || null,
-                        })
-                      }
-                      className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
-                    >
-                      <option value="">-- Fleksibel (Ikuti Kas yang dipilih Bendahara saat transaksi) --</option>
-                      {kasList
-                        .filter((k) => k.is_active && k.id !== 'kas-9')
-                        .map((k) => (
-                          <option key={k.id} value={k.id}>
-                            {k.nama} ({k.kode})
-                          </option>
-                        ))}
-                    </select>
-                  </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Kas Default (Opsional)
+                  </label>
+                  <select
+                    value={editingCategory.default_kas_id || ''}
+                    onChange={(e) =>
+                      setEditingCategory({
+                        ...editingCategory,
+                        default_kas_id: e.target.value || null,
+                      })
+                    }
+                    className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-white text-xs"
+                  >
+                    <option value="">Sesuai pilihan saat transaksi</option>
+                    {kasList
+                      .filter((k) => k.is_active && k.id !== 'kas-9')
+                      .map((k) => (
+                        <option key={k.id} value={k.id}>
+                          {k.nama} ({k.kode})
+                        </option>
+                      ))}
+                  </select>
                 </div>
               )}
 

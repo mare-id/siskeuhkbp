@@ -120,17 +120,12 @@ export const PeriodClosingPage: React.FC = () => {
 
   return (
     <div className="space-y-6 w-full max-w-7xl mx-auto min-w-0 overflow-hidden">
-      {/* Page Title */}
       <div>
-        <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-1">
-          <Lock className="w-4 h-4 text-primary" />
-          <span>Integritas & Kunci Buku Periode</span>
-        </div>
-        <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
-          Penutupan Buku Bulanan (Period Closing)
-        </h2>
-        <p className="text-xs md:text-sm text-slate-500">
-          Kunci transaksi bulanan setelah seluruh catatan kas seksi diverifikasi dan disetujui
+        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+          Penutupan Buku Bulanan
+        </h1>
+        <p className="text-xs text-slate-500">
+          Kunci transaksi bulanan setelah seluruh mutasi kas disetujui
         </p>
       </div>
 

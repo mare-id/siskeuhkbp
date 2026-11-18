@@ -8,7 +8,6 @@ import {
   Search,
   FileEdit,
   Trash2,
-  ShieldAlert,
   Paperclip,
   ChevronLeft,
   ChevronRight,
@@ -149,36 +148,24 @@ export const AdminTransactionsPage: React.FC = () => {
 
   return (
     <div className="space-y-6 w-full max-w-7xl mx-auto min-w-0">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
             Edit &amp; Hapus Transaksi (Admin)
-          </h2>
-          <p className="text-xs md:text-sm text-slate-500">
-            Menu khusus Administrator untuk koreksi, perubahan data, dan penghapusan transaksi pada semua status.
+          </h1>
+          <p className="text-xs text-slate-500">
+            Setiap perubahan atau penghapusan membutuhkan konfirmasi dan tercatat di Audit Trail
           </p>
         </div>
 
         <button
           type="button"
           onClick={handleResetFilters}
-          className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 inline-flex items-center gap-1.5 self-start sm:self-auto"
+          className="px-3.5 py-2 min-h-[40px] rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 inline-flex items-center gap-1.5 self-start sm:self-auto"
         >
           <RotateCcw className="w-3.5 h-3.5" />
           <span>Reset Filter</span>
         </button>
-      </div>
-
-      {/* Admin Governance Notice */}
-      <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 flex items-start gap-3 text-xs text-amber-950">
-        <ShieldAlert className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-        <div className="space-y-0.5 leading-relaxed">
-          <span className="font-bold block">Kontrol Perubahan &amp; Audit Trail</span>
-          <p className="text-amber-900">
-            Setiap perubahan atau penghapusan transaksi membutuhkan konfirmasi ulang, tersimpan langsung ke Supabase, dan otomatis dicatat ke dalam <strong>Audit Trail</strong>. Tahun anggaran yang LPJ-nya sudah disahkan permanen tetap terlindungi.
-          </p>
-        </div>
       </div>
 
       {/* KPI Strip */}

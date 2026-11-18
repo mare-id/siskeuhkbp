@@ -7,18 +7,15 @@ import React, { useState } from 'react';
 import {
   CheckCircle,
   XCircle,
-  AlertCircle,
   Clock,
   Paperclip,
   CheckCheck,
-  ShieldCheck,
   ArrowRightLeft,
-  Calendar,
-  Sparkles,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { Transaction } from '../types/database';
 import { formatRupiah, formatDateIndo } from '../lib/formatters';
 import { AttachmentPreviewModal } from '../components/transactions/AttachmentPreviewModal';
@@ -27,7 +24,8 @@ import { getPpkuProcurementRule, PPKU_BPSK_DEADLINE_DAYS } from '../lib/ppkuRule
 
 export const ApprovalQueuePage: React.FC = () => {
   const { kasList, storageAccounts, transactions, changeStatus, bulkApprove, confirmTransferReceipt } = useData();
-  const { currentUser, canApproveKas, isLeader, userKasAccess } = useAuth();
+  const { currentUser, canApproveKas } = useAuth();
+  const { toast } = useToast();
 
   // Modals state
   const [previewAttachmentUrl, setPreviewAttachmentUrl] = useState<string | null>(null);
@@ -76,7 +74,7 @@ export const ApprovalQueuePage: React.FC = () => {
       setActionSuccessMsg(`Transaksi "${tx.description}" berhasil disetujui.`);
       setTimeout(() => setActionSuccessMsg(''), 4000);
     } else {
-      alert(res.error || 'Gagal menyetujui transaksi.');
+      toast.error(res.error || 'Gagal menyetujui transaksi.');
     }
   };
 
@@ -84,10 +82,10 @@ export const ApprovalQueuePage: React.FC = () => {
     if (!rejectingTx) return;
     const res = await changeStatus(rejectingTx.id, 'rejected', reason);
     if (res.success) {
-      setActionSuccessMsg(`Transaksi telah ditolak dan dikembalikan ke penginput.`);
+      setActionSuccessMsg(`Transaksi ditolak dan dikembalikan ke penginput.`);
       setTimeout(() => setActionSuccessMsg(''), 4000);
     } else {
-      alert(res.error || 'Gagal menolak transaksi.');
+      toast.error(res.error || 'Gagal menolak transaksi.');
     }
     setRejectingTx(null);
   };
@@ -97,7 +95,7 @@ export const ApprovalQueuePage: React.FC = () => {
     const res = await bulkApprove(selectedTxIds);
     if (res.success) {
       confetti({ particleCount: 80, spread: 80, origin: { y: 0.7 } });
-      setActionSuccessMsg(`${res.count} transaksi berhasil disetujui sekaligus.`);
+      setActionSuccessMsg(`${res.count} transaksi disetujui.`);
       setSelectedTxIds([]);
       setTimeout(() => setActionSuccessMsg(''), 4000);
     }
@@ -107,27 +105,22 @@ export const ApprovalQueuePage: React.FC = () => {
     const res = await confirmTransferReceipt(transferId);
     if (res.success) {
       confetti({ particleCount: 60, spread: 70, origin: { y: 0.8 } });
-      setActionSuccessMsg('Penerimaan transfer dana berhasil dikonfirmasi dan saldo telah dimutasi.');
+      setActionSuccessMsg('Penerimaan transfer dana berhasil dikonfirmasi.');
       setTimeout(() => setActionSuccessMsg(''), 4000);
     } else {
-      alert(res.error || 'Gagal mengonfirmasi transfer.');
+      toast.error(res.error || 'Gagal mengonfirmasi transfer.');
     }
   };
 
   return (
-    <div className="space-y-6 w-full max-w-7xl mx-auto min-w-0 overflow-hidden">
-      {/* Page Title */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-5 w-full max-w-7xl mx-auto min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-amber-700 mb-1">
-            <Clock className="w-4 h-4" />
-            <span>Verifikasi & Akuntabilitas Kas</span>
-          </div>
-          <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
-            Antrean Persetujuan Ketua Kas
-          </h2>
-          <p className="text-xs md:text-sm text-slate-500">
-            Periksa dan setujui transaksi yang diajukan oleh bendahara seksi
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            Antrean Persetujuan
+          </h1>
+          <p className="text-xs text-slate-500">
+            Verifikasi pengajuan transaksi kas seksi dan transfer masuk
           </p>
         </div>
 
@@ -248,9 +241,7 @@ export const ApprovalQueuePage: React.FC = () => {
               return (
                 <div
                   key={tx.id}
-                  className={`card-hover bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all border-l-4 ${
-                    isInc ? 'border-l-emerald-500' : 'border-l-rose-500'
-                  }`}
+                  className="card-hover bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
                 >
                   {/* Left: Checkbox & Info */}
                   <div className="flex items-start gap-3">

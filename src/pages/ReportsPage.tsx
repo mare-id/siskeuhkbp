@@ -898,11 +898,11 @@ export const ReportsPage: React.FC = () => {
               <span className="text-[11px] text-slate-400">Posisi Minggu, {formatDateIndo(wartaRange.weekStartStr)}</span>
             </div>
 
-            <div className="bg-white rounded-2xl border border-emerald-200/80 border-t-4 border-t-emerald-600 p-5 shadow-2xs space-y-1">
-              <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider block">
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-5 space-y-1">
+              <span className="text-xs font-semibold text-emerald-700 block">
                 Total Penerimaan Minggu Ini
               </span>
-              <p className="text-xl font-black font-mono text-emerald-900 tabular-nums">
+              <p className="text-xl font-bold font-mono text-emerald-800 tabular-nums">
                 {formatRupiah(weeklyWartaData.totals.penerimaan)}
               </p>
               <span className="text-[11px] text-slate-500">
@@ -912,11 +912,11 @@ export const ReportsPage: React.FC = () => {
               </span>
             </div>
 
-            <div className="bg-white rounded-2xl border border-rose-200/80 border-t-4 border-t-rose-600 p-5 shadow-2xs space-y-1">
-              <span className="text-[11px] font-bold text-rose-700 uppercase tracking-wider block">
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-5 space-y-1">
+              <span className="text-xs font-semibold text-rose-700 block">
                 Total Pengeluaran Minggu Ini
               </span>
-              <p className="text-xl font-black font-mono text-rose-900 tabular-nums">
+              <p className="text-xl font-bold font-mono text-rose-800 tabular-nums">
                 {formatRupiah(weeklyWartaData.totals.pengeluaran)}
               </p>
               <span className="text-[11px] text-slate-500">
@@ -1692,16 +1692,16 @@ export const ReportsPage: React.FC = () => {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="card-emerald card-hover p-4 rounded-2xl border-t-4 border-t-emerald-500 shadow-2xs space-y-2 transition-all">
-                      <span className="text-xs font-semibold text-emerald-900/80 uppercase tracking-wide">Penerimaan Pelayanan Murni</span>
-                      <p className="text-2xl font-black text-emerald-950 tabular-nums">Rp 168.450.000</p>
-                      <p className="text-[11px] font-medium text-emerald-800/80">Pelean I-V, Kantong Diakonia, Donasi Terikat, & Persembahan Khusus.</p>
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200/90 space-y-1.5">
+                      <span className="text-xs font-semibold text-emerald-700">Penerimaan Pelayanan Murni</span>
+                      <p className="text-2xl font-bold font-mono text-slate-900 tabular-nums">Rp 168.450.000</p>
+                      <p className="text-[11px] text-slate-500">Pelean I-V, Kantong Diakonia, Donasi Terikat, &amp; Persembahan Khusus.</p>
                     </div>
 
-                    <div className="card-rose card-hover p-4 rounded-2xl border-t-4 border-t-rose-500 shadow-2xs space-y-2 transition-all">
-                      <span className="text-xs font-semibold text-rose-900/80 uppercase tracking-wide">Pengeluaran Pelayanan Murni</span>
-                      <p className="text-2xl font-black text-rose-950 tabular-nums">Rp 124.800.000</p>
-                      <p className="text-[11px] font-medium text-rose-800/80">Operasional Sekretariat, Listrik, Honor Pelayan, Pelayanan Sosial.</p>
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200/90 space-y-1.5">
+                      <span className="text-xs font-semibold text-rose-700">Pengeluaran Pelayanan Murni</span>
+                      <p className="text-2xl font-bold font-mono text-slate-900 tabular-nums">Rp 124.800.000</p>
+                      <p className="text-[11px] text-slate-500">Operasional Sekretariat, Listrik, Honor Pelayan, Pelayanan Sosial.</p>
                     </div>
                   </div>
 
@@ -2269,11 +2269,10 @@ export const ReportsPage: React.FC = () => {
           );
         });
 
-        // Group 1: Pelean Mingguan & Ibadah Lainnya (PPKU Pasal 4 ayat 3a-k)
+        // Group 1: Pelean Mingguan & Ibadah Lainnya
         const g1Cats = categories.filter(
           (c) =>
             c.tipe === 'income' &&
-            c.is_sentralisasi !== false &&
             (c.sentralisasi_group === 'pelean_mingguan' ||
               (!c.sentralisasi_group && ['IN-01', 'IN-02', 'IN-02B', 'IN-03', 'IN-04', 'IN-05', 'IN-05B'].includes(c.kode || '')))
         );
@@ -2281,27 +2280,35 @@ export const ReportsPage: React.FC = () => {
         const g2Cats = categories.filter(
           (c) =>
             c.tipe === 'income' &&
-            c.is_sentralisasi !== false &&
             (c.sentralisasi_group === 'pelean_syukur' ||
               (!c.sentralisasi_group && ['IN-06', 'IN-07', 'IN-08', 'IN-09', 'IN-10'].includes(c.kode || '')))
         );
-        // Group 3: Badan Usaha, Lembaga & Hibah (PPKU Pasal 4 ayat 2b-e)
+        // Group 3: Badan Usaha, Lembaga & Hibah
         const g3Cats = categories.filter(
           (c) =>
             c.tipe === 'income' &&
-            c.is_sentralisasi !== false &&
             (c.sentralisasi_group === 'badan_usaha_lembaga' ||
               (!c.sentralisasi_group && ['IN-11', 'IN-12', 'IN-12B', 'IN-13', 'IN-14'].includes(c.kode || '')))
         );
-        // Group 4: Non-Sentralisasi / Pengecualian Resmi (100% Kas Tujuan / Bebas Sentralisasi)
+        // Group 4: Kategori yang memiliki transaksi Non-Sentralisasi (100% Kas Tujuan)
+        const nonSentralisasiCatIds = new Set(
+          yearIncomes
+            .filter((tx) => tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi')
+            .map((tx) => tx.category_id)
+            .filter(Boolean)
+        );
         const g4Cats = categories.filter(
           (c) =>
             c.tipe === 'income' &&
-            (c.is_sentralisasi === false || c.sentralisasi_group === 'dikecualikan_khusus')
+            (nonSentralisasiCatIds.has(c.id) || c.sentralisasi_group === 'dikecualikan_khusus')
         );
 
-        const getCatStats = (catId: string) => {
-          const catTxs = yearIncomes.filter((tx) => tx.category_id === catId);
+        const getCatStats = (catId: string, onlyNonSentralisasi = false) => {
+          const catTxs = yearIncomes.filter((tx) => {
+            if (tx.category_id !== catId) return false;
+            const isExcluded = tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi';
+            return onlyNonSentralisasi ? isExcluded : !isExcluded;
+          });
           let total = 0;
           let bpsk = 0;
           let huria = 0;
@@ -2309,9 +2316,7 @@ export const ReportsPage: React.FC = () => {
           catTxs.forEach((tx) => {
             const amt = Number(tx.amount) || 0;
             total += amt;
-            const cat = categories.find((c) => c.id === tx.category_id);
-            const isExcluded =
-              tx.is_sentralisasi !== undefined ? tx.is_sentralisasi === false : cat?.is_sentralisasi === false;
+            const isExcluded = tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi';
             if (isExcluded) {
               huria += amt;
             } else if (tx.sentralisasi_role === 'huria_share') {
@@ -2331,7 +2336,7 @@ export const ReportsPage: React.FC = () => {
         const renderGroupTable = (title: string, groupDesc: string, catList: typeof categories, isExcludedGroup = false) => {
           const groupStats = catList.reduce(
             (acc, c) => {
-              const s = getCatStats(c.id);
+              const s = getCatStats(c.id, isExcludedGroup);
               return {
                 total: acc.total + s.total,
                 bpsk: acc.bpsk + s.bpsk,
@@ -2395,7 +2400,7 @@ export const ReportsPage: React.FC = () => {
                       </tr>
                     ) : (
                       catList.map((cat, idx) => {
-                        const { total, bpsk, huria } = getCatStats(cat.id);
+                        const { total, bpsk, huria } = getCatStats(cat.id, isExcludedGroup);
 
                         return (
                           <tr key={cat.id} className="hover:bg-slate-50/60 transition-colors">
@@ -2555,92 +2560,77 @@ export const ReportsPage: React.FC = () => {
 
             {/* 4 Executive Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="card-blue card-hover p-5 rounded-3xl shadow-xs border-t-4 border-t-blue-600 space-y-1">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                  1. Objek Sentralisasi (100%)
+              <div className="card-executive card-hover p-5 rounded-2xl space-y-1">
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+                  Objek Sentralisasi
                 </span>
-                <div className="text-2xl font-black font-mono text-slate-900 tabular-nums">
+                <div className="text-xl font-bold font-mono text-slate-900 tabular-nums">
                   {formatRupiah(bpskSummary.totalObjekSentralisasi)}
                 </div>
-                <p className="text-[10px] text-slate-400">Total pelean masuk objek potongan 55% BPSK</p>
+                <p className="text-[11px] text-slate-400">Dasar pembagian 55% / 45%</p>
               </div>
 
-              <div className="card-indigo card-hover p-5 rounded-3xl shadow-xs border-t-4 border-t-indigo-600 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">
-                    2. Kewajiban BPSK (55%)
-                  </span>
-                  <span className="text-[9px] font-bold bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded">
-                    Wajib Setor
-                  </span>
-                </div>
-                <div className="text-2xl font-black font-mono text-blue-900 tabular-nums">
+              <div className="card-executive card-hover p-5 rounded-2xl space-y-1">
+                <span className="text-[11px] font-semibold text-blue-700 uppercase tracking-wider block">
+                  Kewajiban BPSK (55%)
+                </span>
+                <div className="text-xl font-bold font-mono text-blue-900 tabular-nums">
                   {formatRupiah(bpskSummary.totalBpskObligation)}
                 </div>
-                <div className="text-[10px] text-slate-500 flex items-center justify-between pt-0.5">
+                <div className="text-[11px] text-slate-500 flex items-center justify-between pt-0.5 tabular-nums">
                   <span>Disetor: {formatRupiah(bpskSummary.totalBpskRemitted)}</span>
-                  <span className={`font-bold ${bpskSummary.outstandingBpsk > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                  <span className={`font-semibold ${bpskSummary.outstandingBpsk > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
                     {bpskSummary.outstandingBpsk > 0 ? `Sisa: ${formatRupiah(bpskSummary.outstandingBpsk)}` : 'Lunas'}
                   </span>
                 </div>
               </div>
 
-              <div className="card-purple card-hover p-5 rounded-3xl shadow-xs border-t-4 border-t-purple-600 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">
-                    3. Hak Kas Huria (45%)
-                  </span>
-                  <span className="text-[9px] font-bold bg-indigo-100 text-indigo-800 px-1.5 py-0.2 rounded">
-                    Operasional Lokal
-                  </span>
-                </div>
-                <div className="text-2xl font-black font-mono text-indigo-900 tabular-nums">
+              <div className="card-executive card-hover p-5 rounded-2xl space-y-1">
+                <span className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wider block">
+                  Hak Kas Lokal (45%)
+                </span>
+                <div className="text-xl font-bold font-mono text-indigo-900 tabular-nums">
                   {formatRupiah(bpskSummary.totalHuriaShare)}
                 </div>
-                <p className="text-[10px] text-slate-400">Tinggal di Huria untuk operasional pelayanan gereja lokal</p>
+                <p className="text-[11px] text-slate-400">Operasional gereja lokal</p>
               </div>
 
-              <div className="card-emerald card-hover p-5 rounded-3xl shadow-xs border-t-4 border-t-emerald-600 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">
-                    4. Dikecualikan (100%)
-                  </span>
-                  <span className="text-[9px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded">
-                    Bebas Potongan
-                  </span>
-                </div>
-                <div className="text-2xl font-black font-mono text-emerald-900 tabular-nums">
+              <div className="card-executive card-hover p-5 rounded-2xl space-y-1">
+                <span className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider block">
+                  Non-Sentralisasi (100%)
+                </span>
+                <div className="text-xl font-bold font-mono text-emerald-900 tabular-nums">
                   {formatRupiah(bpskSummary.totalDikecualikan)}
                 </div>
-                <p className="text-[10px] text-slate-500">
-                  Sosial/Duka, Beasiswa, & Pembangunan Fisik Lokal
+                <p className="text-[11px] text-slate-400">
+                  Sosial, Pembangunan, Transitoris
                 </p>
               </div>
             </div>
 
             {/* Sub-Tables of PPKU Groups */}
-            <div className="space-y-6">
+            <div className="space-y-5">
               {renderGroupTable(
-                '1. Persembahan Mingguan dan Ibadah Lainnya (Pelean)',
-                'Pelean I & II, Pelean Namarboho (Bulanan/Tahunan), Partangiangan Wijk, Kategorial & Hari Raya Gerejawi.',
+                '1. Persembahan Mingguan dan Ibadah',
+                'Transaksi sentralisasi dari pos ibadah mingguan & kategorial.',
                 g1Cats
               )}
 
               {renderGroupTable(
-                '2. Persembahan Syukur dan Khusus (Pelean Hamauliateon)',
-                'Persembahan syukur jemaat amplop/altar, syukur baptisan (pandidion), sidi, pernikahan (pamasu-masuon), dan syukur keluarga.',
+                '2. Persembahan Syukur (Hamauliateon)',
+                'Transaksi sentralisasi dari pos ucapan syukur.',
                 g2Cats
               )}
 
               {renderGroupTable(
-                '3. Penerimaan dari Badan Usaha, Lembaga, dan Sumber Resmi Lainnya',
-                'Keuntungan badan usaha milik HKBP, kontribusi yayasan naungan HKBP, keuntungan perguruan tinggi HKBP, hibah & sumbangan resmi pihak luar.',
+                '3. Badan Usaha, Lembaga & Sumber Resmi Lainnya',
+                'Transaksi sentralisasi dari badan usaha, hibah & sumber lainnya.',
                 g3Cats
               )}
 
               {renderGroupTable(
-                '❌ 4. Pos Penerimaan yang Dikecualikan (Exclusions / 100% Kas Huria)',
-                'Pos penerimaan yang tidak dikenakan sentralisasi keuangan 55% dan dikelola 100% penuh sesuai peruntukannya (Sosial/Gariana, Dana Belajar, Pembangunan Fisik Lokal).',
+                '4. Penerimaan Non-Sentralisasi (100% Kas Tujuan)',
+                'Seluruh transaksi yang ditetapkan bebas sentralisasi saat pencatatan.',
                 g4Cats,
                 true
               )}

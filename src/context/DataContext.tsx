@@ -968,8 +968,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (tx.type === 'income') {
         totalPenerimaan += amt;
         const cat = categories.find((c) => c.id === tx.category_id);
-        const isExcluded =
-          tx.is_sentralisasi !== undefined ? tx.is_sentralisasi === false : cat?.is_sentralisasi === false;
+        const isExcluded = tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi';
 
         if (isExcluded) {
           totalDikecualikan += amt;
@@ -1127,13 +1126,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const nowIso = new Date().toISOString();
 
     if (txInput.type === 'income') {
-      // Per-transaction override takes precedence; otherwise follow category default
+      // Penentuan Sentralisasi dilakukan langsung pada transaksi (default true jika tidak diset)
       const isSentralisasi =
-        txInput.is_sentralisasi !== undefined
-          ? txInput.is_sentralisasi
-          : cat
-          ? cat.is_sentralisasi !== false
-          : true;
+        txInput.is_sentralisasi !== undefined ? txInput.is_sentralisasi : true;
 
       // Split automatically 55% to Kas Sentralisasi & 45% to target Kas Huria when sentralisasi is active
       if (isSentralisasi && sentralisasiKas && txInput.kas_id !== sentralisasiKas.id) {
@@ -1500,7 +1495,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ? updates.is_sentralisasi
           : existing.is_sentralisasi !== undefined
           ? existing.is_sentralisasi
-          : cat?.is_sentralisasi !== false;
+          : true;
 
       if (!isSent) {
         computedSentralisasi = {

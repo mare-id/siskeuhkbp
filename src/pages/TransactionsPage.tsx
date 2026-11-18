@@ -7,30 +7,24 @@ import React, { useState, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   Search,
-  Filter,
   Plus,
   ArrowRightLeft,
   FileSpreadsheet,
-  Download,
-  Eye,
   Trash2,
   Send,
   RotateCcw,
-  CheckCircle,
-  Clock,
-  XCircle,
   FileEdit,
   Paperclip,
   ChevronLeft,
   ChevronRight,
-  Receipt,
-  Shield,
   ShieldCheck,
+  BookOpen,
+  List,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { Transaction, TransactionStatus, TransactionType } from '../types/database';
+import { Transaction } from '../types/database';
 import { formatDateIndo, formatRupiah } from '../lib/formatters';
 import { exportToExcel } from '../lib/exportUtils';
 import { TransactionModal } from '../components/transactions/TransactionModal';
@@ -40,25 +34,79 @@ import { ReversalModal } from '../components/transactions/ReversalModal';
 import { AdminEditTransactionModal } from '../components/transactions/AdminEditTransactionModal';
 import { ConfirmActionModal } from '../components/common/ConfirmActionModal';
 
-const ITEMS_PER_PAGE = 12;
+const ITEMS_PER_PAGE = 15;
+
+type LedgerColumnKey = 'huria' | 'pembangunan' | 'sosial' | 'sentralisasi' | 'transitoris' | 'lainnya';
+
+interface LedgerColumnBuckets {
+  huria: number;
+  pembangunan: number;
+  sosial: number;
+  sentralisasi: number;
+  transitoris: number;
+  lainnya: number;
+}
+
+interface LedgerRowItem {
+  key: string;
+  rowNo?: number;
+  tanggal: string;
+  uraian: string;
+  isParentHeader?: boolean;
+  isSubRow?: boolean;
+  jumlah: number | null;
+  cols: LedgerColumnBuckets;
+  statusText?: string;
+}
+
+const emptyBuckets = (): LedgerColumnBuckets => ({
+  huria: 0,
+  pembangunan: 0,
+  sosial: 0,
+  sentralisasi: 0,
+  transitoris: 0,
+  lainnya: 0,
+});
+
+const stripSplitSuffix = (desc: string): string =>
+  desc
+    .replace(/\s*\[45% Bagian Lokal.*?\]$/i, '')
+    .replace(/\s*\[55% Otomatis Sentralisasi.*?\]$/i, '')
+    .replace(/\s*\[100% Tanpa Sentralisasi\]$/i, '')
+    .trim();
+
+const formatLedgerNumber = (val: number | null): string => {
+  if (val === null || val === 0) return '-';
+  const absFormatted = new Intl.NumberFormat('id-ID', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.abs(val));
+  return val < 0 ? `(${absFormatted})` : absFormatted;
+};
+
+const STATUS_META: Record<string, { label: string; cls: string }> = {
+  approved: { label: 'Disetujui', cls: 'text-emerald-700' },
+  submitted: { label: 'Diajukan', cls: 'text-blue-700' },
+  draft: { label: 'Draf', cls: 'text-amber-700' },
+  rejected: { label: 'Ditolak', cls: 'text-rose-700' },
+};
 
 export const TransactionsPage: React.FC = () => {
-  const { kasList, storageAccounts, categories, transactions, changeStatus, deleteTransaction, createReversalTransaction } = useData();
+  const { kasList, storageAccounts, transactions, changeStatus, deleteTransaction, createReversalTransaction } = useData();
   const { toast } = useToast();
   const {
     currentUser,
     isLeader,
     isAdmin,
-    isBendaharaUmum,
     isAuditor,
-    isPendeta,
-    isSekretaris,
     isMajelis,
     userKasAccess,
-    canInputKas,
     canRecordTransactions,
     canTransfer,
   } = useAuth();
+
+  // View Mode: Daftar Transaksi vs Buku Kas Bendahara
+  const [viewMode, setViewMode] = useState<'list' | 'ledger'>('list');
 
   // Modals state
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
@@ -73,7 +121,6 @@ export const TransactionsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedKas, setSelectedKas] = useState('all');
   const [selectedStorage, setSelectedStorage] = useState('all');
-  const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedType, setSelectedType] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedPpku, setSelectedPpku] = useState<'all' | 'sentralisasi' | 'dikecualikan'>('all');
@@ -83,31 +130,18 @@ export const TransactionsPage: React.FC = () => {
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Filtered transactions
   const filteredTransactions = useMemo(() => {
     return transactions.filter((tx) => {
-      // Role filtering: Section treasurers/heads can only view transactions on their assigned kas (unless leader)
       if (!isLeader) {
         const myKasIds = userKasAccess.map((a) => a.kas_id);
         if (!myKasIds.includes(tx.kas_id)) return false;
       }
 
-      // Filter Kas
       if (selectedKas !== 'all' && tx.kas_id !== selectedKas) return false;
-
-      // Filter Storage
       if (selectedStorage !== 'all' && tx.storage_account_id !== selectedStorage) return false;
-
-      // Filter Category
-      if (selectedCategory !== 'all' && tx.category_id !== selectedCategory) return false;
-
-      // Filter Type
       if (selectedType !== 'all' && tx.type !== selectedType) return false;
-
-      // Filter Status
       if (selectedStatus !== 'all' && tx.status !== selectedStatus) return false;
 
-      // Filter PPKU Sentralisasi
       if (selectedPpku === 'sentralisasi') {
         if (tx.type !== 'income' || tx.is_sentralisasi === false) return false;
       }
@@ -115,11 +149,9 @@ export const TransactionsPage: React.FC = () => {
         if (tx.type !== 'income' || tx.is_sentralisasi !== false) return false;
       }
 
-      // Date Range
       if (startDate && tx.tanggal < startDate) return false;
       if (endDate && tx.tanggal > endDate) return false;
 
-      // Search (description or receipt_no)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchDesc = tx.description.toLowerCase().includes(q);
@@ -135,7 +167,6 @@ export const TransactionsPage: React.FC = () => {
     userKasAccess,
     selectedKas,
     selectedStorage,
-    selectedCategory,
     selectedType,
     selectedStatus,
     selectedPpku,
@@ -144,26 +175,236 @@ export const TransactionsPage: React.FC = () => {
     searchQuery,
   ]);
 
-  // Pagination slice
+  // Map a kas_id to one of the 5 core Buku Kas Bendahara columns (or 'lainnya')
+  const mapKasToColumn = useMemo(() => {
+    return (kasId: string): LedgerColumnKey => {
+      const k = kasList.find((item) => item.id === kasId);
+      const name = (k?.nama || '').toLowerCase();
+      const kode = (k?.kode || '').toLowerCase();
+      if (kasId === 'kas-1' || kode === 'kas-umum' || name.includes('umum huria')) return 'huria';
+      if (kasId === 'kas-7' || name.includes('pembangunan')) return 'pembangunan';
+      if (kasId === 'kas-2' || name.includes('sosial') || name.includes('diakoni')) return 'sosial';
+      if (kasId === 'kas-9' || kode === 'kas-sentral' || name.includes('sentralisasi')) return 'sentralisasi';
+      if (kasId === 'kas-8' || name.includes('transitoris')) return 'transitoris';
+      return 'lainnya';
+    };
+  }, [kasList]);
+
+  // Build Buku Kas Bendahara rows matching manual cashbook reference
+  const ledgerData = useMemo(() => {
+    const sorted = [...filteredTransactions].sort((a, b) => {
+      if (a.tanggal !== b.tanggal) return a.tanggal.localeCompare(b.tanggal);
+      return (a.created_at || '').localeCompare(b.created_at || '');
+    });
+
+    const rows: LedgerRowItem[] = [];
+    const totals = emptyBuckets();
+    let totalJumlah = 0;
+    let hasOtherKas = false;
+    let seqNo = 1;
+
+    const addTxIntoBuckets = (tx: Transaction, buckets: LedgerColumnBuckets): number => {
+      const isInc = tx.type === 'income' || tx.type === 'transfer_in';
+      const signed = isInc ? Number(tx.amount) : -Number(tx.amount);
+
+      // Handle unsplit legacy sentralisasi income that holds both portions on one row
+      if (
+        tx.type === 'income' &&
+        tx.is_sentralisasi !== false &&
+        !tx.sentralisasi_role &&
+        (tx.bpsk_amount ?? 0) > 0
+      ) {
+        const bpskAmt = Number(tx.bpsk_amount || 0);
+        const huriaAmt = Number(tx.huria_amount ?? (Number(tx.amount) - bpskAmt));
+        const col = mapKasToColumn(tx.kas_id);
+        if (col === 'lainnya') hasOtherKas = true;
+        buckets[col] += huriaAmt;
+        buckets.sentralisasi += bpskAmt;
+        totals[col] += huriaAmt;
+        totals.sentralisasi += bpskAmt;
+        totalJumlah += signed;
+        return signed;
+      }
+
+      const col = mapKasToColumn(tx.kas_id);
+      if (col === 'lainnya') hasOtherKas = true;
+      buckets[col] += signed;
+      totals[col] += signed;
+      totalJumlah += signed;
+      return signed;
+    };
+
+    const visitedGroupIds = new Set<string>();
+    const groupMap = new Map<string, Transaction[]>();
+    sorted.forEach((tx) => {
+      if (tx.allocation_group_id) {
+        const arr = groupMap.get(tx.allocation_group_id) || [];
+        arr.push(tx);
+        groupMap.set(tx.allocation_group_id, arr);
+      }
+    });
+
+    sorted.forEach((tx) => {
+      if (tx.allocation_group_id) {
+        if (visitedGroupIds.has(tx.allocation_group_id)) return;
+        visitedGroupIds.add(tx.allocation_group_id);
+
+        const groupTxs = groupMap.get(tx.allocation_group_id) || [tx];
+
+        if (tx.allocation_group_id.startsWith('alloc-multi-')) {
+          // Multi-Pos group (e.g., Ucapan Syukur dari Kel. ... with sub-lines)
+          const firstClean = stripSplitSuffix(groupTxs[0].description);
+          const emDashIdx = firstClean.indexOf(' — ');
+          const parentUraian = emDashIdx >= 0 ? firstClean.slice(0, emDashIdx) : firstClean;
+
+          rows.push({
+            key: `hdr-${tx.allocation_group_id}`,
+            rowNo: seqNo++,
+            tanggal: groupTxs[0].tanggal,
+            uraian: parentUraian,
+            isParentHeader: true,
+            jumlah: null,
+            cols: emptyBuckets(),
+          });
+
+          // Sub-group by base description so 45% Huria + 55% Sentralisasi share one sub-row
+          const subOrder: string[] = [];
+          const subMap = new Map<string, Transaction[]>();
+          groupTxs.forEach((gTx) => {
+            const clean = stripSplitSuffix(gTx.description);
+            if (!subMap.has(clean)) {
+              subOrder.push(clean);
+              subMap.set(clean, []);
+            }
+            subMap.get(clean)!.push(gTx);
+          });
+
+          subOrder.forEach((cleanDesc, sIdx) => {
+            const subTxs = subMap.get(cleanDesc)!;
+            const buckets = emptyBuckets();
+            let subJumlah = 0;
+            subTxs.forEach((sTx) => {
+              subJumlah += addTxIntoBuckets(sTx, buckets);
+            });
+
+            const idx = cleanDesc.indexOf(' — ');
+            let subLabel = idx >= 0 ? cleanDesc.slice(idx + 3).trim() : cleanDesc;
+            if (!subLabel.startsWith('-')) {
+              subLabel = `- ${subLabel}`;
+            }
+
+            rows.push({
+              key: `sub-${tx.allocation_group_id}-${sIdx}`,
+              tanggal: '',
+              uraian: subLabel,
+              isSubRow: true,
+              jumlah: subJumlah,
+              cols: buckets,
+              statusText: subTxs[0].status,
+            });
+          });
+        } else {
+          // Single-entry 45/55 split group -> combine onto ONE cashbook row
+          const buckets = emptyBuckets();
+          let grpJumlah = 0;
+          groupTxs.forEach((gTx) => {
+            grpJumlah += addTxIntoBuckets(gTx, buckets);
+          });
+
+          rows.push({
+            key: `grp-${tx.allocation_group_id}`,
+            rowNo: seqNo++,
+            tanggal: groupTxs[0].tanggal,
+            uraian: stripSplitSuffix(groupTxs[0].description),
+            jumlah: grpJumlah,
+            cols: buckets,
+            statusText: groupTxs[0].status,
+          });
+        }
+        return;
+      }
+
+      // Single ungrouped transaction
+      const buckets = emptyBuckets();
+      const amt = addTxIntoBuckets(tx, buckets);
+      rows.push({
+        key: tx.id,
+        rowNo: seqNo++,
+        tanggal: tx.tanggal,
+        uraian: stripSplitSuffix(tx.description),
+        jumlah: amt,
+        cols: buckets,
+        statusText: tx.status,
+      });
+    });
+
+    return { rows, totals, totalJumlah, hasOtherKas };
+  }, [filteredTransactions, mapKasToColumn]);
+
   const totalPages = Math.ceil(filteredTransactions.length / ITEMS_PER_PAGE) || 1;
+  const safePage = Math.min(currentPage, totalPages);
   const paginatedTransactions = filteredTransactions.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+    (safePage - 1) * ITEMS_PER_PAGE,
+    safePage * ITEMS_PER_PAGE
   );
 
+  const filteredTotals = useMemo(() => {
+    const masuk = filteredTransactions
+      .filter((t) => t.type === 'income' && t.status === 'approved')
+      .reduce((sum, t) => sum + Number(t.amount), 0);
+    const keluar = filteredTransactions
+      .filter((t) => t.type === 'expense' && t.status === 'approved')
+      .reduce((sum, t) => sum + Number(t.amount), 0);
+    return { masuk, keluar };
+  }, [filteredTransactions]);
+
   const handleExportExcel = () => {
+    if (viewMode === 'ledger') {
+      const ledgerRows = ledgerData.rows.map((r) => {
+        const base: Record<string, string | number> = {
+          'No.': r.rowNo ?? '',
+          Tanggal: r.tanggal ? formatDateIndo(r.tanggal) : '',
+          Uraian: r.uraian,
+          Jumlah: r.jumlah ?? '',
+          'Kas Huria': r.cols.huria || '',
+          'Kas Pembangunan': r.cols.pembangunan || '',
+          'Kas Diakoni Sosial': r.cols.sosial || '',
+          'Kas Sentralisasi': r.cols.sentralisasi || '',
+          'Kas Transitoris': r.cols.transitoris || '',
+        };
+        if (ledgerData.hasOtherKas) {
+          base['Kas Seksi Lain'] = r.cols.lainnya || '';
+        }
+        return base;
+      });
+      const footer: Record<string, string | number> = {
+        'No.': '',
+        Tanggal: '',
+        Uraian: 'JUMLAH',
+        Jumlah: ledgerData.totalJumlah,
+        'Kas Huria': ledgerData.totals.huria,
+        'Kas Pembangunan': ledgerData.totals.pembangunan,
+        'Kas Diakoni Sosial': ledgerData.totals.sosial,
+        'Kas Sentralisasi': ledgerData.totals.sentralisasi,
+        'Kas Transitoris': ledgerData.totals.transitoris,
+      };
+      if (ledgerData.hasOtherKas) {
+        footer['Kas Seksi Lain'] = ledgerData.totals.lainnya;
+      }
+      ledgerRows.push(footer);
+      exportToExcel(ledgerRows, `Buku_Kas_Bendahara_HKBP_${new Date().toISOString().split('T')[0]}`);
+      return;
+    }
+
     const rows = filteredTransactions.map((tx, idx) => {
       const kas = kasList.find((k) => k.id === tx.kas_id);
       const storage = storageAccounts.find((s) => s.id === tx.storage_account_id);
-      const cat = categories.find((c) => c.id === tx.category_id);
-
       return {
         No: idx + 1,
         Tanggal: tx.tanggal,
         'No. Bukti': tx.receipt_no || '-',
         'Nama Kas': kas?.nama || '-',
         'Tempat Penyimpanan': storage?.nama || '-',
-        Kategori: cat?.nama || (tx.type.includes('transfer') ? 'Transfer' : '-'),
         Jenis: tx.type,
         Uraian: tx.description,
         'Nominal (Rp)': Number(tx.amount),
@@ -182,7 +423,7 @@ export const TransactionsPage: React.FC = () => {
       toast.error(res.error || 'Gagal menarik transaksi ke Draf.');
       return;
     }
-    toast.success('Transaksi berhasil ditarik kembali ke Draf.');
+    toast.success('Transaksi ditarik kembali ke Draf.');
   };
 
   const handleSubmitDraft = async (txId: string) => {
@@ -191,7 +432,7 @@ export const TransactionsPage: React.FC = () => {
       toast.error(res.error || 'Gagal mengajukan transaksi.');
       return;
     }
-    toast.success('Draf transaksi berhasil diajukan untuk persetujuan.');
+    toast.success('Draf transaksi diajukan untuk persetujuan.');
   };
 
   const handleConfirmDelete = async (reason?: string) => {
@@ -211,41 +452,72 @@ export const TransactionsPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 w-full max-w-7xl mx-auto min-w-0 overflow-hidden">
-      {/* Top Header & Action Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-5 w-full max-w-7xl mx-auto min-w-0">
+      {/* Header & Controls */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
-            Pencatatan Transaksi Kas
-          </h2>
-          <p className="text-xs md:text-sm text-slate-500">
-            Kelola pemasukan, pengeluaran, dan transfer dana kas HKBP Hutaraja
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            Transaksi &amp; Buku Kas
+          </h1>
+          <p className="text-xs text-slate-500">
+            Pemasukan, pengeluaran, dan transfer dana kas huria
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* View Mode Segmented Switch */}
+          <div className="inline-flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200/80">
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-1.5 min-h-[34px] rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+                viewMode === 'list'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>Daftar</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('ledger')}
+              className={`px-3 py-1.5 min-h-[34px] rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+                viewMode === 'ledger'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Buku Kas Bendahara</span>
+            </button>
+          </div>
+
           <button
+            type="button"
             onClick={handleExportExcel}
-            className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors"
+            className="px-3.5 py-2 min-h-[40px] bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
           >
-            <FileSpreadsheet className="w-4 h-4" />
+            <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
             <span>Ekspor Excel</span>
           </button>
 
           {canTransfer && (
             <button
+              type="button"
               onClick={() => setIsTransferModalOpen(true)}
-              className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors"
+              className="px-3.5 py-2 min-h-[40px] bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
             >
-              <ArrowRightLeft className="w-4 h-4" />
-              <span>Transfer Antar Kas</span>
+              <ArrowRightLeft className="w-4 h-4 text-blue-700" />
+              <span>Transfer</span>
             </button>
           )}
 
           {canRecordTransactions && (
             <button
+              type="button"
               onClick={() => setIsTxModalOpen(true)}
-              className="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors"
+              className="px-4 py-2 min-h-[40px] bg-[#0B132B] hover:bg-slate-800 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
             >
               <Plus className="w-4 h-4" />
               <span>Catat Transaksi</span>
@@ -255,105 +527,56 @@ export const TransactionsPage: React.FC = () => {
           {isAuditor && (
             <NavLink
               to="/audit"
-              className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors"
+              className="px-3.5 py-2 min-h-[40px] bg-purple-800 hover:bg-purple-900 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
             >
               <ShieldCheck className="w-4 h-4" />
-              <span>Modul Badan Audit</span>
+              <span>Modul Audit</span>
             </NavLink>
           )}
         </div>
       </div>
 
-      {/* Role Authority & Inspection Notice */}
-      {isAuditor ? (
-        <div className="card-purple p-4 rounded-3xl border border-purple-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-purple-200">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div className="space-y-0.5 text-xs">
-              <span className="font-bold text-purple-950 block">Mode Pemeriksaan Badan Audit (Read-Only)</span>
-              <p className="text-purple-900/90 leading-relaxed">
-                Sesuai <strong>Pasal 7 & 44 Aturan & Peraturan HKBP</strong>, Badan Audit bertugas memeriksa keabsahan bukti nota, kuitansi, dan mutasi kas huria. Badan Audit dilarang mencatat mutasi kas operasional. Bila terdapat bukti transaksi tidak sesuai, catat temuan pada modul audit.
-              </p>
-            </div>
-          </div>
-          <NavLink
-            to="/audit"
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shrink-0 self-start sm:self-center transition-colors shadow-2xs flex items-center gap-1.5"
-          >
-            <Shield className="w-3.5 h-3.5" />
-            <span>Tulis Temuan Audit</span>
-          </NavLink>
+      {/* Compact Read-only Mode Strip */}
+      {(isAuditor || isMajelis) && (
+        <div className="px-4 py-2.5 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-between gap-2 text-xs text-slate-700">
+          <span>
+            {isAuditor
+              ? 'Mode Badan Audit (Read-Only): periksa nota & mutasi, catat temuan di Modul Audit.'
+              : 'Mode Pengawasan Majelis (Read-Only): pemantauan mutasi kas huria.'}
+          </span>
+          {isAuditor && (
+            <NavLink to="/audit" className="font-semibold text-purple-800 hover:underline shrink-0">
+              Tulis Temuan →
+            </NavLink>
+          )}
         </div>
-      ) : isMajelis ? (
-        <div className="card-hover p-4 rounded-3xl bg-slate-100 border border-slate-200 text-xs text-slate-700 flex items-center justify-between shadow-2xs">
-          <div className="flex items-center gap-2.5">
-            <Shield className="w-4 h-4 text-slate-500" />
-            <span>
-              <strong>Mode Penelaahan Majelis Huria (Read-Only):</strong> Anda memiliki hak pengawasan umum untuk memantau aliran kas dan transparansi perbendaharaan.
-            </span>
-          </div>
-        </div>
-      ) : null}
+      )}
 
-      {/* Summary KPI Strip based on filtered transactions */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="card-hover p-5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-              Pemasukan (Filter)
-            </span>
-            <div className="text-xl md:text-2xl font-bold font-mono text-emerald-800 tabular-nums">
-              +{formatRupiah(
-                filteredTransactions
-                  .filter((t) => t.type === 'income' && t.status === 'approved')
-                  .reduce((sum, t) => sum + Number(t.amount), 0)
-              )}
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100/80 text-emerald-700 flex items-center justify-center shrink-0">
-            <CheckCircle className="w-5 h-5" />
-          </div>
+      {/* Summary Strip */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+        <div className="p-4 flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-slate-500">Pemasukan Disetujui</span>
+          <span className="text-base sm:text-lg font-bold font-mono text-emerald-700 tabular-nums">
+            +{formatRupiah(filteredTotals.masuk)}
+          </span>
         </div>
-
-        <div className="card-hover p-5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-              Pengeluaran (Filter)
-            </span>
-            <div className="text-xl md:text-2xl font-bold font-mono text-rose-800 tabular-nums">
-              -{formatRupiah(
-                filteredTransactions
-                  .filter((t) => t.type === 'expense' && t.status === 'approved')
-                  .reduce((sum, t) => sum + Number(t.amount), 0)
-              )}
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-100/80 text-rose-700 flex items-center justify-center shrink-0">
-            <RotateCcw className="w-5 h-5" />
-          </div>
+        <div className="p-4 flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-slate-500">Pengeluaran Disetujui</span>
+          <span className="text-base sm:text-lg font-bold font-mono text-rose-700 tabular-nums">
+            -{formatRupiah(filteredTotals.keluar)}
+          </span>
         </div>
-
-        <div className="card-hover p-5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-              Transaksi Terpilih
-            </span>
-            <div className="text-xl md:text-2xl font-bold font-mono text-slate-900 tabular-nums">
-              {filteredTransactions.length} <span className="text-xs font-normal text-slate-500">Catatan</span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100/80 text-blue-800 flex items-center justify-center shrink-0">
-            <Receipt className="w-5 h-5" />
-          </div>
+        <div className="p-4 flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-slate-500">Total Catatan</span>
+          <span className="text-base sm:text-lg font-bold font-mono text-slate-900 tabular-nums">
+            {filteredTransactions.length} Baris
+          </span>
         </div>
       </div>
 
-      {/* Filter and Search Panel */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-          {/* Search */}
+      {/* Filters Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/90 space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
           <div className="relative md:col-span-2">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -363,540 +586,590 @@ export const TransactionsPage: React.FC = () => {
                 setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Cari uraian transaksi atau nomor kuitansi..."
-              className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary"
+              placeholder="Cari uraian atau nomor bukti..."
+              className="w-full h-10 pl-9 pr-3 text-xs rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600"
             />
           </div>
 
-          {/* Filter Kas */}
-          <div>
-            <select
-              value={selectedKas}
-              onChange={(e) => {
-                setSelectedKas(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full text-xs p-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-primary/40 bg-white"
-            >
-              <option value="all">Semua Kas (Dana)</option>
-              {kasList.map((k) => (
-                <option key={k.id} value={k.id}>
-                  {k.nama}
-                </option>
-              ))}
-            </select>
-          </div>
+          <select
+            value={selectedKas}
+            onChange={(e) => {
+              setSelectedKas(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="w-full h-10 px-3 text-xs rounded-xl border border-slate-200 bg-white"
+          >
+            <option value="all">Semua Kas</option>
+            {kasList.map((k) => (
+              <option key={k.id} value={k.id}>
+                {k.nama}
+              </option>
+            ))}
+          </select>
 
-          {/* Filter Status */}
-          <div>
-            <select
-              value={selectedStatus}
-              onChange={(e) => {
-                setSelectedStatus(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full text-xs p-2 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-primary/40 bg-white"
-            >
-              <option value="all">Semua Status</option>
-              <option value="draft">Draft (Draf Belum Diajukan)</option>
-              <option value="submitted">Diajukan (Menunggu Persetujuan)</option>
-              <option value="approved">Disetujui (Approved)</option>
-              <option value="rejected">Ditolak (Rejected)</option>
-            </select>
-          </div>
+          <select
+            value={selectedStatus}
+            onChange={(e) => {
+              setSelectedStatus(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="w-full h-10 px-3 text-xs rounded-xl border border-slate-200 bg-white"
+          >
+            <option value="all">Semua Status</option>
+            <option value="approved">Disetujui</option>
+            <option value="submitted">Diajukan</option>
+            <option value="draft">Draf</option>
+            <option value="rejected">Ditolak</option>
+          </select>
         </div>
 
-        {/* Extended Secondary Filters */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 border-t border-slate-100 text-xs">
-          {/* Storage */}
-          <div>
-            <select
-              value={selectedStorage}
-              onChange={(e) => {
-                setSelectedStorage(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full text-xs p-1.5 rounded-lg border border-slate-200 bg-white"
-            >
-              <option value="all">Semua Rekening</option>
-              {storageAccounts.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.nama}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-2 border-t border-slate-100 text-xs">
+          <select
+            value={selectedStorage}
+            onChange={(e) => {
+              setSelectedStorage(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="w-full h-9 px-2.5 text-xs rounded-lg border border-slate-200 bg-white"
+          >
+            <option value="all">Semua Simpanan</option>
+            {storageAccounts.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nama}
+              </option>
+            ))}
+          </select>
 
-          {/* Type */}
-          <div>
-            <select
-              value={selectedType}
-              onChange={(e) => {
-                setSelectedType(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full text-xs p-1.5 rounded-lg border border-slate-200 bg-white"
-            >
-              <option value="all">Semua Jenis</option>
-              <option value="income">Pemasukan (+)</option>
-              <option value="expense">Pengeluaran (-)</option>
-              <option value="transfer_in">Transfer Masuk</option>
-              <option value="transfer_out">Transfer Keluar</option>
-            </select>
-          </div>
+          <select
+            value={selectedType}
+            onChange={(e) => {
+              setSelectedType(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="w-full h-9 px-2.5 text-xs rounded-lg border border-slate-200 bg-white"
+          >
+            <option value="all">Semua Jenis</option>
+            <option value="income">Pemasukan</option>
+            <option value="expense">Pengeluaran</option>
+            <option value="transfer_in">Transfer Masuk</option>
+            <option value="transfer_out">Transfer Keluar</option>
+          </select>
 
-          {/* PPKU Filter */}
-          <div>
-            <select
-              value={selectedPpku}
-              onChange={(e) => {
-                setSelectedPpku(e.target.value as 'all' | 'sentralisasi' | 'dikecualikan');
-                setCurrentPage(1);
-              }}
-              className="w-full text-xs p-1.5 rounded-lg border border-slate-200 bg-white"
-            >
-              <option value="all">Semua Status PPKU</option>
-              <option value="sentralisasi">Objek Sentralisasi (55% BPSK / 45% Huria)</option>
-              <option value="dikecualikan">Bebas Sentralisasi (100% Huria)</option>
-            </select>
-          </div>
+          <select
+            value={selectedPpku}
+            onChange={(e) => {
+              setSelectedPpku(e.target.value as 'all' | 'sentralisasi' | 'dikecualikan');
+              setCurrentPage(1);
+            }}
+            className="w-full h-9 px-2.5 text-xs rounded-lg border border-slate-200 bg-white"
+          >
+            <option value="all">Semua Sentralisasi</option>
+            <option value="sentralisasi">Sentralisasi (45/55)</option>
+            <option value="dikecualikan">Non-Sentralisasi (100%)</option>
+          </select>
 
-          {/* Start Date */}
-          <div>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full text-xs p-1.5 rounded-lg border border-slate-200"
-              placeholder="Dari tanggal"
-            />
-          </div>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => {
+              setStartDate(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="w-full h-9 px-2.5 text-xs rounded-lg border border-slate-200"
+            aria-label="Dari tanggal"
+          />
 
-          {/* End Date */}
-          <div>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full text-xs p-1.5 rounded-lg border border-slate-200"
-              placeholder="Sampai tanggal"
-            />
-          </div>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => {
+              setEndDate(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="w-full h-9 px-2.5 text-xs rounded-lg border border-slate-200"
+            aria-label="Sampai tanggal"
+          />
         </div>
       </div>
 
-      {/* Transactions Table */}
-      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xs overflow-hidden">
-        {/* Desktop Table View */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700">
-            <thead className="bg-slate-50/80 text-slate-500 font-semibold border-b border-slate-100">
-              <tr>
-                <th className="py-3.5 px-4">Tanggal & Bukti</th>
-                <th className="py-3.5 px-4">Kas (Dana)</th>
-                <th className="py-3.5 px-4">Tempat Simpan</th>
-                <th className="py-3.5 px-4">Uraian Transaksi</th>
-                <th className="py-3.5 px-4 text-right">Nominal</th>
-                <th className="py-3.5 px-4 text-center">Status</th>
-                <th className="py-3.5 px-4 text-right">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {paginatedTransactions.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
-                    Tidak ada transaksi yang cocok dengan kriteria pencarian/filter.
-                  </td>
+      {/* ---------------- VIEW 1: BUKU KAS BENDAHARA (SPREADSHEET FORMAT) ---------------- */}
+      {viewMode === 'ledger' ? (
+        <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Buku Kas Bendahara</h2>
+              <p className="text-[11px] text-slate-500">
+                Pembagian otomatis kolom kas dan sentralisasi sesuai pencatatan per transaksi
+              </p>
+            </div>
+            <span className="text-[11px] text-slate-500 font-mono tabular-nums">
+              {ledgerData.rows.filter((r) => !r.isSubRow).length} Pos Transaksi
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse min-w-[920px]">
+              <thead>
+                <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                  <th className="py-2.5 px-3 text-center border-r border-slate-200 w-12">No.</th>
+                  <th className="py-2.5 px-3 text-left border-r border-slate-200 w-28">Tanggal</th>
+                  <th className="py-2.5 px-3 text-left border-r border-slate-200 min-w-[240px]">Uraian</th>
+                  <th className="py-2.5 px-3 text-right border-r border-slate-200 w-28">Jumlah</th>
+                  <th className="py-2.5 px-3 text-right border-r border-slate-200 w-28">Kas Huria</th>
+                  <th className="py-2.5 px-3 text-right border-r border-slate-200 w-32">Kas Pembangunan</th>
+                  <th className="py-2.5 px-3 text-right border-r border-slate-200 w-32">Kas Diakoni Sosial</th>
+                  <th className="py-2.5 px-3 text-right border-r border-slate-200 w-28">Kas Sentralisasi</th>
+                  <th className={`py-2.5 px-3 text-right w-28 ${ledgerData.hasOtherKas ? 'border-r border-slate-200' : ''}`}>
+                    Kas Transitoris
+                  </th>
+                  {ledgerData.hasOtherKas && (
+                    <th className="py-2.5 px-3 text-right w-28">Kas Lain</th>
+                  )}
                 </tr>
-              ) : (
-                paginatedTransactions.map((tx) => {
-                  const kas = kasList.find((k) => k.id === tx.kas_id);
-                  const storage = storageAccounts.find((s) => s.id === tx.storage_account_id);
-                  const isInc = tx.type === 'income' || tx.type === 'transfer_in';
-
-                  return (
-                    <tr key={tx.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="font-mono text-slate-800 font-medium">
-                          {formatDateIndo(tx.tanggal)}
-                        </div>
-                        {tx.receipt_no ? (
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            {tx.receipt_no}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-slate-300">-</span>
-                        )}
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {ledgerData.rows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={ledgerData.hasOtherKas ? 10 : 9}
+                      className="py-12 text-center text-slate-400"
+                    >
+                      Tidak ada catatan pada Buku Kas Bendahara untuk filter saat ini.
+                    </td>
+                  </tr>
+                ) : (
+                  ledgerData.rows.map((row) => (
+                    <tr
+                      key={row.key}
+                      className={
+                        row.isParentHeader
+                          ? 'bg-slate-100/80 font-semibold text-slate-900'
+                          : 'hover:bg-slate-50/70 text-slate-800'
+                      }
+                    >
+                      <td className="py-2 px-3 text-center border-r border-slate-200 font-mono tabular-nums text-slate-600">
+                        {row.rowNo ?? ''}
                       </td>
-
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <span
-                          className="px-2 py-0.5 rounded-md text-[11px] font-semibold"
-                          style={{
-                            backgroundColor: `${kas?.warna || '#7C9CF5'}25`,
-                            color: '#1F2440',
-                          }}
-                        >
-                          {kas?.nama}
-                        </span>
+                      <td className="py-2 px-3 border-r border-slate-200 font-mono tabular-nums whitespace-nowrap text-slate-600">
+                        {row.tanggal ? formatDateIndo(row.tanggal) : ''}
                       </td>
-
-                      <td className="py-3.5 px-4 whitespace-nowrap text-slate-600">
-                        {storage?.nama}
-                      </td>
-
-                      <td className="py-3.5 px-4 max-w-xs">
-                        <div className="font-medium text-slate-800 line-clamp-2">
-                          {tx.description}
-                        </div>
-                        <div className="flex items-center gap-2 mt-1">
-                          {tx.attachment_url && (
-                            <button
-                              type="button"
-                              onClick={() => setPreviewAttachmentUrl(tx.attachment_url!)}
-                              className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary hover:text-primary-dark bg-primary/10 px-1.5 py-0.5 rounded-md transition-colors"
-                            >
-                              <Paperclip className="w-3 h-3" />
-                              <span>Lihat Bukti</span>
-                            </button>
-                          )}
-                          {tx.is_reversal && (
-                            <span className="text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-md font-semibold">
-                              Transaksi Koreksi
-                            </span>
-                          )}
-                          {tx.reject_note && (
-                            <span className="text-[10px] text-rose-600 font-medium truncate max-w-[200px]" title={tx.reject_note}>
-                              Alasan: {tx.reject_note}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
                       <td
-                        className={`py-3.5 px-4 text-right font-mono font-bold whitespace-nowrap tabular-nums ${
-                          isInc ? 'text-emerald-600' : 'text-rose-600'
+                        className={`py-2 px-3 border-r border-slate-200 ${
+                          row.isSubRow ? 'pl-6 text-slate-700' : 'font-medium text-slate-900'
                         }`}
                       >
-                        <div>
-                          {isInc ? '+' : '-'}
-                          {formatRupiah(tx.amount)}
-                        </div>
-                        {tx.type === 'income' && (
-                          tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi' ? (
-                            <div className="text-[9.5px] font-sans font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded mt-0.5 inline-block border border-emerald-100">
-                              100% Kas Tujuan (Non-Sentralisasi)
-                            </div>
-                          ) : tx.sentralisasi_role === 'bpsk_share' ? (
-                            <div className="text-[9.5px] font-sans font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded mt-0.5 inline-block border border-blue-100">
-                              Porsi 55% Sentralisasi (BPSK)
-                            </div>
-                          ) : tx.sentralisasi_role === 'huria_share' ? (
-                            <div className="text-[9.5px] font-sans font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded mt-0.5 inline-block border border-indigo-100">
-                              Porsi 45% Bagian Lokal Huria
-                            </div>
-                          ) : (
-                            <div className="text-[9px] font-sans font-medium text-slate-500 mt-0.5 text-right space-y-0.2">
-                              <span className="text-blue-700 font-semibold block">
-                                BPSK (55%): {formatRupiah(tx.bpsk_amount ?? Math.round(tx.amount * 0.55))}
-                              </span>
-                              <span className="text-indigo-700 block">
-                                Huria (45%): {formatRupiah(tx.huria_amount ?? (tx.amount - (tx.bpsk_amount ?? Math.round(tx.amount * 0.55))))}
-                              </span>
-                            </div>
-                          )
-                        )}
+                        {row.uraian}
                       </td>
+                      <td className="py-2 px-3 text-right border-r border-slate-200 font-mono font-semibold tabular-nums whitespace-nowrap">
+                        {row.isParentHeader ? '' : formatLedgerNumber(row.jumlah)}
+                      </td>
+                      <td className="py-2 px-3 text-right border-r border-slate-200 font-mono tabular-nums whitespace-nowrap">
+                        {row.isParentHeader ? '' : formatLedgerNumber(row.cols.huria)}
+                      </td>
+                      <td className="py-2 px-3 text-right border-r border-slate-200 font-mono tabular-nums whitespace-nowrap">
+                        {row.isParentHeader ? '' : formatLedgerNumber(row.cols.pembangunan)}
+                      </td>
+                      <td className="py-2 px-3 text-right border-r border-slate-200 font-mono tabular-nums whitespace-nowrap">
+                        {row.isParentHeader ? '' : formatLedgerNumber(row.cols.sosial)}
+                      </td>
+                      <td className="py-2 px-3 text-right border-r border-slate-200 font-mono tabular-nums whitespace-nowrap text-blue-900">
+                        {row.isParentHeader ? '' : formatLedgerNumber(row.cols.sentralisasi)}
+                      </td>
+                      <td
+                        className={`py-2 px-3 text-right font-mono tabular-nums whitespace-nowrap ${
+                          ledgerData.hasOtherKas ? 'border-r border-slate-200' : ''
+                        }`}
+                      >
+                        {row.isParentHeader ? '' : formatLedgerNumber(row.cols.transitoris)}
+                      </td>
+                      {ledgerData.hasOtherKas && (
+                        <td className="py-2 px-3 text-right font-mono tabular-nums whitespace-nowrap">
+                          {row.isParentHeader ? '' : formatLedgerNumber(row.cols.lainnya)}
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              {ledgerData.rows.length > 0 && (
+                <tfoot>
+                  <tr className="bg-slate-900 text-white font-bold border-t-2 border-slate-300">
+                    <td colSpan={3} className="py-3 px-4 text-center tracking-wider">
+                      JUMLAH
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono tabular-nums whitespace-nowrap border-l border-slate-700">
+                      {formatLedgerNumber(ledgerData.totalJumlah)}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono tabular-nums whitespace-nowrap border-l border-slate-700">
+                      {formatLedgerNumber(ledgerData.totals.huria)}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono tabular-nums whitespace-nowrap border-l border-slate-700">
+                      {formatLedgerNumber(ledgerData.totals.pembangunan)}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono tabular-nums whitespace-nowrap border-l border-slate-700">
+                      {formatLedgerNumber(ledgerData.totals.sosial)}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono tabular-nums whitespace-nowrap border-l border-slate-700 text-amber-300">
+                      {formatLedgerNumber(ledgerData.totals.sentralisasi)}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono tabular-nums whitespace-nowrap border-l border-slate-700">
+                      {formatLedgerNumber(ledgerData.totals.transitoris)}
+                    </td>
+                    {ledgerData.hasOtherKas && (
+                      <td className="py-3 px-3 text-right font-mono tabular-nums whitespace-nowrap border-l border-slate-700">
+                        {formatLedgerNumber(ledgerData.totals.lainnya)}
+                      </td>
+                    )}
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </div>
+      ) : (
+        /* ---------------- VIEW 2: DAFTAR TRANSAKSI ---------------- */
+        <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden">
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-700">
+              <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                <tr>
+                  <th className="py-3 px-4">Tanggal &amp; Bukti</th>
+                  <th className="py-3 px-4">Kas &amp; Simpanan</th>
+                  <th className="py-3 px-4">Uraian</th>
+                  <th className="py-3 px-4 text-right">Nominal</th>
+                  <th className="py-3 px-4 text-center">Status</th>
+                  <th className="py-3 px-4 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {paginatedTransactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                      Tidak ada transaksi yang cocok dengan filter.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedTransactions.map((tx) => {
+                    const kas = kasList.find((k) => k.id === tx.kas_id);
+                    const storage = storageAccounts.find((s) => s.id === tx.storage_account_id);
+                    const isInc = tx.type === 'income' || tx.type === 'transfer_in';
+                    const statusInfo = STATUS_META[tx.status] || { label: tx.status, cls: 'text-slate-600' };
 
-                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        <span
-                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                            tx.status === 'approved'
-                              ? 'bg-emerald-100 text-emerald-900'
-                              : tx.status === 'submitted'
-                              ? 'bg-blue-100 text-blue-800'
-                              : tx.status === 'draft'
-                              ? 'bg-amber-100 text-amber-900'
-                              : 'bg-rose-100 text-rose-900'
+                    const porsiNote =
+                      tx.type !== 'income'
+                        ? null
+                        : tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi'
+                        ? '100% Non-Sentralisasi'
+                        : tx.sentralisasi_role === 'bpsk_share'
+                        ? '55% Sentralisasi (BPSK)'
+                        : tx.sentralisasi_role === 'huria_share'
+                        ? '45% Bagian Lokal'
+                        : `BPSK ${formatRupiah(tx.bpsk_amount ?? Math.round(tx.amount * 0.55))}`;
+
+                    return (
+                      <tr key={tx.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-3 px-4 whitespace-nowrap align-top">
+                          <div className="font-mono text-slate-900 font-medium tabular-nums">
+                            {formatDateIndo(tx.tanggal)}
+                          </div>
+                          {tx.receipt_no && (
+                            <div className="text-[11px] text-slate-400 font-mono">{tx.receipt_no}</div>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4 whitespace-nowrap align-top">
+                          <div className="font-semibold text-slate-900">{kas?.nama}</div>
+                          <div className="text-[11px] text-slate-500">{storage?.nama}</div>
+                        </td>
+
+                        <td className="py-3 px-4 max-w-sm align-top">
+                          <div className="font-medium text-slate-900 line-clamp-2">{tx.description}</div>
+                          {(tx.attachment_url || tx.is_reversal || tx.reject_note) && (
+                            <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px]">
+                              {tx.attachment_url && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewAttachmentUrl(tx.attachment_url!)}
+                                  className="inline-flex items-center gap-1 font-medium text-blue-700 hover:underline"
+                                >
+                                  <Paperclip className="w-3 h-3" />
+                                  <span>Lihat Bukti</span>
+                                </button>
+                              )}
+                              {tx.is_reversal && <span className="text-amber-700 font-medium">Koreksi</span>}
+                              {tx.reject_note && (
+                                <span className="text-rose-600 truncate max-w-[200px]" title={tx.reject_note}>
+                                  Alasan: {tx.reject_note}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        <td
+                          className={`py-3 px-4 text-right font-mono font-bold whitespace-nowrap tabular-nums align-top ${
+                            isInc ? 'text-emerald-700' : 'text-rose-700'
                           }`}
                         >
-                          {tx.status}
-                        </span>
-                      </td>
-
-                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* Admin Edit & Delete on all statuses */}
-                          {isAdmin && (
-                            <>
-                              <button
-                                onClick={() => setEditTargetTx(tx)}
-                                title="Edit Transaksi (Admin)"
-                                className="p-1.5 text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                              >
-                                <FileEdit className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => setDeleteTargetTx(tx)}
-                                title="Hapus Transaksi (Admin)"
-                                className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </>
+                          <div>
+                            {isInc ? '+' : '-'}
+                            {formatRupiah(tx.amount)}
+                          </div>
+                          {porsiNote && (
+                            <div className="text-[10px] font-sans font-normal text-slate-500 mt-0.5">
+                              {porsiNote}
+                            </div>
                           )}
+                        </td>
 
-                          {/* Draft Actions - only for recording users */}
-                          {tx.status === 'draft' && canRecordTransactions && (isAdmin || tx.created_by === currentUser?.id) && (
+                        <td className={`py-3 px-4 text-center whitespace-nowrap font-semibold align-top ${statusInfo.cls}`}>
+                          {statusInfo.label}
+                        </td>
+
+                        <td className="py-3 px-4 text-right whitespace-nowrap align-top">
+                          <div className="flex items-center justify-end gap-1">
+                            {isAdmin && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditTargetTx(tx)}
+                                  title="Edit Transaksi (Admin)"
+                                  className="p-2 text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                                >
+                                  <FileEdit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteTargetTx(tx)}
+                                  title="Hapus Transaksi (Admin)"
+                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
+
+                            {tx.status === 'draft' &&
+                              canRecordTransactions &&
+                              (isAdmin || tx.created_by === currentUser?.id) && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSubmitDraft(tx.id)}
+                                    title="Ajukan untuk Persetujuan"
+                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                  >
+                                    <Send className="w-4 h-4" />
+                                  </button>
+                                  {!isAdmin && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setDeleteTargetTx(tx)}
+                                      title="Hapus Draf"
+                                      className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                </>
+                              )}
+
+                            {tx.status === 'submitted' &&
+                              tx.created_by === currentUser?.id &&
+                              canRecordTransactions && (
+                                <button
+                                  type="button"
+                                  onClick={() => setRecallTargetTx(tx)}
+                                  className="px-2.5 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
+                                >
+                                  Tarik Draf
+                                </button>
+                              )}
+
+                            {tx.status === 'approved' && !tx.is_reversal && canRecordTransactions && (
+                              <button
+                                type="button"
+                                onClick={() => setReversalTargetTx(tx)}
+                                title="Buat Koreksi/Pembalik"
+                                className="p-2 text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
+                              >
+                                <RotateCcw className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Responsive Cards View */}
+          <div className="md:hidden divide-y divide-slate-100 px-4">
+            {paginatedTransactions.length === 0 ? (
+              <div className="py-10 text-center text-slate-400 text-xs">
+                Tidak ada transaksi yang cocok.
+              </div>
+            ) : (
+              paginatedTransactions.map((tx) => {
+                const kas = kasList.find((k) => k.id === tx.kas_id);
+                const storage = storageAccounts.find((s) => s.id === tx.storage_account_id);
+                const isInc = tx.type === 'income' || tx.type === 'transfer_in';
+                const statusInfo = STATUS_META[tx.status] || { label: tx.status, cls: 'text-slate-600' };
+
+                return (
+                  <div key={tx.id} className="py-3.5 space-y-2">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-mono text-slate-500 tabular-nums">
+                        {formatDateIndo(tx.tanggal)}
+                        {tx.receipt_no ? ` · ${tx.receipt_no}` : ''}
+                      </span>
+                      <span className={`font-semibold ${statusInfo.cls}`}>{statusInfo.label}</span>
+                    </div>
+
+                    <div className="font-semibold text-slate-900 text-sm leading-snug">
+                      {tx.description}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="text-[11px] text-slate-500 truncate">
+                        {kas?.nama} · {storage?.nama}
+                      </span>
+
+                      <div className="text-right shrink-0">
+                        <span
+                          className={`font-mono font-bold tabular-nums text-sm block ${
+                            isInc ? 'text-emerald-700' : 'text-rose-700'
+                          }`}
+                        >
+                          {isInc ? '+' : '-'}
+                          {formatRupiah(tx.amount)}
+                        </span>
+                        {tx.type === 'income' && (
+                          <span className="text-[10px] text-slate-500 block">
+                            {tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi'
+                              ? '100% Non-Sentralisasi'
+                              : tx.sentralisasi_role === 'bpsk_share'
+                              ? '55% Sentralisasi'
+                              : tx.sentralisasi_role === 'huria_share'
+                              ? '45% Lokal Huria'
+                              : `BPSK ${formatRupiah(tx.bpsk_amount ?? Math.round(tx.amount * 0.55))}`}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 text-xs">
+                      <div>
+                        {tx.attachment_url && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewAttachmentUrl(tx.attachment_url!)}
+                            className="min-h-[36px] text-xs font-medium text-blue-700 inline-flex items-center gap-1"
+                          >
+                            <Paperclip className="w-3.5 h-3.5" />
+                            <span>Bukti</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        {isAdmin && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setEditTargetTx(tx)}
+                              className="px-3 min-h-[36px] text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg inline-flex items-center gap-1"
+                            >
+                              <FileEdit className="w-3.5 h-3.5" />
+                              <span>Edit</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTargetTx(tx)}
+                              className="p-2 min-h-[36px] min-w-[36px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg inline-flex items-center justify-center"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+
+                        {tx.status === 'draft' &&
+                          canRecordTransactions &&
+                          (isAdmin || tx.created_by === currentUser?.id) && (
                             <>
                               <button
+                                type="button"
                                 onClick={() => handleSubmitDraft(tx.id)}
-                                title="Ajukan untuk Persetujuan"
-                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                className="px-3 min-h-[36px] text-xs font-semibold text-white bg-blue-700 rounded-lg inline-flex items-center gap-1"
                               >
                                 <Send className="w-3.5 h-3.5" />
+                                <span>Ajukan</span>
                               </button>
                               {!isAdmin && (
                                 <button
+                                  type="button"
                                   onClick={() => setDeleteTargetTx(tx)}
-                                  title="Hapus Draf"
-                                  className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                  className="p-2 min-h-[36px] min-w-[36px] text-rose-600 inline-flex items-center justify-center"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
                               )}
                             </>
                           )}
 
-                          {/* Submitted Action (Author can recall before approval) */}
-                          {tx.status === 'submitted' && tx.created_by === currentUser?.id && canRecordTransactions && (
-                            <button
-                              onClick={() => setRecallTargetTx(tx)}
-                              title="Tarik Kembali ke Draf"
-                              className="px-2 py-1 text-[10px] font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md transition-colors"
-                            >
-                              Tarik Draf
-                            </button>
-                          )}
-
-                          {/* Approved Actions (Reversal button - only for authorized recording officers) */}
-                          {tx.status === 'approved' && !tx.is_reversal && canRecordTransactions && (
-                            <button
-                              onClick={() => setReversalTargetTx(tx)}
-                              title="Buat Transaksi Koreksi/Pembalik"
-                              className="p-1.5 text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
-                            >
-                              <RotateCcw className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-
-                          {/* Auditor Badge */}
-                          {isAuditor && (
-                            <span className="text-[10px] text-purple-700 font-semibold bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
-                              Uji Petik
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile Responsive Cards View */}
-        <div className="md:hidden divide-y divide-slate-100 p-4 space-y-3">
-          {paginatedTransactions.length === 0 ? (
-            <div className="py-8 text-center text-slate-400 text-xs">
-              Tidak ada transaksi yang cocok.
-            </div>
-          ) : (
-            paginatedTransactions.map((tx) => {
-              const kas = kasList.find((k) => k.id === tx.kas_id);
-              const storage = storageAccounts.find((s) => s.id === tx.storage_account_id);
-              const isInc = tx.type === 'income' || tx.type === 'transfer_in';
-
-              return (
-                <div key={tx.id} className="pt-3.5 first:pt-0 space-y-2.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-mono text-slate-500 font-semibold">{formatDateIndo(tx.tanggal)}</span>
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                        tx.status === 'approved'
-                          ? 'bg-emerald-100 text-emerald-900'
-                          : tx.status === 'submitted'
-                          ? 'bg-blue-100 text-blue-900'
-                          : tx.status === 'draft'
-                          ? 'bg-amber-100 text-amber-900'
-                          : 'bg-rose-100 text-rose-900'
-                      }`}
-                    >
-                      {tx.status}
-                    </span>
-                  </div>
-
-                  <div className="font-bold text-slate-900 text-sm leading-snug">
-                    {tx.description}
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span
-                        className="px-2 py-0.5 rounded-md text-[10px] font-bold"
-                        style={{
-                          backgroundColor: `${kas?.warna || '#6366F1'}20`,
-                          color: kas?.warna || '#4338CA',
-                        }}
-                      >
-                        {kas?.nama}
-                      </span>
-                      <span className="text-[10px] text-slate-500">· {storage?.nama}</span>
-                    </div>
-
-                    <div className="text-right">
-                      <span
-                        className={`font-mono font-black tabular-nums text-sm block ${
-                          isInc ? 'text-emerald-700' : 'text-rose-700'
-                        }`}
-                      >
-                        {isInc ? '+' : '-'}
-                        {formatRupiah(tx.amount)}
-                      </span>
-                      {tx.type === 'income' && (
-                        tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi' ? (
-                          <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-100 block mt-0.5">
-                            100% Non-Sentralisasi
-                          </span>
-                        ) : tx.sentralisasi_role === 'bpsk_share' ? (
-                          <span className="text-[9px] font-semibold text-blue-700 bg-blue-50 px-1 py-0.2 rounded border border-blue-100 block mt-0.5">
-                            55% Sentralisasi (BPSK)
-                          </span>
-                        ) : tx.sentralisasi_role === 'huria_share' ? (
-                          <span className="text-[9px] font-semibold text-indigo-700 bg-indigo-50 px-1 py-0.2 rounded border border-indigo-100 block mt-0.5">
-                            45% Bagian Lokal
-                          </span>
-                        ) : (
-                          <span className="text-[8.5px] font-medium text-blue-700 block mt-0.5">
-                            BPSK: {formatRupiah(tx.bpsk_amount ?? Math.round(tx.amount * 0.55))}
-                          </span>
-                        )
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Mobile Actions */}
-                  <div className="flex items-center justify-between pt-1 text-xs">
-                    <div>
-                      {tx.attachment_url && (
-                        <button
-                          type="button"
-                          onClick={() => setPreviewAttachmentUrl(tx.attachment_url!)}
-                          className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
-                        >
-                          <Paperclip className="w-3.5 h-3.5" />
-                          <span>Bukti</span>
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {isAdmin && (
-                        <>
+                        {tx.status === 'approved' && !tx.is_reversal && canRecordTransactions && (
                           <button
-                            onClick={() => setEditTargetTx(tx)}
-                            className="px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-1"
+                            type="button"
+                            onClick={() => setReversalTargetTx(tx)}
+                            className="px-3 min-h-[36px] text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg inline-flex items-center gap-1"
                           >
-                            <FileEdit className="w-3 h-3" />
-                            <span>Edit</span>
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Koreksi</span>
                           </button>
-                          <button
-                            onClick={() => setDeleteTargetTx(tx)}
-                            className="p-1.5 text-rose-600 bg-rose-50 border border-rose-200 rounded-lg"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </>
-                      )}
-
-                      {tx.status === 'draft' && canRecordTransactions && (isAdmin || tx.created_by === currentUser?.id) && (
-                        <>
-                          <button
-                            onClick={() => handleSubmitDraft(tx.id)}
-                            className="px-2.5 py-1 text-xs font-bold text-white bg-indigo-600 rounded-lg flex items-center gap-1"
-                          >
-                            <Send className="w-3 h-3" />
-                            <span>Ajukan</span>
-                          </button>
-                          {!isAdmin && (
-                            <button
-                              onClick={() => setDeleteTargetTx(tx)}
-                              className="p-1 text-rose-600"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </>
-                      )}
-
-                      {tx.status === 'approved' && !tx.is_reversal && canRecordTransactions && (
-                        <button
-                          onClick={() => setReversalTargetTx(tx)}
-                          className="px-2 py-1 text-[11px] font-bold text-amber-800 bg-amber-100 rounded-lg flex items-center gap-1"
-                        >
-                          <RotateCcw className="w-3 h-3" />
-                          <span>Koreksi</span>
-                        </button>
-                      )}
-
-                      {isAuditor && (
-                        <span className="text-[10px] text-purple-700 font-semibold bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
-                          Uji Petik
-                        </span>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+                );
+              })
+            )}
+          </div>
 
-        {/* Pagination bar */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
-          <span>
-            Menampilkan {filteredTransactions.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1} -{' '}
-            {Math.min(currentPage * ITEMS_PER_PAGE, filteredTransactions.length)} dari {filteredTransactions.length} transaksi
-          </span>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="p-1.5 rounded-lg border border-slate-200 hover:bg-white disabled:opacity-40 transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="font-semibold text-slate-700">
-              Halaman {currentPage} dari {totalPages}
+          {/* Pagination */}
+          <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+            <span>
+              {filteredTransactions.length === 0 ? 0 : (safePage - 1) * ITEMS_PER_PAGE + 1} -{' '}
+              {Math.min(safePage * ITEMS_PER_PAGE, filteredTransactions.length)} dari {filteredTransactions.length} transaksi
             </span>
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="p-1.5 rounded-lg border border-slate-200 hover:bg-white disabled:opacity-40 transition-colors"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={safePage === 1}
+                className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="font-semibold text-slate-700 tabular-nums">
+                {safePage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safePage === totalPages}
+                className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Global Modals */}
       <TransactionModal isOpen={isTxModalOpen} onClose={() => setIsTxModalOpen(false)} />
@@ -926,7 +1199,7 @@ export const TransactionsPage: React.FC = () => {
         message="Apakah Anda yakin ingin menghapus transaksi ini secara permanen? Tindakan ini tidak dapat dibatalkan."
         warningText={
           deleteTargetTx?.status === 'approved'
-            ? 'Peringatan: Transaksi ini berstatus Disetujui (Approved). Menghapusnya akan mengubah saldo resmi kas.'
+            ? 'Peringatan: Transaksi ini berstatus Disetujui. Menghapusnya akan mengubah saldo resmi kas.'
             : undefined
         }
         summaryRows={
@@ -955,7 +1228,7 @@ export const TransactionsPage: React.FC = () => {
         onConfirm={handleConfirmRecallToDraft}
         variant="warning"
         title="Konfirmasi Tarik ke Draf"
-        message="Tarik kembali pengajuan transaksi ini menjadi status Draft agar dapat diubah atau dihapus?"
+        message="Tarik kembali pengajuan transaksi ini menjadi status Draft?"
         summaryRows={
           recallTargetTx
             ? [

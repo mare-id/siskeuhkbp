@@ -386,29 +386,22 @@ export default function OpeningBalancePage() {
       {/* Page Header & Go-Live Banner */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2.5">
-              <BookOpen className="w-7 h-7 text-[#7C9CF5]" />
-              Pembukaan Buku & Saldo Awal
-            </h1>
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[#7C9CF5]/15 text-[#7C9CF5] border border-[#7C9CF5]/30">
-              Go-Live: {formatDateIndo(openingSetup.go_live_date)}
-            </span>
-          </div>
-          <p className="text-sm text-gray-500 mt-1">
-            Penetapan saldo pindahan buku manual per 31 Desember {openingSetup.first_year - 1} untuk menjadi
-            dasar pembukuan resmi komputerisasi tahun {openingSetup.first_year}.
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            Pembukaan Buku &amp; Saldo Awal
+          </h1>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Saldo awal T.A. {openingSetup.first_year} · Mulai aktif {formatDateIndo(openingSetup.go_live_date)}
           </p>
         </div>
 
         {/* Global Action Buttons */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={handleExportPDF}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 shadow-xs transition-colors"
+            className="inline-flex items-center gap-2 px-3.5 py-2 min-h-[40px] rounded-xl text-xs font-semibold border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-colors"
           >
-            <Download className="w-4 h-4 text-gray-500" />
-            Cetak Berita Acara (PDF)
+            <Download className="w-4 h-4 text-slate-500" />
+            Berita Acara (PDF)
           </button>
 
           {(isAdmin || isBendaharaUmum) && (
@@ -423,7 +416,7 @@ export default function OpeningBalancePage() {
                   alert(`Berhasil mengunci ${res.count || 0} entri saldo awal.`);
                 }
               }}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm transition-colors"
+              className="inline-flex items-center gap-2 px-3.5 py-2 min-h-[40px] rounded-xl text-xs font-semibold bg-emerald-700 text-white hover:bg-emerald-800 transition-colors"
             >
               <Lock className="w-4 h-4" />
               Kunci Semua Kas
@@ -433,25 +426,25 @@ export default function OpeningBalancePage() {
       </div>
 
       {/* Progress & Status Card */}
-      <div className="card-indigo card-hover p-5 rounded-2xl border-t-4 border-t-indigo-500 shadow-2xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-lg border border-indigo-200">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-800 flex items-center justify-center font-bold font-mono text-sm border border-blue-200/80 shrink-0 tabular-nums">
             {progressPct}%
           </div>
           <div>
-            <h3 className="text-sm font-bold text-indigo-950">
-              Progres Pembukaan Buku: {lockedKasCount} dari {totalKasCount} Kas Dikunci
-            </h3>
-            <p className="text-xs text-indigo-800/80 mt-0.5 font-medium">
-              Kas yang belum dikunci belum dapat mencatat transaksi keuangan demi integritas saldo awal.
+            <h2 className="text-sm font-bold text-slate-900">
+              Progres Pembukaan Buku: {lockedKasCount} / {totalKasCount} Kas Dikunci
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Kas yang dikunci siap mencatat transaksi keuangan
             </p>
           </div>
         </div>
 
         <div className="w-full md:w-64">
-          <div className="h-2.5 w-full bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
             <div
-              className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+              className="h-full bg-emerald-600 rounded-full transition-all duration-300"
               style={{ width: `${progressPct}%` }}
             />
           </div>

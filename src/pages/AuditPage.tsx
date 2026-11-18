@@ -527,27 +527,20 @@ export const AuditPage: React.FC = () => {
       )}
 
       {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950 text-white p-6 md:p-8 shadow-xl border border-indigo-800/40 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-white/10 backdrop-blur-md border border-white/20 text-indigo-200 flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
-              <span>Badan Audit Huria Independen</span>
-            </span>
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-              3 Anggota Kolektif (Majority Rule 2/3)
-            </span>
+      <div className="card-navy rounded-2xl p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="text-xs text-slate-300">
+            Badan Audit Huria Independen · Kolegial 2/3
           </div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
-            Pemeriksaan & Tata Kelola Badan Audit Huria
+          <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+            Pemeriksaan &amp; Audit Huria
           </h1>
-          <p className="text-xs md:text-sm text-indigo-200/90 max-w-2xl leading-relaxed">
-            Pemeriksaan berkala (Semester I, Semester II, Saldo Awal, & LPJ Tahunan), opname fisik kas brankas, dan penegakan tata kelola persembahan jemaat yang akuntabel.
+          <p className="text-xs text-slate-300">
+            Verifikasi bukti transaksi, opname kas, temuan, dan opini audit
           </p>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex flex-wrap items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           {isCurrentUserAuditor && (
             <button
               onClick={() => {
@@ -561,10 +554,10 @@ export const AuditPage: React.FC = () => {
                   });
                 }
               }}
-              className="px-4 py-2.5 bg-white/10 hover:bg-white/15 backdrop-blur-md text-white border border-white/20 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-sm transition-all"
+              className="px-3.5 py-2 min-h-[40px] bg-white/10 hover:bg-white/15 text-white border border-white/20 rounded-xl text-xs font-semibold inline-flex items-center gap-2 transition-colors"
             >
-              <Download className="w-4 h-4 text-indigo-300" />
-              <span>Unduh Berita Acara PDF</span>
+              <Download className="w-4 h-4" />
+              <span>Berita Acara PDF</span>
             </button>
           )}
 
@@ -574,7 +567,7 @@ export const AuditPage: React.FC = () => {
                 setNewEngJudul(`Pemeriksaan Keuangan Semester II Tahun ${settings.active_year || 2026}`);
                 setShowNewEngModal(true);
               }}
-              className="px-4 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-2xl text-xs font-bold flex items-center gap-2 shadow-md shadow-indigo-500/30 transition-all"
+              className="px-4 py-2 min-h-[40px] bg-white text-slate-900 hover:bg-slate-100 rounded-xl text-xs font-semibold inline-flex items-center gap-2 transition-colors"
             >
               <Plus className="w-4 h-4" />
               <span>Buka Penugasan Audit</span>
@@ -767,58 +760,55 @@ export const AuditPage: React.FC = () => {
 
           {/* Metric KPI Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="card-indigo card-hover p-4 rounded-2xl border-t-4 border-t-indigo-500 shadow-2xs space-y-1 transition-all">
-              <span className="text-[11px] font-semibold text-indigo-900/80 uppercase tracking-wider block">
-                Total Transaksi Sesuai Filter
+            <div className="bg-white p-4 rounded-2xl border border-slate-200/90 space-y-1">
+              <span className="text-[11px] font-semibold text-slate-500 block">
+                Total Transaksi
               </span>
-              <p className="text-xl md:text-2xl font-black text-indigo-950 tabular-nums">
-                {txAuditStats.totalCount} <span className="text-xs font-semibold text-indigo-800/80">transaksi</span>
+              <p className="text-xl font-bold font-mono text-slate-900 tabular-nums">
+                {txAuditStats.totalCount}
               </p>
-              <p className="text-[11px] font-medium text-indigo-800/80 tabular-nums">
-                Nilai: {formatRupiah(txAuditStats.totalAmount)}
+              <p className="text-[11px] font-mono text-slate-500 tabular-nums">
+                {formatRupiah(txAuditStats.totalAmount)}
               </p>
             </div>
 
-            <div className="card-emerald card-hover p-4 rounded-2xl border-t-4 border-t-emerald-500 shadow-2xs space-y-1 transition-all">
-              <span className="text-[11px] font-semibold text-emerald-900/80 uppercase tracking-wider block flex items-center gap-1">
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Lolos Verifikasi (Valid)</span>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200/90 space-y-1">
+              <span className="text-[11px] font-semibold text-emerald-700 block">
+                Lolos Verifikasi
               </span>
-              <p className="text-xl md:text-2xl font-black text-emerald-950 tabular-nums">
+              <p className="text-xl font-bold font-mono text-emerald-800 tabular-nums">
                 {txAuditStats.verifiedCount}
-                <span className="text-xs font-semibold text-emerald-800 ml-1.5">
+                <span className="text-xs font-sans font-normal text-slate-500 ml-1">
                   ({Math.round((txAuditStats.verifiedCount / (txAuditStats.totalCount || 1)) * 100)}%)
                 </span>
               </p>
-              <p className="text-[11px] font-medium text-emerald-800/80">Bukti sah & terkonfirmasi</p>
+              <p className="text-[11px] text-slate-500">Bukti sah</p>
             </div>
 
-            <div className="card-amber card-hover p-4 rounded-2xl border-t-4 border-t-amber-500 shadow-2xs space-y-1 transition-all">
-              <span className="text-[11px] font-semibold text-amber-900/80 uppercase tracking-wider block flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                <span>Catatan / Temuan Audit</span>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200/90 space-y-1">
+              <span className="text-[11px] font-semibold text-amber-700 block">
+                Temuan Audit
               </span>
-              <p className="text-xl md:text-2xl font-black text-amber-950 tabular-nums">
+              <p className="text-xl font-bold font-mono text-amber-800 tabular-nums">
                 {txAuditStats.flaggedCount}
-                <span className="text-xs font-semibold text-amber-800 ml-1.5">
+                <span className="text-xs font-sans font-normal text-slate-500 ml-1">
                   ({Math.round((txAuditStats.flaggedCount / (txAuditStats.totalCount || 1)) * 100)}%)
                 </span>
               </p>
-              <p className="text-[11px] font-medium text-amber-800/80">Perlu klarifikasi bendahara</p>
+              <p className="text-[11px] text-slate-500">Perlu klarifikasi</p>
             </div>
 
-            <div className="card-sky card-hover p-4 rounded-2xl border-t-4 border-t-sky-500 shadow-2xs space-y-1 transition-all">
-              <span className="text-[11px] font-semibold text-sky-900/80 uppercase tracking-wider block flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5 text-sky-600" />
-                <span>Belum Diperiksa</span>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200/90 space-y-1">
+              <span className="text-[11px] font-semibold text-slate-500 block">
+                Belum Diperiksa
               </span>
-              <p className="text-xl md:text-2xl font-black text-sky-950 tabular-nums">
+              <p className="text-xl font-bold font-mono text-slate-900 tabular-nums">
                 {txAuditStats.unverifiedCount}
-                <span className="text-xs font-semibold text-sky-800 ml-1.5">
+                <span className="text-xs font-sans font-normal text-slate-500 ml-1">
                   ({Math.round((txAuditStats.unverifiedCount / (txAuditStats.totalCount || 1)) * 100)}%)
                 </span>
               </p>
-              <p className="text-[11px] font-medium text-sky-800/80">Menunggu pemeriksaan</p>
+              <p className="text-[11px] text-slate-500">Menunggu audit</p>
             </div>
           </div>
 

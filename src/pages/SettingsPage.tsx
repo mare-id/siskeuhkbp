@@ -116,50 +116,36 @@ export const SettingsPage: React.FC = () => {
   return (
     <div className="space-y-6 w-full max-w-4xl mx-auto min-w-0 overflow-hidden">
       <div>
-        <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-1">
-          <Settings className="w-4 h-4 text-primary" />
-          <span>Konfigurasi Organisasi, Kop Resmi & Basis Data Cloud</span>
-        </div>
-        <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
-          Pengaturan Sistem & Database Supabase
-        </h2>
-        <p className="text-xs md:text-sm text-slate-500">
-          Kelola koneksi cloud database PostgreSQL Supabase, teks kop surat PDF, penandatangan sah, serta aturan kas
+        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+          Pengaturan Sistem &amp; Database
+        </h1>
+        <p className="text-xs text-slate-500">
+          Koneksi Supabase, identitas huria, dan pejabat penandatangan laporan
         </p>
       </div>
 
       {successMsg && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 flex items-center gap-2 animate-in fade-in">
-          <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
-          <span className="font-medium">Pengaturan gereja berhasil diperbarui dan disimpan!</span>
+        <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span className="font-medium">Pengaturan berhasil disimpan.</span>
         </div>
       )}
 
       {/* SECTION SUPABASE INTEGRATION */}
-      <div className="bg-gradient-to-br from-white to-slate-50/70 p-6 rounded-2xl border border-slate-200/90 shadow-sm space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100/80 flex items-center justify-center text-emerald-700 shadow-2xs">
+            <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white shrink-0">
               <Database className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <span>Database Cloud Supabase (PostgreSQL)</span>
-                {isSupabaseConfigured ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Terhubung Langsung
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-300">
-                    Mode Demo / Lokal
-                  </span>
-                )}
-              </h3>
-              <p className="text-[11px] text-slate-500 mt-0.5">
+              <h2 className="text-sm font-bold text-slate-900">
+                Database Cloud Supabase
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
                 {isSupabaseConfigured
-                  ? 'Penyimpanan lokal dinonaktifkan. Seluruh data transaksi tersimpan langsung di server database Supabase Anda.'
-                  : 'Hubungkan project Supabase agar data yang diinput langsung tersimpan permanen di cloud database.'}
+                  ? 'Terhubung langsung ke PostgreSQL Supabase (penyimpanan lokal dinonaktifkan).'
+                  : 'Belum terhubung · masukkan URL & Anon Key Supabase.'}
               </p>
             </div>
           </div>
@@ -194,16 +180,6 @@ export const SettingsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Notice on Local Storage Disabled */}
-        <div className="p-3.5 bg-blue-50/70 border border-blue-200/80 rounded-xl text-[11px] text-blue-900 flex items-start gap-2.5">
-          <Server className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-          <div className="leading-relaxed">
-            <span className="font-bold">Ketentuan Penyimpanan: </span>
-            Saat Supabase terhubung, sistem SISKEU HKBP secara ketat <strong>menonaktifkan penyimpanan lokal browser (localStorage)</strong>.
-            Semua penambahan kas, verifikasi audit, anggaran APBG, dan mutasi kas disinkronkan secara real-time langsung ke tabel PostgreSQL di Supabase.
-          </div>
-        </div>
-
         {/* Form Inputs */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
           <div>
@@ -216,11 +192,8 @@ export const SettingsPage: React.FC = () => {
               value={sbUrl}
               onChange={(e) => setSbUrl(e.target.value)}
               placeholder="https://your-project-ref.supabase.co"
-              className="w-full p-2.5 rounded-xl border border-slate-200 font-mono text-[11px] focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              className="w-full h-10 px-3 rounded-xl border border-slate-200 font-mono text-[11px] focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
             />
-            <span className="text-[10px] text-slate-400 mt-1 block">
-              Ditemukan di: Supabase Dashboard &gt; Project Settings &gt; API &gt; Project URL
-            </span>
           </div>
 
           <div>
@@ -233,11 +206,8 @@ export const SettingsPage: React.FC = () => {
               value={sbKey}
               onChange={(e) => setSbKey(e.target.value)}
               placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-              className="w-full p-2.5 rounded-xl border border-slate-200 font-mono text-[11px] focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              className="w-full h-10 px-3 rounded-xl border border-slate-200 font-mono text-[11px] focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
             />
-            <span className="text-[10px] text-slate-400 mt-1 block">
-              Ditemukan di: Supabase Dashboard &gt; Project Settings &gt; API &gt; Project API keys (anon public)
-            </span>
           </div>
         </div>
 
@@ -508,26 +478,24 @@ export const SettingsPage: React.FC = () => {
 
       {/* Danger Zone: Reset Transaksi, Anggaran & Saldo Awal */}
       {isAdmin && (
-        <div className="card-rose p-6 rounded-2xl border-t-4 border-t-rose-500 shadow-2xs space-y-4 transition-all">
-          <div className="flex items-center gap-2 text-rose-900 font-bold text-sm">
-            <AlertCircle className="w-4 h-4 text-rose-600" />
-            <span>Zona Pengaturan Ulang Data (Reset ke Nol)</span>
+        <div className="bg-rose-50/50 p-5 sm:p-6 rounded-2xl border border-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-rose-900 font-bold text-sm">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>Reset Data Pembukuan ke Nol</span>
+            </div>
+            <p className="text-xs text-rose-800">
+              Menghapus seluruh transaksi, anggaran (APBG), dan mengembalikan saldo awal ke Rp 0.
+            </p>
           </div>
-          <p className="text-xs text-rose-800 leading-relaxed font-medium">
-            Gunakan fitur ini jika Anda ingin mengosongkan seluruh data uji coba atau memulai ulang penggunaan aplikasi
-            dengan pembukuan riil yang baru. Tindakan ini akan menghapus semua transaksi kas, mengosongkan seluruh draf anggaran (APBG),
-            mengembalikan saldo awal ke Rp 0, dan menyegarkan checklist kesiapan baik di database Supabase (jika terhubung) maupun lokal.
-          </p>
-          <div className="pt-2">
-            <button
-              type="button"
-              onClick={() => setIsResetConfirmOpen(true)}
-              className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-2 shadow-xs transition-colors"
-            >
-              <RotateCcw className="w-4 h-4" />
-              <span>Reset Semua Transaksi & Anggaran (APBG) ke Nol</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsResetConfirmOpen(true)}
+            className="px-4 py-2.5 min-h-[42px] bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs inline-flex items-center justify-center gap-2 transition-colors shrink-0 whitespace-nowrap"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>Reset Semua Data ke Nol</span>
+          </button>
         </div>
       )}
 

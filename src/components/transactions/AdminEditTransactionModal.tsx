@@ -96,20 +96,15 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
       setAttachmentUrl(transaction.attachment_url || '');
       setStatus(transaction.status || 'draft');
       setRejectNote(transaction.reject_note || '');
-      const cat = categories.find((c) => c.id === transaction.category_id);
       const sentFlag =
-        transaction.is_sentralisasi !== undefined
-          ? transaction.is_sentralisasi !== false
-          : cat?.is_sentralisasi !== false;
+        transaction.is_sentralisasi !== undefined ? transaction.is_sentralisasi !== false : true;
       setIsSentralisasi(sentFlag);
       setSentralisasiRole(
         transaction.sentralisasi_role && transaction.sentralisasi_role !== 'non_sentralisasi'
           ? transaction.sentralisasi_role
           : ''
       );
-      setExclusionType(
-        transaction.sentralisasi_exclusion_type || cat?.sentralisasi_exclusion_type || 'lainnya'
-      );
+      setExclusionType(transaction.sentralisasi_exclusion_type || 'lainnya');
       setChangeReason('');
       setFormError('');
       setIsConfirmOpen(false);
@@ -309,14 +304,6 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
 
   const handleCategoryChange = (newCatId: string) => {
     setCategoryId(newCatId);
-    const selectedCat = categories.find((c) => c.id === newCatId);
-    if (selectedCat && type === 'income') {
-      const catSent = selectedCat.is_sentralisasi !== false;
-      setIsSentralisasi(catSent);
-      if (!catSent && selectedCat.sentralisasi_exclusion_type) {
-        setExclusionType(selectedCat.sentralisasi_exclusion_type);
-      }
-    }
   };
 
   const handleValidateAndAskConfirm = (e: React.FormEvent) => {
@@ -418,14 +405,9 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
           {/* Form Body */}
           <form onSubmit={handleValidateAndAskConfirm} className="flex-1 overflow-y-auto p-6 space-y-4">
             {transaction.status === 'approved' && (
-              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
-                <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold block">Transaksi Berstatus Disetujui (Approved)</span>
-                  <span>
-                    Perubahan oleh Admin akan langsung memperbarui saldo kas, laporan warta/LPJ, dan tercatat permanen di Audit Trail.
-                  </span>
-                </div>
+              <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0" />
+                <span>Transaksi berstatus Approved. Perubahan langsung memperbarui saldo kas &amp; Audit Trail.</span>
               </div>
             )}
 

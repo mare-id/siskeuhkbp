@@ -41,7 +41,6 @@ export const AppLayout: React.FC = () => {
   const {
     currentUser,
     logout,
-    isLeader,
     isAdmin,
     isBendaharaUmum,
     isAuditor,
@@ -52,7 +51,6 @@ export const AppLayout: React.FC = () => {
     canRecordTransactions,
     canTransfer,
     canApprove,
-    canAudit,
     canClosePeriod,
     canManageSettings,
     canManageMasterData,
@@ -110,26 +108,26 @@ export const AppLayout: React.FC = () => {
     },
     {
       to: '/approvals',
-      label: 'Persetujuan Ketua',
+      label: 'Persetujuan',
       icon: CheckSquare,
       badge: pendingCount > 0 ? pendingCount : null,
       allowed: isAdmin || canApprove,
     },
     {
       to: '/reports?tab=warta',
-      label: 'Warta Keuangan Mingguan',
+      label: 'Warta Keuangan',
       icon: FileText,
       allowed: canViewWarta,
     },
     {
       to: '/reports?tab=semester',
-      label: 'Laporan & LPJ ISAK 35',
+      label: 'Laporan & LPJ',
       icon: FileSpreadsheet,
       allowed: canViewConsolidatedLpj,
     },
     {
       to: '/reports?tab=bpsk',
-      label: 'Sentralisasi BPSK (55/45)',
+      label: 'Sentralisasi (55/45)',
       icon: Landmark,
       allowed: canViewBpsk,
     },
@@ -141,7 +139,7 @@ export const AppLayout: React.FC = () => {
     },
     {
       to: '/audit',
-      label: 'Badan Audit Huria',
+      label: 'Badan Audit',
       icon: Shield,
       badge: openFindingsCount > 0 ? openFindingsCount : null,
       allowed: canViewAuditModule,
@@ -172,42 +170,83 @@ export const AppLayout: React.FC = () => {
     },
     {
       to: '/settings',
-      label: 'Pengaturan Kop & DB',
+      label: 'Pengaturan',
       icon: Settings,
       allowed: canManageSettings,
     },
     {
       to: '/guide',
-      label: 'Buku Panduan',
+      label: 'Panduan',
       icon: HelpCircle,
       allowed: true,
     },
   ];
 
+  const activeNavItem =
+    navItems.find((item) => {
+      if (location.pathname === '/reports' && location.search.includes('tab=bpsk')) {
+        return item.to.includes('tab=bpsk');
+      }
+      if (
+        location.pathname === '/reports' &&
+        (location.search.includes('tab=warta') || location.search === '')
+      ) {
+        return item.to.includes('tab=warta');
+      }
+      if (location.pathname === '/reports') {
+        return item.to.includes('tab=semester');
+      }
+      if (item.to.includes('?')) return false;
+      return item.exact
+        ? location.pathname === item.to
+        : item.to !== '/' && location.pathname.startsWith(item.to);
+    }) || navItems[0];
+
+  const isNavItemActive = (to: string, isActive: boolean) => {
+    if (to.includes('tab=bpsk')) {
+      return location.pathname === '/reports' && location.search.includes('tab=bpsk');
+    }
+    if (to.includes('tab=warta')) {
+      return (
+        location.pathname === '/reports' &&
+        (location.search.includes('tab=warta') || location.search === '')
+      );
+    }
+    if (to.includes('tab=semester')) {
+      return (
+        location.pathname === '/reports' &&
+        !location.search.includes('tab=bpsk') &&
+        !location.search.includes('tab=warta') &&
+        location.search !== ''
+      );
+    }
+    return isActive;
+  };
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col w-full overflow-x-hidden">
-      {/* ---------------- Desktop Sidebar (Modern Executive Prussian Navy) ---------------- */}
-      <aside className="hidden md:flex flex-col w-64 bg-[#0B132B] border-r border-slate-800/90 fixed inset-y-0 left-0 z-30 shadow-md">
-        {/* Church Brand Header */}
-        <div className="p-5 border-b border-slate-800/80 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-950 border border-blue-800/80 text-amber-400 shadow-inner flex items-center justify-center shrink-0">
-            <Church className="w-5 h-5" />
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex flex-col w-60 bg-[#0B132B] border-r border-slate-800/90 fixed inset-y-0 left-0 z-30">
+        {/* Brand */}
+        <div className="px-4 py-4 border-b border-slate-800/80 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-blue-950 border border-blue-800/70 text-amber-400 flex items-center justify-center shrink-0">
+            <Church className="w-4 h-4" />
           </div>
-          <div className="overflow-hidden">
-            <h1 className="font-bold text-white text-sm leading-tight truncate">
+          <div className="min-w-0">
+            <h1 className="font-bold text-white text-xs leading-tight truncate">
               {settings.church_name}
             </h1>
-            <p className="text-[11px] font-medium text-slate-400 truncate">SISKEU HKBP Hutaraja · PPKU</p>
+            <p className="text-[11px] text-slate-400 truncate mt-0.5">SISKEU · T.A. {settings.active_year}</p>
           </div>
         </div>
 
-        {/* Action Buttons tailored by Role & Authority */}
-        <div className="p-3.5 space-y-2">
+        {/* Primary Role CTA */}
+        <div className="p-3 space-y-1.5">
           {canRecordTransactions ? (
             <>
               <button
                 onClick={() => setIsTxModalOpen(true)}
-                className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98"
+                className="w-full h-9 px-3 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 <span>Catat Transaksi</span>
@@ -215,7 +254,7 @@ export const AppLayout: React.FC = () => {
               {canTransfer && (
                 <button
                   onClick={() => setIsTransferModalOpen(true)}
-                  className="w-full py-2 px-4 bg-slate-900/90 hover:bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 border border-slate-800 transition-colors"
+                  className="w-full h-8 px-3 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-medium rounded-lg flex items-center justify-center gap-1.5 border border-slate-800 transition-colors"
                 >
                   <ArrowRightLeft className="w-3.5 h-3.5 text-blue-400" />
                   <span>Transfer Antar Kas</span>
@@ -223,86 +262,42 @@ export const AppLayout: React.FC = () => {
               )}
             </>
           ) : isAuditor ? (
-            <>
-              <NavLink
-                to="/audit"
-                className="w-full py-2.5 px-4 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98 text-center"
-              >
-                <ShieldCheck className="w-4 h-4 text-amber-300" />
-                <span>Modul Pemeriksaan Audit</span>
-              </NavLink>
-              <NavLink
-                to="/transactions"
-                className="w-full py-2 px-4 bg-slate-900/90 hover:bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 border border-slate-800 transition-colors text-center"
-              >
-                <Search className="w-3.5 h-3.5 text-purple-400" />
-                <span>Uji Bukti Transaksi</span>
-              </NavLink>
-            </>
-          ) : isPendeta ? (
-            <>
-              <NavLink
-                to="/approvals"
-                className="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98 text-center"
-              >
-                <CheckSquare className="w-4 h-4" />
-                <span>Otorisasi & Persetujuan {pendingCount > 0 ? `(${pendingCount})` : ''}</span>
-              </NavLink>
-              <NavLink
-                to="/reports"
-                className="w-full py-2 px-4 bg-slate-900/90 hover:bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 border border-slate-800 transition-colors text-center"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
-                <span>Tinjau LPJ Konsolidasi</span>
-              </NavLink>
-            </>
+            <NavLink
+              to="/audit"
+              className="w-full h-9 px-3 bg-purple-700 hover:bg-purple-600 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <ShieldCheck className="w-4 h-4 text-amber-300" />
+              <span>Modul Audit</span>
+            </NavLink>
+          ) : isPendeta || canApprove ? (
+            <NavLink
+              to="/approvals"
+              className="w-full h-9 px-3 bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <CheckSquare className="w-4 h-4" />
+              <span>Persetujuan {pendingCount > 0 ? `(${pendingCount})` : ''}</span>
+            </NavLink>
           ) : isSekretaris ? (
-            <>
-              <NavLink
-                to="/reports?tab=warta"
-                className="w-full py-2.5 px-4 bg-blue-700 hover:bg-blue-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98 text-center"
-              >
-                <FileSpreadsheet className="w-4 h-4" />
-                <span>Materi Warta & LPJ</span>
-              </NavLink>
-              <NavLink
-                to="/approvals"
-                className="w-full py-2 px-4 bg-slate-900/90 hover:bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 border border-slate-800 transition-colors text-center"
-              >
-                <CheckSquare className="w-3.5 h-3.5 text-amber-400" />
-                <span>Persetujuan {pendingCount > 0 ? `(${pendingCount})` : ''}</span>
-              </NavLink>
-            </>
-          ) : canApprove ? (
-            <>
-              <NavLink
-                to="/approvals"
-                className="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98 text-center"
-              >
-                <CheckSquare className="w-4 h-4" />
-                <span>Persetujuan Kas {pendingCount > 0 ? `(${pendingCount})` : ''}</span>
-              </NavLink>
-              <NavLink
-                to="/budget"
-                className="w-full py-2 px-4 bg-slate-900/90 hover:bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 border border-slate-800 transition-colors text-center"
-              >
-                <Calculator className="w-3.5 h-3.5 text-blue-400" />
-                <span>Tinjau APBG Seksi</span>
-              </NavLink>
-            </>
+            <NavLink
+              to="/reports?tab=warta"
+              className="w-full h-9 px-3 bg-blue-700 hover:bg-blue-600 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Materi Warta</span>
+            </NavLink>
           ) : (
             <NavLink
               to="/reports?tab=semester"
-              className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98 text-center"
+              className="w-full h-9 px-3 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
             >
               <FileSpreadsheet className="w-4 h-4 text-blue-400" />
-              <span>Pantau Laporan Keuangan</span>
+              <span>Laporan Keuangan</span>
             </NavLink>
           )}
         </div>
 
-        {/* Navigation Items */}
-        <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
+        {/* Navigation */}
+        <nav className="flex-1 px-2.5 py-1 space-y-0.5 overflow-y-auto scrollbar-none">
           {navItems
             .filter((item) => item.allowed)
             .map((item) => {
@@ -313,135 +308,86 @@ export const AppLayout: React.FC = () => {
                   to={item.to}
                   end={item.exact}
                   className={({ isActive }) => {
-                    const isCustomActive = item.to.includes('tab=bpsk')
-                      ? location.pathname === '/reports' && location.search.includes('tab=bpsk')
-                      : item.to.includes('tab=warta')
-                      ? location.pathname === '/reports' &&
-                        (location.search.includes('tab=warta') || location.search === '')
-                      : item.to.includes('tab=semester')
-                      ? location.pathname === '/reports' &&
-                        !location.search.includes('tab=bpsk') &&
-                        !location.search.includes('tab=warta') &&
-                        location.search !== ''
-                      : isActive;
-                    return `flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all ${
-                      isCustomActive
-                        ? 'bg-slate-800/90 text-white font-semibold border-l-2 border-blue-500 shadow-xs'
+                    const active = isNavItemActive(item.to, isActive);
+                    return `flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors ${
+                      active
+                        ? 'bg-blue-600/20 text-white font-semibold'
                         : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900/70'
                     }`;
                   }}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <Icon className="w-4 h-4 shrink-0" />
-                    <span>{item.label}</span>
-                  </div>
-                  {item.badge !== undefined && item.badge !== null && (
-                    <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-500 text-white shadow-2xs">
-                      {item.badge}
-                    </span>
-                  )}
+                  {({ isActive }) => {
+                    const active = isNavItemActive(item.to, isActive);
+                    return (
+                      <>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-blue-400' : ''}`} />
+                          <span className="truncate">{item.label}</span>
+                        </div>
+                        {item.badge !== undefined && item.badge !== null && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-amber-500 text-white tabular-nums">
+                            {item.badge}
+                          </span>
+                        )}
+                      </>
+                    );
+                  }}
                 </NavLink>
               );
             })}
         </nav>
 
-        {/* User Card in Desktop Sidebar */}
-        <div className="p-3 border-t border-slate-800/80 bg-slate-950/80">
+        {/* User Footer */}
+        <div className="p-3 border-t border-slate-800/80 bg-slate-950/60 flex items-center justify-between gap-2">
           <NavLink
             to="/profile"
-            className="w-full p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 flex items-center gap-2.5 transition-colors shadow-2xs text-left"
+            className="flex items-center gap-2.5 min-w-0 flex-1 p-1.5 rounded-lg hover:bg-slate-900 transition-colors"
+            title="Profil & Kata Sandi"
           >
-            <div className="w-8 h-8 rounded-lg bg-blue-950 border border-blue-800 text-blue-200 font-bold text-xs flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-blue-950 border border-blue-800/80 text-blue-200 font-bold text-xs flex items-center justify-center shrink-0">
               {currentUser?.full_name.substring(0, 2).toUpperCase()}
             </div>
-            <div className="overflow-hidden">
+            <div className="min-w-0">
               <div className="text-xs font-semibold text-slate-200 truncate">
                 {currentUser?.full_name}
               </div>
-              <div className="text-[10px] text-slate-400 font-medium capitalize truncate flex items-center gap-1">
-                <Shield className="w-3 h-3 text-blue-400" />
-                <span>{currentUser?.role.replace('_', ' ')}</span>
+              <div className="text-[10px] text-slate-400 capitalize truncate">
+                {currentUser?.role.replace('_', ' ')}
               </div>
             </div>
           </NavLink>
 
-          <div className="mt-2 flex items-center justify-between pt-1">
-            <NavLink
-              to="/profile"
-              className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
-            >
-              <User className="w-3.5 h-3.5" />
-              <span>Profil</span>
-            </NavLink>
-            <NavLink
-              to="/guide"
-              className="text-[11px] text-slate-300 hover:text-white font-medium flex items-center gap-1 transition-colors"
-            >
-              <HelpCircle className="w-3.5 h-3.5 text-blue-400" />
-              <span>Panduan</span>
-            </NavLink>
-            <button
-              onClick={handleLogout}
-              className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1 transition-colors"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Keluar</span>
-            </button>
-          </div>
+          <button
+            onClick={handleLogout}
+            title="Keluar"
+            className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition-colors shrink-0"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </aside>
 
-      {/* ---------------- Main Content Column with Desktop Sidebar Offset ---------------- */}
-      <div className="md:pl-64 flex flex-col min-h-screen w-full min-w-0">
-        {/* ---------------- Desktop Sleek Top Header Bar ---------------- */}
-        <header className="hidden md:flex items-center justify-between gap-6 px-8 py-3.5 bg-white/90 backdrop-blur-md border-b border-slate-200/90 sticky top-0 z-20 shadow-2xs">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-400">SISKEU HKBP Hutaraja</span>
-              <span className="text-slate-300">/</span>
-              <h2 className="text-sm font-bold text-slate-900 tracking-tight">
-                {(
-                  navItems.find((item) => {
-                    if (location.pathname === '/reports' && location.search.includes('tab=bpsk')) {
-                      return item.to.includes('tab=bpsk');
-                    }
-                    if (
-                      location.pathname === '/reports' &&
-                      (location.search.includes('tab=warta') || location.search === '')
-                    ) {
-                      return item.to.includes('tab=warta');
-                    }
-                    if (location.pathname === '/reports') {
-                      return item.to.includes('tab=semester');
-                    }
-                    if (item.to.includes('?')) return false;
-                    return item.exact
-                      ? location.pathname === item.to
-                      : item.to !== '/' && location.pathname.startsWith(item.to);
-                  }) || navItems[0]
-                ).label}
-              </h2>
-            </div>
-            <span className="text-slate-300">·</span>
-            <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200/80 flex items-center gap-1.5 shadow-2xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              <span>T.A. {settings.active_year} · Basis Kas Dimodifikasi (ISAK 35)</span>
+      {/* Main Content Area */}
+      <div className="md:pl-60 flex flex-col min-h-screen w-full min-w-0">
+        {/* Desktop Top Header */}
+        <header className="hidden md:flex items-center justify-between gap-4 px-6 h-14 bg-white/95 backdrop-blur-md border-b border-slate-200/90 sticky top-0 z-20">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xs font-medium text-slate-400">SISKEU HKBP</span>
+            <span className="text-slate-300">/</span>
+            <h2 className="text-sm font-bold text-slate-900 truncate">
+              {activeNavItem.label}
+            </h2>
+            <span className="text-slate-300 mx-1">·</span>
+            <span className="text-xs text-slate-500 font-medium tabular-nums">
+              T.A. {settings.active_year}
             </span>
           </div>
 
-          <div className="flex items-center gap-2.5 relative">
-            <NavLink
-              to="/guide"
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 transition-all flex items-center gap-1.5 shadow-2xs"
-            >
-              <HelpCircle className="w-3.5 h-3.5 text-blue-600" />
-              <span>Panduan</span>
-            </NavLink>
-
+          <div className="flex items-center gap-2 shrink-0">
             {canTransfer && (
               <button
                 onClick={() => setIsTransferModalOpen(true)}
-                className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300/80 transition-all flex items-center gap-1.5 shadow-2xs active:scale-98"
+                className="h-8 px-3 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 border border-slate-200 transition-colors flex items-center gap-1.5"
               >
                 <ArrowRightLeft className="w-3.5 h-3.5 text-blue-600" />
                 <span>Transfer Kas</span>
@@ -451,7 +397,7 @@ export const AppLayout: React.FC = () => {
             {canRecordTransactions && (
               <button
                 onClick={() => setIsTxModalOpen(true)}
-                className="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition-all flex items-center gap-1.5 active:scale-98"
+                className="h-8 px-3.5 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors flex items-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Catat Transaksi</span>
@@ -461,271 +407,226 @@ export const AppLayout: React.FC = () => {
             {(isAuditor || isAdmin) && (
               <NavLink
                 to="/audit"
-                className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 shadow-xs transition-all flex items-center gap-1.5 active:scale-98"
+                className="h-8 px-3 rounded-lg text-xs font-semibold text-white bg-purple-700 hover:bg-purple-800 transition-colors flex items-center gap-1.5"
               >
                 <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
-                <span>Modul Audit</span>
+                <span>Audit</span>
               </NavLink>
             )}
 
             {(isPendeta || (canApprove && !canRecordTransactions && !isSekretaris)) && (
               <NavLink
                 to="/approvals"
-                className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-xs transition-all flex items-center gap-1.5 active:scale-98"
+                className="h-8 px-3 rounded-lg text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 transition-colors flex items-center gap-1.5"
               >
                 <CheckSquare className="w-3.5 h-3.5" />
                 <span>Persetujuan {pendingCount > 0 ? `(${pendingCount})` : ''}</span>
               </NavLink>
             )}
 
-            {isSekretaris && (
-              <NavLink
-                to="/reports?tab=warta"
-                className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-blue-700 hover:bg-blue-800 shadow-xs transition-all flex items-center gap-1.5 active:scale-98"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
-                <span>Materi Warta</span>
-              </NavLink>
-            )}
-
             <div className="h-4 w-px bg-slate-200 mx-1" />
 
-            {/* Logged-in User Profile Chip & Logout on Desktop Top Bar */}
-            <div className="flex items-center gap-2">
-              <NavLink
-                to="/profile"
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700 transition-colors shadow-2xs"
-                title="Lihat Profil & Ubah Password"
-              >
-                <div className="w-5 h-5 rounded-md bg-slate-800 text-white text-[10px] font-bold flex items-center justify-center shadow-xs">
-                  {currentUser?.full_name.substring(0, 1)}
-                </div>
-                <span className="max-w-[140px] truncate">{currentUser?.full_name}</span>
-              </NavLink>
-              <button
-                type="button"
-                onClick={handleLogout}
-                title="Keluar dari SISKEU"
-                className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 border border-slate-200 transition-colors"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            <NavLink
+              to="/profile"
+              className="h-8 px-2.5 rounded-lg hover:bg-slate-100 text-xs font-semibold text-slate-700 transition-colors flex items-center gap-2"
+              title="Profil & Kata Sandi"
+            >
+              <div className="w-6 h-6 rounded-md bg-slate-800 text-white text-[10px] font-bold flex items-center justify-center">
+                {currentUser?.full_name.substring(0, 1)}
+              </div>
+              <span className="max-w-[130px] truncate">{currentUser?.full_name}</span>
+            </NavLink>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="Keluar"
+              className="h-8 w-8 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </header>
 
-        {/* ---------------- Mobile Top Header ---------------- */}
-        <header className="md:hidden bg-white border-b border-slate-200/80 sticky top-0 z-30 px-4 py-3 flex items-center justify-between w-full">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-            <Church className="w-5 h-5" />
+        {/* Mobile Top Header */}
+        <header className="md:hidden bg-white border-b border-slate-200/80 sticky top-0 z-30 px-4 h-14 flex items-center justify-between w-full">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-[#0B132B] text-amber-400 flex items-center justify-center shrink-0">
+              <Church className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="font-bold text-xs text-slate-900 leading-tight truncate">
+                {activeNavItem.label}
+              </h1>
+              <p className="text-[10px] text-slate-500 truncate">
+                HKBP Hutaraja · T.A. {settings.active_year}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-bold text-xs text-slate-900 leading-tight">HKBP Hutaraja</h1>
-            <p className="text-[10px] text-slate-500">SISKEU Keuangan</p>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <NavLink
+              to="/profile"
+              className="h-9 px-2.5 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-semibold capitalize flex items-center"
+            >
+              {currentUser?.role.replace('_', ' ')}
+            </NavLink>
+
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="h-10 w-10 text-slate-700 hover:bg-slate-100 rounded-lg flex items-center justify-center"
+              aria-label="Menu"
+            >
+              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
-        </div>
+        </header>
 
-        <div className="flex items-center gap-2">
-          <NavLink
-            to="/profile"
-            className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 capitalize"
-          >
-            {currentUser?.role.replace('_', ' ')}
-          </NavLink>
-
-          <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg"
-          >
-            {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
-        </div>
-      </header>
-
-      {/* Mobile Drawer Menu */}
-      {isMobileMenuOpen && (
-        <div className="md:hidden fixed inset-x-0 top-14 bottom-16 bg-white z-40 p-4 overflow-y-auto space-y-2 border-b border-slate-200">
-          <div className="grid grid-cols-2 gap-2 mb-4">
-            {canRecordTransactions ? (
-              <>
-                <button
-                  onClick={() => {
-                    setIsMobileMenuOpen(false);
-                    setIsTxModalOpen(true);
-                  }}
-                  className="p-3 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm active:scale-98"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Catat Transaksi</span>
-                </button>
-                {canTransfer && (
+        {/* Mobile Drawer */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden fixed inset-x-0 top-14 bottom-16 bg-white z-40 p-4 overflow-y-auto space-y-3 border-b border-slate-200">
+            <div className="grid grid-cols-2 gap-2">
+              {canRecordTransactions ? (
+                <>
                   <button
                     onClick={() => {
                       setIsMobileMenuOpen(false);
-                      setIsTransferModalOpen(true);
+                      setIsTxModalOpen(true);
                     }}
-                    className="p-3 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-indigo-200"
+                    className="h-11 px-3 bg-blue-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
                   >
-                    <ArrowRightLeft className="w-4 h-4" />
-                    <span>Transfer Kas</span>
+                    <Plus className="w-4 h-4" />
+                    <span>Catat Transaksi</span>
                   </button>
-                )}
-              </>
-            ) : isAuditor ? (
-              <>
-                <NavLink
-                  to="/audit"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-3 bg-purple-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm text-center"
-                >
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Modul Audit</span>
-                </NavLink>
-                <NavLink
-                  to="/transactions"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-3 bg-purple-50 text-purple-900 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-purple-200 text-center"
-                >
-                  <Search className="w-4 h-4" />
-                  <span>Uji Bukti</span>
-                </NavLink>
-              </>
-            ) : isPendeta ? (
-              <>
-                <NavLink
-                  to="/approvals"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-3 bg-amber-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm text-center"
-                >
-                  <CheckSquare className="w-4 h-4" />
-                  <span>Persetujuan {pendingCount > 0 ? `(${pendingCount})` : ''}</span>
-                </NavLink>
-                <NavLink
-                  to="/reports?tab=semester"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-3 bg-amber-50 text-amber-900 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-amber-200 text-center"
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span>LPJ Huria</span>
-                </NavLink>
-              </>
-            ) : canApprove ? (
-              <>
-                <NavLink
-                  to="/approvals"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-3 bg-amber-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm text-center"
-                >
-                  <CheckSquare className="w-4 h-4" />
-                  <span>Persetujuan {pendingCount > 0 ? `(${pendingCount})` : ''}</span>
-                </NavLink>
-                <NavLink
-                  to="/budget"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-3 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-indigo-200 text-center"
-                >
-                  <Calculator className="w-4 h-4" />
-                  <span>APBG</span>
-                </NavLink>
-              </>
-            ) : (
-              <>
+                  {canTransfer && (
+                    <button
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setIsTransferModalOpen(true);
+                      }}
+                      className="h-11 px-3 bg-slate-100 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                    >
+                      <ArrowRightLeft className="w-4 h-4 text-blue-600" />
+                      <span>Transfer Kas</span>
+                    </button>
+                  )}
+                </>
+              ) : isAuditor ? (
+                <>
+                  <NavLink
+                    to="/audit"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="h-11 px-3 bg-purple-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Modul Audit</span>
+                  </NavLink>
+                  <NavLink
+                    to="/transactions"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="h-11 px-3 bg-slate-100 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                  >
+                    <Search className="w-4 h-4" />
+                    <span>Uji Bukti</span>
+                  </NavLink>
+                </>
+              ) : canApprove ? (
+                <>
+                  <NavLink
+                    to="/approvals"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="h-11 px-3 bg-amber-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                  >
+                    <CheckSquare className="w-4 h-4" />
+                    <span>Persetujuan {pendingCount > 0 ? `(${pendingCount})` : ''}</span>
+                  </NavLink>
+                  <NavLink
+                    to="/reports?tab=semester"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="h-11 px-3 bg-slate-100 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
+                    <span>Laporan</span>
+                  </NavLink>
+                </>
+              ) : (
                 <NavLink
                   to="/reports?tab=semester"
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-3 bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm text-center"
+                  className="col-span-2 h-11 px-3 bg-slate-900 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
                 >
                   <FileSpreadsheet className="w-4 h-4" />
                   <span>Laporan Huria</span>
                 </NavLink>
-                <NavLink
-                  to="/budget"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-3 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-indigo-200 text-center"
-                >
-                  <Calculator className="w-4 h-4" />
-                  <span>APBG Tahunan</span>
-                </NavLink>
-              </>
-            )}
+              )}
+            </div>
+
+            <div className="space-y-1">
+              {navItems
+                .filter((item) => item.allowed)
+                .map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.exact}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={({ isActive }) => {
+                        const active = isNavItemActive(item.to, isActive);
+                        return `flex items-center justify-between px-3 py-2.5 rounded-xl text-xs ${
+                          active ? 'bg-blue-50 text-blue-800 font-semibold' : 'text-slate-700 hover:bg-slate-50'
+                        }`;
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Icon className="w-4 h-4" />
+                        <span>{item.label}</span>
+                      </div>
+                      {item.badge && (
+                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-100 text-amber-800 tabular-nums">
+                          {item.badge}
+                        </span>
+                      )}
+                    </NavLink>
+                  );
+                })}
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <NavLink
+                to="/profile"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="h-10 px-2 text-xs text-slate-600 flex items-center gap-1.5 font-medium"
+              >
+                <User className="w-4 h-4" />
+                <span>Profil Saya</span>
+              </NavLink>
+              <button
+                onClick={handleLogout}
+                className="h-10 px-3 text-xs text-rose-600 flex items-center gap-1.5 font-semibold"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Keluar</span>
+              </button>
+            </div>
           </div>
+        )}
 
-          <div className="space-y-1">
-            {navItems
-              .filter((item) => item.allowed)
-              .map((item) => {
-                const Icon = item.icon;
-                return (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.exact}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className={({ isActive }) => {
-                      const isCustomActive = item.to.includes('tab=bpsk')
-                        ? location.pathname === '/reports' && location.search.includes('tab=bpsk')
-                        : item.to.includes('tab=warta')
-                        ? location.pathname === '/reports' &&
-                          (location.search.includes('tab=warta') || location.search === '')
-                        : item.to.includes('tab=semester')
-                        ? location.pathname === '/reports' &&
-                          !location.search.includes('tab=bpsk') &&
-                          !location.search.includes('tab=warta') &&
-                          location.search !== ''
-                        : isActive;
-                      return `flex items-center justify-between p-3 rounded-xl text-xs ${
-                        isCustomActive ? 'bg-primary/10 text-primary font-semibold' : 'text-slate-700 hover:bg-slate-50'
-                      }`;
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Icon className="w-4 h-4" />
-                      <span>{item.label}</span>
-                    </div>
-                    {item.badge && (
-                      <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-100 text-amber-800">
-                        {item.badge}
-                      </span>
-                    )}
-                  </NavLink>
-                );
-              })}
-          </div>
+        {/* Main Content Viewport */}
+        <main className="flex-1 p-3.5 sm:p-5 md:p-6 pb-20 md:pb-8 w-full max-w-7xl mx-auto min-w-0">
+          <Outlet />
+        </main>
+      </div>
 
-          <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-            <NavLink
-              to="/profile"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="text-xs text-slate-600 flex items-center gap-1.5"
-            >
-              <User className="w-4 h-4" />
-              <span>Profil Pengguna</span>
-            </NavLink>
-            <button
-              onClick={handleLogout}
-              className="text-xs text-rose-600 flex items-center gap-1.5"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>Keluar</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ---------------- Main Content Viewport ---------------- */}
-      <main className="flex-1 p-4 md:p-8 pb-24 md:pb-10 w-full max-w-7xl mx-auto min-w-0">
-        <Outlet />
-      </main>
-    </div>
-
-      {/* ---------------- Mobile Bottom Navigation Bar ---------------- */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 z-30 px-3 py-2 flex items-center justify-around shadow-lg">
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 h-16 bg-white border-t border-slate-200 z-30 px-2 flex items-center justify-around">
         <NavLink
           to="/"
+          end
           className={({ isActive }) =>
-            `flex flex-col items-center gap-1 text-[10px] min-w-[50px] ${
-              isActive ? 'text-primary font-semibold' : 'text-slate-500'
+            `flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[54px] h-12 ${
+              isActive ? 'text-blue-700 font-semibold' : 'text-slate-500'
             }`
           }
         >
@@ -736,8 +637,8 @@ export const AppLayout: React.FC = () => {
         <NavLink
           to="/transactions"
           className={({ isActive }) =>
-            `flex flex-col items-center gap-1 text-[10px] min-w-[50px] ${
-              isActive ? 'text-primary font-semibold' : 'text-slate-500'
+            `flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[54px] h-12 ${
+              isActive ? 'text-blue-700 font-semibold' : 'text-slate-500'
             }`
           }
         >
@@ -745,55 +646,54 @@ export const AppLayout: React.FC = () => {
           <span>Transaksi</span>
         </NavLink>
 
-        {/* Center Action Button on Mobile */}
+        {/* Center Role Action */}
         {canRecordTransactions ? (
           <button
             onClick={() => setIsTxModalOpen(true)}
-            className="w-12 h-12 -mt-5 rounded-full bg-primary hover:bg-primary-dark text-white flex items-center justify-center shadow-lg active:scale-95 transition-transform"
+            className="w-11 h-11 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-md active:scale-95 transition-transform"
             title="Catat Transaksi"
           >
-            <Plus className="w-6 h-6" />
+            <Plus className="w-5 h-5" />
           </button>
         ) : isAuditor ? (
           <NavLink
             to="/audit"
-            className="w-12 h-12 -mt-5 rounded-full bg-purple-700 hover:bg-purple-800 text-white flex items-center justify-center shadow-lg active:scale-95 transition-transform"
-            title="Modul Audit Huria"
+            className="w-11 h-11 rounded-full bg-purple-700 text-white flex items-center justify-center shadow-md"
+            title="Modul Audit"
           >
-            <ShieldCheck className="w-6 h-6" />
+            <ShieldCheck className="w-5 h-5" />
           </NavLink>
         ) : canApprove ? (
           <NavLink
             to="/approvals"
-            className="w-12 h-12 -mt-5 rounded-full bg-amber-600 hover:bg-amber-700 text-white flex items-center justify-center shadow-lg active:scale-95 transition-transform"
-            title="Persetujuan Transaksi"
+            className="w-11 h-11 rounded-full bg-amber-600 text-white flex items-center justify-center shadow-md"
+            title="Persetujuan"
           >
-            <CheckSquare className="w-6 h-6" />
+            <CheckSquare className="w-5 h-5" />
           </NavLink>
         ) : (
           <NavLink
             to="/reports?tab=semester"
-            className="w-12 h-12 -mt-5 rounded-full bg-slate-800 hover:bg-slate-900 text-white flex items-center justify-center shadow-lg active:scale-95 transition-transform"
-            title="Laporan Keuangan"
+            className="w-11 h-11 rounded-full bg-slate-800 text-white flex items-center justify-center shadow-md"
+            title="Laporan"
           >
             <FileSpreadsheet className="w-5 h-5" />
           </NavLink>
         )}
 
-        {/* Tab 4: Role-based navigation */}
         {isAuditor ? (
           <NavLink
             to="/audit"
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 text-[10px] min-w-[50px] relative ${
-                isActive ? 'text-purple-700 font-bold' : 'text-slate-500'
+              `flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[54px] h-12 ${
+                isActive ? 'text-purple-700 font-semibold' : 'text-slate-500'
               }`
             }
           >
             <div className="relative">
               <Shield className="w-5 h-5" />
               {openFindingsCount > 0 && (
-                <span className="absolute -top-1 -right-2 w-4 h-4 bg-purple-600 text-white rounded-full text-[9px] flex items-center justify-center font-bold">
+                <span className="absolute -top-1 -right-2 px-1 min-w-[16px] h-4 bg-purple-600 text-white rounded-full text-[9px] flex items-center justify-center font-bold tabular-nums">
                   {openFindingsCount}
                 </span>
               )}
@@ -804,15 +704,15 @@ export const AppLayout: React.FC = () => {
           <NavLink
             to="/approvals"
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 text-[10px] min-w-[50px] relative ${
-                isActive ? 'text-primary font-semibold' : 'text-slate-500'
+              `flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[54px] h-12 ${
+                isActive ? 'text-blue-700 font-semibold' : 'text-slate-500'
               }`
             }
           >
             <div className="relative">
               <CheckSquare className="w-5 h-5" />
               {pendingCount > 0 && (
-                <span className="absolute -top-1 -right-2 w-4 h-4 bg-amber-500 text-white rounded-full text-[9px] flex items-center justify-center font-bold">
+                <span className="absolute -top-1 -right-2 px-1 min-w-[16px] h-4 bg-amber-500 text-white rounded-full text-[9px] flex items-center justify-center font-bold tabular-nums">
                   {pendingCount}
                 </span>
               )}
@@ -823,8 +723,8 @@ export const AppLayout: React.FC = () => {
           <NavLink
             to="/budget"
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 text-[10px] min-w-[50px] ${
-                isActive ? 'text-primary font-semibold' : 'text-slate-500'
+              `flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[54px] h-12 ${
+                isActive ? 'text-blue-700 font-semibold' : 'text-slate-500'
               }`
             }
           >
@@ -836,8 +736,8 @@ export const AppLayout: React.FC = () => {
         <NavLink
           to={canViewConsolidatedLpj ? '/reports?tab=semester' : '/reports?tab=warta'}
           className={({ isActive }) =>
-            `flex flex-col items-center gap-1 text-[10px] min-w-[50px] ${
-              isActive ? 'text-primary font-semibold' : 'text-slate-500'
+            `flex flex-col items-center justify-center gap-0.5 text-[10px] min-w-[54px] h-12 ${
+              isActive ? 'text-blue-700 font-semibold' : 'text-slate-500'
             }`
           }
         >

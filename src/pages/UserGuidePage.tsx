@@ -104,7 +104,7 @@ export const UserGuidePage: React.FC = () => {
             </div>
           </div>
 
-          <div className="border-l-4 border-amber-400 pl-4 py-2 bg-amber-50/50 rounded-r-xl text-xs text-amber-900">
+          <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl text-xs text-amber-900">
             <strong>Kunci Integritas:</strong> Tidak ada transaksi yang boleh disahkan tanpa bukti otentik (kuitansi bermeterai/cap toko, nota asli, atau tanda tangan penerima — <em>PPKU Pasal 18 ayat 3</em>). Setiap pengeluaran di atas plafon memerlukan persetujuan berjenjang.
           </div>
 

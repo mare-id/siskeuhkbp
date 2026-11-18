@@ -546,14 +546,13 @@ export default function BudgetPage() {
   return (
     <div className="space-y-6 w-full max-w-7xl mx-auto min-w-0 overflow-hidden">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2.5">
-            <Calculator className="w-7 h-7 text-[#7C9CF5]" />
-            Modul Anggaran (APBG)
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            Anggaran Tahunan (APBG)
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Penyusunan anggaran tahunan per seksi, pergeseran pos, pengesahan Rapat Huria, dan realisasi anggaran
+          <p className="text-xs text-slate-500 mt-0.5">
+            Penyusunan anggaran kas, pergeseran pos, dan realisasi
           </p>
         </div>
 
@@ -845,72 +844,55 @@ export default function BudgetPage() {
               )}
 
               {/* 4 Summary Cards */}
-              <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-50/60 border-b border-slate-100">
+              <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 bg-slate-50/50 border-b border-slate-100">
                 {/* Saldo Awal */}
-                <div className="card-indigo card-hover p-4 rounded-2xl border-t-4 border-t-indigo-500 shadow-2xs transition-all">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-indigo-900/80">Saldo Awal Tahun</span>
-                    {isOpeningBalanceLocked ? (
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        Terkunci Resmi
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                        Taksiran
-                      </span>
-                    )}
+                <div className="bg-white p-4 rounded-xl border border-slate-200/90">
+                  <div className="flex items-center justify-between mb-1 text-xs">
+                    <span className="font-semibold text-slate-500">Saldo Awal Tahun</span>
+                    <span className={`font-semibold ${isOpeningBalanceLocked ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      {isOpeningBalanceLocked ? 'Terkunci' : 'Taksiran'}
+                    </span>
                   </div>
-                  <div className="text-xl font-black text-indigo-950 tabular-nums tracking-tight">
+                  <div className="text-lg font-bold font-mono text-slate-900 tabular-nums">
                     {formatRupiah(openingBalanceForKas)}
                   </div>
-                  <p className="text-[11px] text-indigo-800/70 mt-1 font-medium">
-                    {isOpeningBalanceLocked
-                      ? 'Tersinkronisasi dari modul Saldo Awal'
-                      : 'Perkiraan sementara sebelum tutup buku'}
-                  </p>
                 </div>
 
                 {/* Total Rencana Penerimaan */}
-                <div className="card-emerald card-hover p-4 rounded-2xl border-t-4 border-t-emerald-500 shadow-2xs transition-all">
+                <div className="bg-white p-4 rounded-xl border border-slate-200/90">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-emerald-900/80">Rencana Pemasukan</span>
-                    <TrendingUp className="w-4 h-4 text-emerald-600" />
+                    <span className="text-xs font-semibold text-slate-500">Rencana Pemasukan</span>
+                    <TrendingUp className="w-4 h-4 text-emerald-700" />
                   </div>
-                  <div className="text-xl font-black text-emerald-950 tabular-nums tracking-tight">
+                  <div className="text-lg font-bold font-mono text-emerald-700 tabular-nums">
                     {formatRupiah(totalIncomeBudget)}
                   </div>
-                  <p className="text-[11px] text-emerald-800/70 mt-1 font-medium">{incomeItems.length} pos penerimaan anggaran</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">{incomeItems.length} pos anggaran</p>
                 </div>
 
                 {/* Total Rencana Pengeluaran */}
-                <div className="card-rose card-hover p-4 rounded-2xl border-t-4 border-t-rose-500 shadow-2xs transition-all">
+                <div className="bg-white p-4 rounded-xl border border-slate-200/90">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-rose-900/80">Rencana Pengeluaran</span>
-                    <TrendingDown className="w-4 h-4 text-rose-600" />
+                    <span className="text-xs font-semibold text-slate-500">Rencana Pengeluaran</span>
+                    <TrendingDown className="w-4 h-4 text-rose-700" />
                   </div>
-                  <div className="text-xl font-black text-rose-950 tabular-nums tracking-tight">
+                  <div className="text-lg font-bold font-mono text-rose-700 tabular-nums">
                     {formatRupiah(totalExpenseBudget)}
                   </div>
-                  <p className="text-[11px] text-rose-800/70 mt-1 font-medium">{expenseItems.length} pos belanja anggaran</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">{expenseItems.length} pos belanja</p>
                 </div>
 
                 {/* Surplus / Defisit Rencana */}
-                <div className={`${netSurplusDeficit >= 0 ? 'card-purple border-t-purple-500' : 'card-rose border-t-rose-500'} card-hover p-4 rounded-2xl border-t-4 shadow-2xs transition-all`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-slate-800">Surplus / (Defisit)</span>
-                    <span
-                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                        netSurplusDeficit >= 0
-                          ? 'bg-purple-100 text-purple-900 border border-purple-200'
-                          : 'bg-rose-100 text-rose-900 border border-rose-200'
-                      }`}
-                    >
+                <div className="bg-white p-4 rounded-xl border border-slate-200/90">
+                  <div className="flex items-center justify-between mb-1 text-xs">
+                    <span className="font-semibold text-slate-500">Surplus / (Defisit)</span>
+                    <span className={`font-semibold ${netSurplusDeficit >= 0 ? 'text-blue-700' : 'text-rose-700'}`}>
                       {netSurplusDeficit >= 0 ? 'Surplus' : 'Defisit'}
                     </span>
                   </div>
                   <div
-                    className={`text-xl font-black tabular-nums tracking-tight ${
-                      netSurplusDeficit >= 0 ? 'text-purple-950' : 'text-rose-950'
+                    className={`text-lg font-bold font-mono tabular-nums ${
+                      netSurplusDeficit >= 0 ? 'text-slate-900' : 'text-rose-700'
                     }`}
                   >
                     {formatRupiah(netSurplusDeficit)}

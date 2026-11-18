@@ -220,18 +220,13 @@ export default function LpjDataPage() {
 
   return (
     <div className="space-y-6 w-full max-w-7xl mx-auto min-w-0 overflow-hidden">
-      {/* ---------------- Header Banner ---------------- */}
-      <div className="bg-gradient-to-r from-white via-indigo-50/40 to-purple-50/30 p-5 md:p-6 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-primary mb-1">
-            <FolderArchive className="w-4 h-4" />
-            <span>Basis Kas yang Dimodifikasi (Modified Cash Basis) · Standar ISAK 35</span>
-          </div>
-          <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
-            Data Pendukung Laporan Pertanggungjawaban (LPJ)
-          </h2>
-          <p className="text-xs md:text-sm text-slate-500 mt-1">
-            Kelola inventaris aset tetap, panjar kegiatan berjalan, piutang, utang, klasifikasi dana terikat, dan CaLK HKBP Ressort Hutaraja.
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            Data Pendukung LPJ (ISAK 35)
+          </h1>
+          <p className="text-xs text-slate-500">
+            Inventaris aset tetap, panjar kegiatan, piutang, utang, dan CaLK huria
           </p>
         </div>
 
@@ -245,10 +240,10 @@ export default function LpjDataPage() {
                 );
               }
             }}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-primary text-white text-xs font-semibold rounded-xl shadow-xs hover:opacity-95 transition-all shrink-0"
+            className="inline-flex items-center gap-2 px-4 py-2 min-h-[40px] bg-[#0B132B] hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition-colors shrink-0"
           >
             <Sparkles className="w-4 h-4" />
-            <span>Sinkronkan {unmigratedCount} Data dari Saldo Awal</span>
+            <span>Sinkronkan {unmigratedCount} Data Saldo Awal</span>
           </button>
         )}
       </div>
@@ -279,57 +274,57 @@ export default function LpjDataPage() {
       )}
 
       {/* ---------------- Top Metrics Summary ---------------- */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="card-purple card-hover p-4 rounded-2xl border-t-4 border-t-purple-500 shadow-2xs transition-all">
-          <div className="text-xs font-semibold text-purple-900/80 flex items-center justify-between">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/90">
+          <div className="text-xs font-semibold text-slate-500 flex items-center justify-between">
             <span>Aset Tetap (Historis)</span>
-            <Package className="w-4 h-4 text-purple-600" />
+            <Package className="w-4 h-4 text-purple-700" />
           </div>
-          <div className="text-lg md:text-xl font-black text-purple-950 mt-1 tabular-nums tracking-tight">
+          <div className="text-lg md:text-xl font-bold font-mono text-slate-900 mt-1 tabular-nums tracking-tight">
             {formatRupiah(totalNilaiPerolehanAset)}
           </div>
-          <div className="text-[11px] font-medium text-purple-800/70 mt-0.5">
+          <div className="text-[11px] text-slate-500 mt-0.5">
             {scopedAssets.filter((a) => a.status === 'aktif').length} unit aktif
             {lpjSettings.enable_depreciation && ` · Buku: ${formatRupiah(totalNilaiBukuAset)}`}
           </div>
         </div>
 
-        <div className="card-amber card-hover p-4 rounded-2xl border-t-4 border-t-amber-500 shadow-2xs transition-all">
-          <div className="text-xs font-semibold text-amber-900/80 flex items-center justify-between">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/90">
+          <div className="text-xs font-semibold text-slate-500 flex items-center justify-between">
             <span>Panjar Berjalan</span>
             <Clock className="w-4 h-4 text-amber-600" />
           </div>
-          <div className="text-lg md:text-xl font-black text-amber-950 mt-1 tabular-nums tracking-tight">
+          <div className="text-lg md:text-xl font-bold font-mono text-slate-900 mt-1 tabular-nums tracking-tight">
             {formatRupiah(totalPanjarAktif)}
           </div>
-          <div className="text-[11px] font-medium text-amber-800/70 mt-0.5">
+          <div className="text-[11px] text-slate-500 mt-0.5">
             {scopedAdvances.filter((a) => a.status === 'active').length} panjar belum SPJ
-            {overdueAdvances.length > 0 && <span className="text-rose-600 font-bold ml-1">({overdueAdvances.length} overdue)</span>}
+            {overdueAdvances.length > 0 && <span className="text-rose-600 font-semibold ml-1">({overdueAdvances.length} terlambat)</span>}
           </div>
         </div>
 
-        <div className="card-emerald card-hover p-4 rounded-2xl border-t-4 border-t-emerald-500 shadow-2xs transition-all">
-          <div className="text-xs font-semibold text-emerald-900/80 flex items-center justify-between">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/90">
+          <div className="text-xs font-semibold text-slate-500 flex items-center justify-between">
             <span>Piutang Jemaat / Pihak Ke-3</span>
-            <TrendingDown className="w-4 h-4 text-emerald-600" />
+            <TrendingDown className="w-4 h-4 text-emerald-700" />
           </div>
-          <div className="text-lg md:text-xl font-black text-emerald-950 mt-1 tabular-nums tracking-tight">
+          <div className="text-lg md:text-xl font-bold font-mono text-emerald-800 mt-1 tabular-nums tracking-tight">
             {formatRupiah(totalPiutangAktif)}
           </div>
-          <div className="text-[11px] font-medium text-emerald-800/70 mt-0.5">
+          <div className="text-[11px] text-slate-500 mt-0.5">
             {scopedRp.filter((r) => r.type === 'receivable' && r.status !== 'paid').length} tagihan belum lunas
           </div>
         </div>
 
-        <div className="card-rose card-hover p-4 rounded-2xl border-t-4 border-t-rose-500 shadow-2xs transition-all">
-          <div className="text-xs font-semibold text-rose-900/80 flex items-center justify-between">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/90">
+          <div className="text-xs font-semibold text-slate-500 flex items-center justify-between">
             <span>Kewajiban / Utang Kas</span>
-            <CreditCard className="w-4 h-4 text-rose-600" />
+            <CreditCard className="w-4 h-4 text-rose-700" />
           </div>
-          <div className="text-lg md:text-xl font-black text-rose-950 mt-1 tabular-nums tracking-tight">
+          <div className="text-lg md:text-xl font-bold font-mono text-rose-800 mt-1 tabular-nums tracking-tight">
             {formatRupiah(totalUtangAktif)}
           </div>
-          <div className="text-[11px] font-medium text-rose-800/70 mt-0.5">
+          <div className="text-[11px] text-slate-500 mt-0.5">
             {scopedRp.filter((r) => r.type === 'payable' && r.status !== 'paid').length} kewajiban berjalan
           </div>
         </div>
@@ -678,7 +673,7 @@ export default function LpjDataPage() {
                               asset.status === 'aktif'
                                 ? 'bg-emerald-100 text-emerald-800'
                                 : isPendingApproval
-                                ? 'bg-amber-100 text-amber-800 animate-pulse'
+                                ? 'bg-amber-100 text-amber-800'
                                 : 'bg-slate-100 text-slate-600'
                             }`}
                           >

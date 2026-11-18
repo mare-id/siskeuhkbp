@@ -36,91 +36,57 @@ body {
   margin: 0;
   min-height: 100vh;
   background-color: #F8FAFC;
-  background-image: 
-    radial-gradient(at 0% 0%, rgba(15, 23, 42, 0.03) 0px, transparent 50%),
-    radial-gradient(at 100% 0%, rgba(30, 58, 138, 0.02) 0px, transparent 50%),
-    radial-gradient(at 50% 100%, rgba(15, 23, 42, 0.02) 0px, transparent 50%);
-  background-attachment: fixed;
   color: #0F172A;
   overflow-x: hidden;
 }
 
-/* Card hover micro-interactions - subtle and refined */
-.card-hover {
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.15s ease;
-}
-.card-hover:hover {
-  transform: translateY(-1.5px);
-  box-shadow: 0 10px 24px -6px rgba(15, 23, 42, 0.07), 0 4px 8px -2px rgba(15, 23, 42, 0.03);
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
-/* Modern Executive Dashboard Cards - Dignified, architectural, clean hairline borders */
-.card-executive {
+/* Subtle interactive surface lift */
+.card-hover {
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.16s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.15s ease;
+}
+.card-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px -6px rgba(15, 23, 42, 0.08), 0 2px 6px -2px rgba(15, 23, 42, 0.04);
+}
+
+/* Modern SaaS card surfaces */
+.card-executive,
+.card-indigo,
+.card-emerald,
+.card-rose,
+.card-amber,
+.card-purple,
+.card-sky,
+.card-teal,
+.card-orange,
+.card-sunset,
+.card-luminous {
   background: #FFFFFF;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03), 0 1px 2px -1px rgba(15, 23, 42, 0.02);
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.03);
 }
 
 .card-navy {
-  background: linear-gradient(135deg, #0A0F1D 0%, #0F172A 50%, #1E293B 100%);
+  background: linear-gradient(135deg, #0B132B 0%, #111C3D 60%, #1E3A8A 100%);
   border: 1px solid rgba(30, 41, 59, 0.85);
-  box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.25);
+  box-shadow: 0 8px 24px -6px rgba(11, 19, 43, 0.28);
   color: #FFFFFF;
 }
 
-/* Refined semantic cards: Clean white base with subtle top hairline or gentle border tint */
-.card-indigo {
-  background: #FFFFFF;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03);
+/* Hide scrollbars cleanly where horizontal tab scrolling is used */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
-.card-emerald {
-  background: #FFFFFF;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03);
-}
-.card-rose {
-  background: #FFFFFF;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03);
-}
-.card-amber {
-  background: #FFFFFF;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03);
-}
-.card-purple {
-  background: #FFFFFF;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03);
-}
-.card-sky {
-  background: #FFFFFF;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03);
-}
-.card-teal {
-  background: #FFFFFF;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03);
-}
-.card-orange {
-  background: #FFFFFF;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03);
-}
-.card-sunset {
-  background: #FFFFFF;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03);
-}
-.card-luminous {
-  background: #FFFFFF;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03);
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
-/* Custom scrollbars for clean UI */
+/* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

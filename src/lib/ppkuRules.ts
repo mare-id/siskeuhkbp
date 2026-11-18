@@ -158,9 +158,7 @@ export function evaluateBpskRemittanceCompliance(
   const sentralisasiIncomes = approved
     .filter((tx) => {
       if (tx.type !== 'income') return false;
-      const cat = categories.find((c) => c.id === tx.category_id);
-      const isExcluded =
-        tx.is_sentralisasi !== undefined ? tx.is_sentralisasi === false : cat?.is_sentralisasi === false;
+      const isExcluded = tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi';
       return !isExcluded;
     })
     .sort((a, b) => a.tanggal.localeCompare(b.tanggal));

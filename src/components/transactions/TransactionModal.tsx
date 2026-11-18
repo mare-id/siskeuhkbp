@@ -10,7 +10,6 @@ import {
   X,
   AlertCircle,
   CheckCircle,
-  Info,
   Plus,
   Trash2,
   Layers,
@@ -21,7 +20,7 @@ import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { uploadReceiptFile } from '../../lib/supabase';
 import { formatRupiah } from '../../lib/formatters';
-import { getPpkuProcurementRule, PPKU_BPSK_DEADLINE_DAYS, splitSentralisasiAmount } from '../../lib/ppkuRules';
+import { getPpkuProcurementRule, splitSentralisasiAmount } from '../../lib/ppkuRules';
 import { SentralisasiExclusionType } from '../../types/database';
 
 interface Props {
@@ -66,11 +65,11 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
   const [error, setError] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Per-transaction Sentralisasi override (Mode: single income)
-  const [isSentralisasiOverride, setIsSentralisasiOverride] = useState<boolean>(true);
-  const [exclusionTypeOverride, setExclusionTypeOverride] = useState<SentralisasiExclusionType>('lainnya');
+  // Per-transaction Sentralisasi status (decided during transaction recording)
+  const [isSentralisasi, setIsSentralisasi] = useState<boolean>(true);
+  const [exclusionType, setExclusionType] = useState<SentralisasiExclusionType>('lainnya');
 
-  // Compound Multi-Pos Income rows (Mode: multi income / Ucapan Syukur)
+  // Multi-pos income rows (e.g., Ucapan Syukur)
   const [allocations, setAllocations] = useState<AllocationDraftRow[]>([]);
 
   const selectableKas = useMemo(
@@ -83,7 +82,6 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
     [kasList]
   );
 
-  // Suggest default exclusion type based on target kas
   const inferExclusionForKas = (kId: string): SentralisasiExclusionType => {
     if (kId === 'kas-8') return 'transitoris';
     if (kId === 'kas-2') return 'sosial_duka';
@@ -91,11 +89,8 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
     return 'lainnya';
   };
 
-  // Suggest default sentralisasi toggle when picking a kas in Multi-Pos mode
-  const inferDefaultSentralisasiForMultiRow = (kId: string): boolean => {
-    // Dalam rincian Ucapan Syukur: Kas Umum Huria dikenakan sentralisasi 55/45,
-    // sedangkan Pembangunan/Sosial/Transitoris default 100% ke kas tujuan (tetap bisa diubah bendahara)
-    if (kId === 'kas-2' || kId === 'kas-7' || kId === 'kas-8') return false;
+  const inferDefaultSentralisasiForKas = (kId: string): boolean => {
+    if (kId === 'kas-2' || kId === 'kas-8' || kId === 'kas-9') return false;
     return true;
   };
 
@@ -117,6 +112,8 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
         initialKas = (nonSentral || selectableKas[0]).id;
       }
       setKasId(initialKas);
+      setIsSentralisasi(inferDefaultSentralisasiForKas(initialKas));
+      setExclusionType(inferExclusionForKas(initialKas));
 
       if (storageAccounts.length > 0) {
         const activeStor = storageAccounts.filter((s) => s.is_active);
@@ -127,57 +124,53 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
         {
           rowId: `row-${Date.now()}-1`,
           kas_id: initialKas,
-          sub_description: 'Ke Huria',
+          sub_description: 'Ke Kas Huria',
           amountInput: '',
-          is_sentralisasi: inferDefaultSentralisasiForMultiRow(initialKas),
+          is_sentralisasi: inferDefaultSentralisasiForKas(initialKas),
           exclusion_type: inferExclusionForKas(initialKas),
         },
       ]);
     }
   }, [isOpen, defaultKasId]);
 
-  // Sync default category when type changes
   useEffect(() => {
     const validCategories = categories.filter((c) => c.tipe === type && c.is_active);
     if (validCategories.length > 0) {
-      const firstCat = validCategories[0];
-      setCategoryId(firstCat.id);
-      if (type === 'income') {
-        setIsSentralisasiOverride(firstCat.is_sentralisasi !== false);
-        setExclusionTypeOverride(firstCat.sentralisasi_exclusion_type || 'lainnya');
-      }
+      setCategoryId(validCategories[0].id);
     } else {
       setCategoryId('');
     }
   }, [type, categories]);
 
-  // Sync override & optional default_kas_id when user switches category
   const handleCategoryChange = (newCatId: string) => {
     setCategoryId(newCatId);
     const cat = categories.find((c) => c.id === newCatId);
-    if (type === 'income' && cat) {
-      const nextSent = cat.is_sentralisasi !== false;
-      setIsSentralisasiOverride(nextSent);
-      setExclusionTypeOverride(cat.sentralisasi_exclusion_type || inferExclusionForKas(cat.default_kas_id || kasId));
-      if (!defaultKasId && cat.default_kas_id && canInputKas(cat.default_kas_id)) {
-        setKasId(cat.default_kas_id);
-      }
+    if (!defaultKasId && cat?.default_kas_id && canInputKas(cat.default_kas_id)) {
+      setKasId(cat.default_kas_id);
+      setExclusionType(inferExclusionForKas(cat.default_kas_id));
+    }
+  };
+
+  const handleKasChange = (newKasId: string) => {
+    setKasId(newKasId);
+    setExclusionType(inferExclusionForKas(newKasId));
+    if (newKasId === 'kas-2' || newKasId === 'kas-8') {
+      setIsSentralisasi(false);
     }
   };
 
   const parseNum = (val: string) => parseFloat(val.replace(/[^0-9]/g, '')) || 0;
 
-  // Computed live summary for multi-pos income mode (must be before early return to obey Rules of Hooks)
   const multiSummary = useMemo(() => {
     let totalGross = 0;
     let totalSentralisasiPool = 0;
-    const inflowsByKas: Record<string, { kasName: string; amount: number; tag: string }> = {};
+    const inflowsByKas: Record<string, { kasName: string; amount: number }> = {};
 
-    const addInflow = (kId: string, amt: number, tag: string) => {
+    const addInflow = (kId: string, amt: number) => {
       if (amt <= 0 || !kId) return;
       const kName = kasList.find((k) => k.id === kId)?.nama || kId;
       if (!inflowsByKas[kId]) {
-        inflowsByKas[kId] = { kasName: kName, amount: 0, tag };
+        inflowsByKas[kId] = { kasName: kName, amount: 0 };
       }
       inflowsByKas[kId].amount += amt;
     };
@@ -190,10 +183,10 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
       if (row.is_sentralisasi && sentralisasiKas && row.kas_id !== sentralisasiKas.id) {
         const { bpskAmount, huriaAmount } = splitSentralisasiAmount(amt, true);
         totalSentralisasiPool += bpskAmount;
-        addInflow(row.kas_id, huriaAmount, '45% Lokal');
-        addInflow(sentralisasiKas.id, bpskAmount, '55% Sentralisasi');
+        addInflow(row.kas_id, huriaAmount);
+        addInflow(sentralisasiKas.id, bpskAmount);
       } else {
-        addInflow(row.kas_id, amt, row.is_sentralisasi ? 'Sentralisasi' : '100% Penuh');
+        addInflow(row.kas_id, amt);
       }
     });
 
@@ -208,14 +201,8 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
 
   const rawAmount = parseNum(amountInput);
   const isReceiptMandatory = type === 'expense' && rawAmount >= settings.receipt_required_threshold;
-  const selectedCategory = categories.find((c) => c.id === categoryId);
   const selectedKas = kasList.find((k) => k.id === kasId);
-
-  const singleSplit = splitSentralisasiAmount(rawAmount, type === 'income' ? isSentralisasiOverride : false);
-  const isOverriddenFromCategory =
-    type === 'income' &&
-    selectedCategory &&
-    isSentralisasiOverride !== (selectedCategory.is_sentralisasi !== false);
+  const singleSplit = splitSentralisasiAmount(rawAmount, type === 'income' ? isSentralisasi : false);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -226,7 +213,7 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
 
     const res = await uploadReceiptFile(file);
     if (res.error) {
-      setError(`Gagal mengunggah foto nota: ${res.error.message}`);
+      setError(`Gagal mengunggah nota: ${res.error.message}`);
     } else if (res.url) {
       setAttachmentUrl(res.url);
     }
@@ -242,7 +229,7 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
         kas_id: defaultRowKas,
         sub_description: '',
         amountInput: '',
-        is_sentralisasi: inferDefaultSentralisasiForMultiRow(defaultRowKas),
+        is_sentralisasi: inferDefaultSentralisasiForKas(defaultRowKas),
         exclusion_type: inferExclusionForKas(defaultRowKas),
       },
     ]);
@@ -256,11 +243,11 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
       isSentralisasi: boolean;
       exType: SentralisasiExclusionType | null;
     }> = [
-      { kasId: 'kas-1', subDesc: 'Ke Huria (Objek Sentralisasi 55%/45%)', amount: '100000', isSentralisasi: true, exType: null },
-      { kasId: 'kas-7', subDesc: 'Ke Pembangunan (Sumbangan Syukur Non-Sentralisasi)', amount: '100000', isSentralisasi: false, exType: 'pembangunan_lokal' },
-      { kasId: 'kas-2', subDesc: 'Ke Sosial Huria (Diakonia Sosial)', amount: '100000', isSentralisasi: false, exType: 'sosial_duka' },
-      { kasId: 'kas-8', subDesc: 'Ke Pendeta (Penerimaan Transitoris)', amount: '100000', isSentralisasi: false, exType: 'transitoris' },
-      { kasId: 'kas-8', subDesc: 'Ke Lingkungan / Wijk (Penerimaan Transitoris)', amount: '100000', isSentralisasi: false, exType: 'transitoris' },
+      { kasId: 'kas-1', subDesc: 'Ke Kas Huria', amount: '200000', isSentralisasi: true, exType: null },
+      { kasId: 'kas-7', subDesc: 'Ke Kas Pembangunan', amount: '100000', isSentralisasi: false, exType: 'pembangunan_lokal' },
+      { kasId: 'kas-2', subDesc: 'Ke Kas Diakonia Sosial', amount: '100000', isSentralisasi: false, exType: 'sosial_duka' },
+      { kasId: 'kas-8', subDesc: 'Ke Pendeta', amount: '100000', isSentralisasi: false, exType: 'transitoris' },
+      { kasId: 'kas-8', subDesc: 'Ke Lingkungan', amount: '100000', isSentralisasi: false, exType: 'transitoris' },
     ];
 
     const availableRows: AllocationDraftRow[] = templateCandidates
@@ -276,13 +263,12 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
 
     if (availableRows.length > 0) {
       setAllocations(availableRows);
-      // Select Pelean Hamauliateon / Syukur Keluarga if available
       const syukurCat =
         categories.find((c) => c.id === 'cat-in-syukur-keluarga' && c.is_active) ||
         categories.find((c) => c.id === 'cat-in-syukur-altar' && c.is_active);
       if (syukurCat) setCategoryId(syukurCat.id);
       if (!description.trim()) {
-        setDescription('Ucapan Syukur Keluarga Jemaat');
+        setDescription('Ucapan Syukur Keluarga');
       }
     }
   };
@@ -291,19 +277,18 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
     setError('');
 
     if (!description.trim()) {
-      setError('Uraian transaksi wajib diisi secara jelas.');
+      setError('Uraian transaksi wajib diisi.');
       return;
     }
 
     if (!storageAccountId) {
-      setError('Pilih Tempat Penyimpanan (Tunai/Bank).');
+      setError('Pilih tempat penyimpanan.');
       return;
     }
 
-    // Compound Multi-Pos Income Mode
     if (type === 'income' && incomeMode === 'multi') {
       if (allocations.length === 0) {
-        setError('Tambahkan minimal 1 baris rincian alokasi kas.');
+        setError('Tambahkan minimal 1 baris rincian kas.');
         return;
       }
 
@@ -311,11 +296,11 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
         const row = allocations[i];
         const amt = parseNum(row.amountInput);
         if (!row.kas_id) {
-          setError(`Baris rincian ke-${i + 1} belum memilih Kas Tujuan.`);
+          setError(`Baris ke-${i + 1} belum memilih Kas Tujuan.`);
           return;
         }
         if (amt <= 0) {
-          setError(`Nominal pada baris rincian ke-${i + 1} harus lebih dari Rp 0.`);
+          setError(`Nominal baris ke-${i + 1} harus lebih dari Rp 0.`);
           return;
         }
       }
@@ -347,33 +332,32 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
       return;
     }
 
-    // Standard Single-Pos Mode (Income or Expense)
     if (rawAmount <= 0) {
       setError('Nominal harus lebih besar dari Rp 0.');
       return;
     }
 
     if (!kasId) {
-      setError('Pilih Kas yang dituju.');
+      setError('Pilih Kas tujuan.');
       return;
     }
 
     if (isReceiptMandatory && !attachmentUrl) {
       setError(
-        `Pengeluaran sebesar ${formatRupiah(rawAmount)} melebihi batas ${formatRupiah(settings.receipt_required_threshold)}, wajib menyertakan foto nota bukti.`
+        `Pengeluaran >= ${formatRupiah(settings.receipt_required_threshold)} wajib melampirkan foto nota.`
       );
       return;
     }
 
     const d = new Date(tanggal);
     if (isPeriodClosed(d.getFullYear(), d.getMonth() + 1, kasId)) {
-      setError(`Bulan ${d.getMonth() + 1} tahun ${d.getFullYear()} untuk kas ini sudah ditutup bukunya.`);
+      setError(`Periode ${d.getMonth() + 1}/${d.getFullYear()} untuk kas ini sudah ditutup.`);
       return;
     }
 
     setIsSubmitting(true);
 
-    const useSentralisasi = type === 'income' ? isSentralisasiOverride : false;
+    const useSentralisasi = type === 'income' ? isSentralisasi : false;
     const { bpskAmount, huriaAmount } = splitSentralisasiAmount(rawAmount, useSentralisasi);
 
     const result = await addTransaction({
@@ -394,124 +378,110 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
       huria_amount: type === 'income' ? huriaAmount : undefined,
       sentralisasi_exclusion_type:
         type === 'income' && !useSentralisasi
-          ? exclusionTypeOverride || inferExclusionForKas(kasId)
+          ? exclusionType || inferExclusionForKas(kasId)
           : null,
     });
 
     setIsSubmitting(false);
 
     if (!result.success) {
-      setError(result.error || 'Terjadi kesalahan saat menyimpan transaksi.');
+      setError(result.error || 'Gagal menyimpan transaksi.');
     } else {
       onClose();
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/60 backdrop-blur-xs">
       <div
-        className={`bg-white rounded-2xl w-full overflow-hidden shadow-2xl border border-slate-100 my-8 transition-all ${
-          type === 'income' && incomeMode === 'multi' ? 'max-w-2xl' : 'max-w-xl'
+        className={`bg-white sm:rounded-2xl rounded-t-2xl w-full max-h-[92vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200 ${
+          type === 'income' && incomeMode === 'multi' ? 'sm:max-w-2xl' : 'sm:max-w-lg'
         }`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/70">
-          <div>
-            <h3 className="font-semibold text-base text-slate-800">Catat Transaksi Keuangan</h3>
-            <span className="text-xs text-slate-500">
-              Pencatatan kas masuk, kas keluar, dan alokasi dinamis HKBP Ressort Hutaraja
-            </span>
-          </div>
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 shrink-0">
+          <h3 className="font-bold text-sm sm:text-base text-slate-900">Catat Transaksi</h3>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 rounded-lg transition-colors"
+            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+            aria-label="Tutup"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Form Body */}
-        <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+        <div className="p-4 sm:p-5 space-y-3.5 overflow-y-auto flex-1">
           {error && (
-            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700">
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
 
-          {/* Type Toggle: Pemasukan / Pengeluaran */}
-          <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+          {/* Type Toggle */}
+          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl">
             <button
               type="button"
               onClick={() => setType('income')}
-              className={`py-2 text-xs font-semibold rounded-lg transition-all ${
+              className={`h-9 text-xs font-semibold rounded-lg transition-all ${
                 type === 'income'
-                  ? 'bg-emerald-500 text-white shadow-xs'
+                  ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              + Pemasukan (Kas Masuk)
+              + Pemasukan
             </button>
             <button
               type="button"
               onClick={() => setType('expense')}
-              className={`py-2 text-xs font-semibold rounded-lg transition-all ${
+              className={`h-9 text-xs font-semibold rounded-lg transition-all ${
                 type === 'expense'
-                  ? 'bg-rose-500 text-white shadow-xs'
+                  ? 'bg-rose-600 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              - Pengeluaran (Kas Keluar)
+              - Pengeluaran
             </button>
           </div>
 
-          {/* Mode Selector for Income: Single Kas vs Multi-Pos / Ucapan Syukur */}
+          {/* Income Mode Switch */}
           {type === 'income' && (
-            <div className="p-2 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIncomeMode('single')}
-                  className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all text-left border ${
-                    incomeMode === 'single'
-                      ? 'bg-white border-blue-400 text-blue-950 shadow-2xs ring-1 ring-blue-300'
-                      : 'bg-transparent border-transparent text-slate-600 hover:bg-white/60'
-                  }`}
-                >
-                  <span className="block font-bold">1 Pos Kas (Fleksibel 55/45 atau 100%)</span>
-                  <span className="text-[10px] text-slate-500 block">
-                    Contoh: Pelean Minggu atau Pelean IB ke Pembangunan + Sentralisasi
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIncomeMode('multi')}
-                  className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all text-left border ${
-                    incomeMode === 'multi'
-                      ? 'bg-white border-emerald-500 text-emerald-950 shadow-2xs ring-1 ring-emerald-300'
-                      : 'bg-transparent border-transparent text-slate-600 hover:bg-white/60'
-                  }`}
-                >
-                  <span className="flex items-center gap-1 font-bold">
-                    <Layers className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Rincian Banyak Kas / Ucapan Syukur</span>
-                  </span>
-                  <span className="text-[10px] text-slate-500 block">
-                    Pecah ke Huria, Pembangunan, Sosial, Pendeta/Lingkungan (Transitoris)
-                  </span>
-                </button>
-              </div>
+            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100/80 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setIncomeMode('single')}
+                className={`h-9 px-2 rounded-lg text-xs font-semibold transition-all ${
+                  incomeMode === 'single'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                1 Pos Kas
+              </button>
+              <button
+                type="button"
+                onClick={() => setIncomeMode('multi')}
+                className={`h-9 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                  incomeMode === 'multi'
+                    ? 'bg-white text-emerald-800 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Multi Pos / Ucapan Syukur</span>
+              </button>
             </div>
           )}
 
-          {/* Nominal Input (Single mode only) */}
+          {/* Nominal (Single mode) */}
           {(type === 'expense' || incomeMode === 'single') && (
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Nominal Transaksi (Rp) <span className="text-rose-500">*</span>
+                Nominal (Rp) <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
                   Rp
                 </span>
                 <input
@@ -520,63 +490,55 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
                   value={amountInput ? Number(amountInput.replace(/[^0-9]/g, '')).toLocaleString('id-ID') : ''}
                   onChange={(e) => setAmountInput(e.target.value)}
                   placeholder="0"
-                  className="w-full pl-11 pr-4 py-3 text-lg font-bold text-slate-800 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary font-mono tabular-nums"
+                  className="w-full h-11 pl-10 pr-3.5 text-base font-bold text-slate-900 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 font-mono tabular-nums"
                   autoFocus
                 />
               </div>
-              {rawAmount > 0 && (
-                <span className="text-xs text-slate-500 mt-1 block">
-                  Terbilang: <span className="font-medium text-slate-700">{formatRupiah(rawAmount)}</span>
-                </span>
-              )}
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* Tanggal */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Tanggal Transaksi <span className="text-rose-500">*</span>
+                Tanggal <span className="text-rose-500">*</span>
               </label>
               <input
                 type="date"
                 value={tanggal}
                 onChange={(e) => setTanggal(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                className="w-full h-10 text-xs px-3 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 required
               />
             </div>
 
-            {/* Nomor Bukti */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Nomor Bukti / Kuitansi (Opsional)
+                No. Bukti (Opsional)
               </label>
               <input
                 type="text"
                 value={receiptNo}
                 onChange={(e) => setReceiptNo(e.target.value)}
-                placeholder="Contoh: BKM-01 / KW-10"
-                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                placeholder="BKM-01 / KW-10"
+                className="w-full h-10 text-xs px-3 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
               />
             </div>
           </div>
 
-          {/* Kas Selection (Hidden in multi mode because each line picks its Kas) */}
+          {/* Kas Tujuan (Single mode) */}
           {(type === 'expense' || incomeMode === 'single') && (
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {type === 'income' ? 'Kas Tujuan Lokal (Penerima Porsi 45% atau 100%)' : 'Kas Sumber Dana'}{' '}
-                <span className="text-rose-500">*</span>
+                {type === 'income' ? 'Kas Tujuan' : 'Kas Sumber'} <span className="text-rose-500">*</span>
               </label>
               <select
                 value={kasId}
-                onChange={(e) => setKasId(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary bg-white"
+                onChange={(e) => handleKasChange(e.target.value)}
+                className="w-full h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 required
               >
                 {selectableKas.length === 0 ? (
-                  <option value="">Anda belum ditugaskan pada kas mana pun</option>
+                  <option value="">Tidak ada akses kas</option>
                 ) : (
                   selectableKas.map((k) => (
                     <option key={k.id} value={k.id}>
@@ -588,16 +550,15 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* Tempat Penyimpanan */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Tempat Penyimpanan (Rekening / Brankas) <span className="text-rose-500">*</span>
+                Tempat Simpan <span className="text-rose-500">*</span>
               </label>
               <select
                 value={storageAccountId}
                 onChange={(e) => setStorageAccountId(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary bg-white"
+                className="w-full h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 required
               >
                 {storageAccounts
@@ -610,232 +571,123 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
               </select>
             </div>
 
-            {/* Kategori */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {incomeMode === 'multi' && type === 'income' ? 'Kategori Utama Penerimaan' : 'Kategori'}{' '}
-                <span className="text-rose-500">*</span>
+                Kategori <span className="text-rose-500">*</span>
               </label>
               <select
                 value={categoryId}
                 onChange={(e) => handleCategoryChange(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary bg-white"
+                className="w-full h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 required
               >
-                {type === 'income' ? (
-                  <>
-                    <optgroup label="Objek Sentralisasi (Bawaan 55% Kas Sentralisasi / 45% Kas Tujuan)">
-                      {categories
-                        .filter((c) => c.tipe === 'income' && c.is_active && c.is_sentralisasi !== false)
-                        .map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.nama} [55% Sentralisasi : 45% Lokal]
-                          </option>
-                        ))}
-                    </optgroup>
-                    <optgroup label="Non-Sentralisasi (Bawaan 100% Kas Tujuan)">
-                      {categories
-                        .filter((c) => c.tipe === 'income' && c.is_active && c.is_sentralisasi === false)
-                        .map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.nama} [100% Kas Tujuan]
-                          </option>
-                        ))}
-                    </optgroup>
-                  </>
-                ) : (
-                  categories
-                    .filter((c) => c.tipe === 'expense' && c.is_active)
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nama}
-                      </option>
-                    ))
-                )}
+                {categories
+                  .filter((c) => c.tipe === type && c.is_active)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nama}
+                    </option>
+                  ))}
               </select>
             </div>
           </div>
 
-          {/* ================================================================= */}
-          {/* MODE SINGLE INCOME: DYNAMIC SENTRALISASI TOGGLE + LIVE LEDGER SPLIT */}
-          {/* ================================================================= */}
+          {/* SENTRALISASI DETERMINATION AT TRANSACTION ENTRY (SINGLE INCOME) */}
           {type === 'income' && incomeMode === 'single' && (
-            <div
-              className={`p-3.5 rounded-2xl border text-xs transition-all space-y-3 ${
-                isSentralisasiOverride
-                  ? 'bg-gradient-to-br from-indigo-50/90 via-blue-50/50 to-white border-blue-200/90 shadow-2xs'
-                  : 'bg-gradient-to-br from-emerald-50/90 via-teal-50/50 to-white border-emerald-200/90 shadow-2xs'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span
-                    className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                      isSentralisasiOverride
-                        ? 'bg-blue-700 text-white'
-                        : 'bg-emerald-700 text-white'
-                    }`}
-                  >
-                    {isSentralisasiOverride ? 'Sentralisasi: 55% / 45%' : 'Non-Sentralisasi: 100% Kas Tujuan'}
-                  </span>
-                  {isOverriddenFromCategory && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200">
-                      Disesuaikan pada transaksi ini
-                    </span>
-                  )}
-                </div>
-                <span className="text-[10px] font-medium text-slate-500">
-                  Pengaturan Dinamis Bendahara/Admin
-                </span>
+            <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/80 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-700">Status Sentralisasi Transaksi</span>
               </div>
 
-              {/* Dynamic Per-Transaction Toggle Buttons */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsSentralisasiOverride(true)}
-                  className={`p-2 rounded-xl border text-left transition-all ${
-                    isSentralisasiOverride
-                      ? 'bg-white border-blue-500 ring-1 ring-blue-400 text-blue-950 shadow-2xs'
+                  onClick={() => setIsSentralisasi(true)}
+                  className={`py-2 px-3 rounded-lg border text-left transition-all ${
+                    isSentralisasi
+                      ? 'bg-white border-blue-600 text-blue-950 ring-1 ring-blue-600/30 font-semibold'
                       : 'bg-white/60 border-slate-200 text-slate-600 hover:bg-white'
                   }`}
                 >
-                  <div className="font-bold text-[11px]">Kenakan Sentralisasi (55% / 45%)</div>
-                  <div className="text-[10px] opacity-80">
-                    55% masuk ke {sentralisasiKas?.nama || 'Kas Sentralisasi'}, 45% ke {selectedKas?.nama || 'Kas Tujuan'}
-                  </div>
+                  <div className="text-xs font-bold">Sentralisasi (45/55)</div>
+                  <div className="text-[10px] text-slate-500">45% Kas · 55% BPSK</div>
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    setIsSentralisasiOverride(false);
-                    setExclusionTypeOverride(inferExclusionForKas(kasId));
+                    setIsSentralisasi(false);
+                    setExclusionType(inferExclusionForKas(kasId));
                   }}
-                  className={`p-2 rounded-xl border text-left transition-all ${
-                    !isSentralisasiOverride
-                      ? 'bg-white border-emerald-500 ring-1 ring-emerald-400 text-emerald-950 shadow-2xs'
+                  className={`py-2 px-3 rounded-lg border text-left transition-all ${
+                    !isSentralisasi
+                      ? 'bg-white border-emerald-600 text-emerald-950 ring-1 ring-emerald-600/30 font-semibold'
                       : 'bg-white/60 border-slate-200 text-slate-600 hover:bg-white'
                   }`}
                 >
-                  <div className="font-bold text-[11px]">Bebas Sentralisasi (100% Utuh)</div>
-                  <div className="text-[10px] opacity-80">
-                    100% masuk penuh ke {selectedKas?.nama || 'Kas Tujuan'} tanpa potongan 55%
-                  </div>
+                  <div className="text-xs font-bold">Non-Sentralisasi (100%)</div>
+                  <div className="text-[10px] text-slate-500">100% ke {selectedKas?.nama || 'Kas'}</div>
                 </button>
               </div>
 
-              {isSentralisasiOverride ? (
-                <div className="space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-white/95 p-2.5 rounded-xl border border-indigo-200 shadow-2xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-indigo-700 uppercase">45% Kas Tujuan Lokal</span>
-                      </div>
-                      <div className="text-base font-extrabold text-indigo-900 mt-0.5 font-mono">
-                        {formatRupiah(singleSplit.huriaAmount)}
-                      </div>
-                      <div className="text-[10px] text-slate-600 font-medium truncate">
-                        Masuk: {selectedKas?.nama || 'Kas Huria'}
-                      </div>
-                    </div>
-
-                    <div className="bg-white/95 p-2.5 rounded-xl border border-blue-200 shadow-2xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-blue-700 uppercase">55% Kas Sentralisasi</span>
-                      </div>
-                      <div className="text-base font-extrabold text-blue-900 mt-0.5 font-mono">
-                        {formatRupiah(singleSplit.bpskAmount)}
-                      </div>
-                      <div className="text-[10px] text-slate-600 font-medium truncate">
-                        Otomatis ke: {sentralisasiKas?.nama || 'Kas Sentralisasi'}
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-blue-900 bg-blue-100/60 border border-blue-200 rounded-lg px-2.5 py-1.5 leading-relaxed">
-                    Saat disimpan, sistem otomatis mencatat pembagian ke <strong>{selectedKas?.nama || 'Kas Tujuan'} (45%)</strong> dan{' '}
-                    <strong>{sentralisasiKas?.nama || 'Kas Sentralisasi'} (55%)</strong>. Batas setor BPSK maks. H+{PPKU_BPSK_DEADLINE_DAYS}.
-                  </p>
+              {isSentralisasi ? (
+                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-white border border-slate-200 text-[11px] tabular-nums">
+                  <span className="text-slate-600">
+                    {selectedKas?.nama || 'Kas'} (45%): <strong className="text-slate-900 font-mono">{formatRupiah(singleSplit.huriaAmount)}</strong>
+                  </span>
+                  <span className="text-blue-700">
+                    Sentralisasi (55%): <strong className="font-mono">{formatRupiah(singleSplit.bpskAmount)}</strong>
+                  </span>
                 </div>
               ) : (
-                <div className="bg-white/95 p-3 rounded-xl border border-emerald-200 shadow-2xs space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <div className="text-[11px] font-bold text-emerald-800 uppercase">
-                        100% Masuk Penuh ke {selectedKas?.nama || 'Kas Tujuan'}
-                      </div>
-                      <p className="text-[10px] text-slate-500">
-                        Tanpa pemotongan sentralisasi 55% — sesuai alokasi khusus/transitoris/kebijakan transaksi ini.
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <span className="text-[10px] text-slate-400 block">Nominal Masuk</span>
-                      <span className="text-base font-extrabold text-emerald-900 font-mono">
-                        {formatRupiah(rawAmount)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-semibold text-slate-600 mb-1">
-                      Klasifikasi Pos Non-Sentralisasi
-                    </label>
-                    <select
-                      value={exclusionTypeOverride}
-                      onChange={(e) => setExclusionTypeOverride(e.target.value as SentralisasiExclusionType)}
-                      className="w-full p-1.5 rounded-lg border border-slate-200 bg-white text-[11px]"
-                    >
-                      <option value="pembangunan_lokal">Pembangunan Fisik Lokal (dari Sumbangan / Syukur)</option>
-                      <option value="sosial_duka">Diakonia Sosial / Duka (Sosial Huria)</option>
-                      <option value="transitoris">Penerimaan Transitoris (Pendeta, Lingkungan/Wijk, dll.)</option>
-                      <option value="beasiswa">Beasiswa / Dana Belajar</option>
-                      <option value="lainnya">Non-Sentralisasi Lainnya</option>
-                    </select>
-                  </div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-0.5">
+                  <select
+                    value={exclusionType}
+                    onChange={(e) => setExclusionType(e.target.value as SentralisasiExclusionType)}
+                    className="flex-1 h-9 px-2.5 rounded-lg border border-slate-200 bg-white text-[11px]"
+                  >
+                    <option value="pembangunan_lokal">Pembangunan Lokal</option>
+                    <option value="sosial_duka">Diakonia Sosial / Duka</option>
+                    <option value="transitoris">Transitoris / Titipan</option>
+                    <option value="beasiswa">Beasiswa</option>
+                    <option value="lainnya">Non-Sentralisasi Lainnya</option>
+                  </select>
+                  <span className="font-mono font-bold text-emerald-700 text-xs tabular-nums shrink-0">
+                    100%: {formatRupiah(rawAmount)}
+                  </span>
                 </div>
               )}
             </div>
           )}
 
-          {/* ================================================================= */}
-          {/* MODE MULTI-POS INCOME: DYNAMIC ALLOCATION BUILDER (UCAPAN SYUKUR) */}
-          {/* ================================================================= */}
+          {/* MULTI-POS INCOME (UCAPAN SYUKUR / RINCIAN) */}
           {type === 'income' && incomeMode === 'multi' && (
-            <div className="p-3.5 rounded-2xl border border-emerald-200/90 bg-emerald-50/30 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900">
-                    Rincian Pembagian Pos Kas (Penerimaan Gabungan / Ucapan Syukur)
-                  </h4>
-                  <p className="text-[11px] text-slate-500">
-                    Tentukan peruntukan tiap baris beserta Kas Tujuan dan apakah baris tersebut dikenakan Sentralisasi 55%/45% atau 100% langsung.
-                  </p>
-                </div>
+            <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-slate-800">Rincian Alokasi Kas</span>
                 <button
                   type="button"
                   onClick={handleApplyUcapanSyukurTemplate}
-                  className="px-2.5 py-1.5 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg text-[11px] font-semibold flex items-center gap-1 shrink-0 self-start sm:self-center shadow-2xs"
+                  className="px-2.5 py-1.5 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[11px] font-semibold flex items-center gap-1"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Contoh Pola Ucapan Syukur</span>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Contoh Ucapan Syukur</span>
                 </button>
               </div>
 
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 {allocations.map((row, idx) => {
                   const rowAmt = parseNum(row.amountInput);
                   const rowSplit = splitSentralisasiAmount(rowAmt, row.is_sentralisasi);
-                  const rowKasName = kasList.find((k) => k.id === row.kas_id)?.nama || 'Kas Tujuan';
+                  const rowKasName = kasList.find((k) => k.id === row.kas_id)?.nama || 'Kas';
 
                   return (
                     <div
                       key={row.rowId}
-                      className="p-3 bg-white rounded-xl border border-slate-200/90 shadow-2xs space-y-2.5 text-xs"
+                      className="p-2.5 bg-white rounded-xl border border-slate-200 space-y-2 text-xs"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                          Pos Rincian #{idx + 1}
-                        </span>
-                        <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold text-slate-500">#{idx + 1}</span>
+                        <div className="flex items-center gap-1.5">
                           <button
                             type="button"
                             onClick={() =>
@@ -845,15 +697,13 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
                                 )
                               )
                             }
-                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors ${
+                            className={`px-2 py-1 rounded-md text-[10px] font-bold border transition-colors ${
                               row.is_sentralisasi
                                 ? 'bg-blue-50 border-blue-300 text-blue-800'
                                 : 'bg-emerald-50 border-emerald-300 text-emerald-800'
                             }`}
                           >
-                            {row.is_sentralisasi
-                              ? 'Objek Sentralisasi (55% Sentralisasi / 45% Lokal)'
-                              : 'Non-Sentralisasi (100% Masuk Kas Tujuan)'}
+                            {row.is_sentralisasi ? 'Sentralisasi (45/55)' : 'Non-Sentralisasi (100%)'}
                           </button>
 
                           {allocations.length > 1 && (
@@ -863,7 +713,7 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
                                 setAllocations((prev) => prev.filter((r) => r.rowId !== row.rowId))
                               }
                               className="p-1 text-rose-500 hover:bg-rose-50 rounded-md"
-                              title="Hapus Baris"
+                              aria-label="Hapus baris"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -872,95 +722,77 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                        <div className="sm:col-span-4">
-                          <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">
-                            Peruntukan Baris
-                          </label>
-                          <input
-                            type="text"
-                            value={row.sub_description}
-                            onChange={(e) =>
-                              setAllocations((prev) =>
-                                prev.map((r) =>
-                                  r.rowId === row.rowId ? { ...r, sub_description: e.target.value } : r
-                                )
+                        <input
+                          type="text"
+                          value={row.sub_description}
+                          onChange={(e) =>
+                            setAllocations((prev) =>
+                              prev.map((r) =>
+                                r.rowId === row.rowId ? { ...r, sub_description: e.target.value } : r
                               )
-                            }
-                            placeholder="Misal: Ke Huria / Ke Pendeta / Wijk"
-                            className="w-full p-2 rounded-lg border border-slate-200 text-xs"
-                          />
-                        </div>
+                            )
+                          }
+                          placeholder="- Ke Kas Huria / Pendeta"
+                          className="sm:col-span-4 h-9 px-2.5 rounded-lg border border-slate-200 text-xs"
+                        />
 
-                        <div className="sm:col-span-4">
-                          <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">
-                            Kas Tujuan
-                          </label>
-                          <select
-                            value={row.kas_id}
-                            onChange={(e) => {
-                              const nextKas = e.target.value;
-                              setAllocations((prev) =>
-                                prev.map((r) =>
-                                  r.rowId === row.rowId
-                                    ? {
-                                        ...r,
-                                        kas_id: nextKas,
-                                        is_sentralisasi: inferDefaultSentralisasiForMultiRow(nextKas),
-                                        exclusion_type: inferExclusionForKas(nextKas),
-                                      }
-                                    : r
-                                )
-                              );
-                            }}
-                            className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
-                          >
-                            {selectableKas.map((k) => (
-                              <option key={k.id} value={k.id}>
-                                {k.nama}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div className="sm:col-span-4">
-                          <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">
-                            Nominal (Rp)
-                          </label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={
-                              row.amountInput
-                                ? Number(row.amountInput.replace(/[^0-9]/g, '')).toLocaleString('id-ID')
-                                : ''
-                            }
-                            onChange={(e) =>
-                              setAllocations((prev) =>
-                                prev.map((r) =>
-                                  r.rowId === row.rowId ? { ...r, amountInput: e.target.value } : r
-                                )
+                        <select
+                          value={row.kas_id}
+                          onChange={(e) => {
+                            const nextKas = e.target.value;
+                            setAllocations((prev) =>
+                              prev.map((r) =>
+                                r.rowId === row.rowId
+                                  ? {
+                                      ...r,
+                                      kas_id: nextKas,
+                                      is_sentralisasi: inferDefaultSentralisasiForKas(nextKas),
+                                      exclusion_type: inferExclusionForKas(nextKas),
+                                    }
+                                  : r
                               )
-                            }
-                            placeholder="0"
-                            className="w-full p-2 rounded-lg border border-slate-200 font-mono font-bold text-right text-xs"
-                          />
-                        </div>
+                            );
+                          }}
+                          className="sm:col-span-4 h-9 px-2 rounded-lg border border-slate-200 bg-white text-xs"
+                        >
+                          {selectableKas.map((k) => (
+                            <option key={k.id} value={k.id}>
+                              {k.nama}
+                            </option>
+                          ))}
+                        </select>
+
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={
+                            row.amountInput
+                              ? Number(row.amountInput.replace(/[^0-9]/g, '')).toLocaleString('id-ID')
+                              : ''
+                          }
+                          onChange={(e) =>
+                            setAllocations((prev) =>
+                              prev.map((r) =>
+                                r.rowId === row.rowId ? { ...r, amountInput: e.target.value } : r
+                              )
+                            )
+                          }
+                          placeholder="Nominal"
+                          className="sm:col-span-4 h-9 px-2.5 rounded-lg border border-slate-200 font-mono font-bold text-right text-xs tabular-nums"
+                        />
                       </div>
 
                       {rowAmt > 0 && (
-                        <div className="text-[10px] text-slate-600 bg-slate-50 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 flex-wrap">
+                        <div className="text-[10px] text-slate-600 flex items-center gap-1 tabular-nums">
                           <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
                           {row.is_sentralisasi && sentralisasiKas && row.kas_id !== sentralisasiKas.id ? (
                             <span>
-                              Otomatis dibagi: <strong className="text-indigo-800">{formatRupiah(rowSplit.huriaAmount)}</strong> ke{' '}
-                              <strong>{rowKasName} (45%)</strong> +{' '}
-                              <strong className="text-blue-800">{formatRupiah(rowSplit.bpskAmount)}</strong> ke{' '}
-                              <strong>{sentralisasiKas.nama} (55%)</strong>
+                              {rowKasName}: <strong className="font-mono">{formatRupiah(rowSplit.huriaAmount)}</strong> · Sentralisasi:{' '}
+                              <strong className="font-mono text-blue-700">{formatRupiah(rowSplit.bpskAmount)}</strong>
                             </span>
                           ) : (
                             <span>
-                              Masuk utuh <strong className="text-emerald-800">{formatRupiah(rowAmt)}</strong> (100%) ke{' '}
-                              <strong>{rowKasName}</strong>
+                              {rowKasName} (100%): <strong className="font-mono text-emerald-700">{formatRupiah(rowAmt)}</strong>
                             </span>
                           )}
                         </div>
@@ -973,64 +805,28 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
               <button
                 type="button"
                 onClick={handleAddAllocationRow}
-                className="w-full py-2 border border-dashed border-emerald-400 text-emerald-800 hover:bg-emerald-50 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                className="w-full h-9 border border-dashed border-slate-300 text-slate-700 hover:bg-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
               >
-                <Plus className="w-4 h-4" />
-                <span>Tambah Baris Pos Kas</span>
+                <Plus className="w-3.5 h-3.5" />
+                <span>Tambah Baris</span>
               </button>
 
-              {/* Consolidated Preview Box */}
-              <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
-                <div className="flex items-center justify-between text-xs border-b border-slate-100 pb-2">
-                  <span className="font-bold text-slate-700">Total Seluruh Rincian Penerimaan:</span>
-                  <span className="font-mono font-black text-base text-slate-900">
-                    {formatRupiah(multiSummary.totalGross)}
-                  </span>
-                </div>
-
-                {multiSummary.inflows.length > 0 && (
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                      Ringkasan Saldo Masuk Otomatis per Kas:
-                    </span>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                      {multiSummary.inflows.map((inf) => (
-                        <div
-                          key={inf.kasId}
-                          className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-100 text-[11px]"
-                        >
-                          <span className="font-medium text-slate-700 truncate pr-2">{inf.kasName}</span>
-                          <span className="font-mono font-bold text-emerald-700 shrink-0">
-                            +{formatRupiah(inf.amount)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              <div className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between text-xs tabular-nums">
+                <span className="font-semibold text-slate-600">Total Penerimaan</span>
+                <span className="font-mono font-bold text-sm text-slate-900">
+                  {formatRupiah(multiSummary.totalGross)}
+                </span>
               </div>
             </div>
           )}
 
-          {/* Live PPKU Pasal 21 Procurement & Pasal 18(3) Valid Receipt Compliance Card for Expenses */}
-          {type === 'expense' && (
+          {/* Expense Procurement Compact Hint */}
+          {type === 'expense' && rawAmount > settings.receipt_required_threshold && (
             (() => {
               const rule = getPpkuProcurementRule(rawAmount);
               return (
-                <div className={`p-3.5 rounded-2xl border text-xs space-y-1.5 ${rule.badgeClass}`}>
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <span className="font-bold flex items-center gap-1.5">
-                      <Info className="w-3.5 h-3.5 shrink-0" />
-                      <span>Kepatuhan Belanja PPKU 2023: {rule.label}</span>
-                    </span>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-white/80 border border-current/20">
-                      {rule.pasalRef}
-                    </span>
-                  </div>
-                  <p className="text-[11px] leading-relaxed opacity-90">{rule.requirement}</p>
-                  <p className="text-[10px] font-semibold opacity-80">
-                    Pasal 18 ayat (3): Semua pembayaran wajib didukung kuitansi/nota yang sah dan diunggah pada lampiran bukti.
-                  </p>
+                <div className={`px-3 py-2 rounded-xl border text-[11px] font-medium ${rule.badgeClass}`}>
+                  {rule.label} · {rule.pasalRef}
                 </div>
               );
             })()
@@ -1039,9 +835,7 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
           {/* Uraian */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              {type === 'income' && incomeMode === 'multi'
-                ? 'Uraian Utama / Nama Pemberi Ucapan Syukur'
-                : 'Uraian Keterangan Transaksi'}{' '}
+              {type === 'income' && incomeMode === 'multi' ? 'Uraian Utama (mis. Ucapan Syukur Kel. ...)' : 'Uraian'}{' '}
               <span className="text-rose-500">*</span>
             </label>
             <textarea
@@ -1050,76 +844,61 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
               rows={2}
               placeholder={
                 type === 'income' && incomeMode === 'multi'
-                  ? 'Contoh: Ucapan Syukur Keluarga Si A (Total Rp 500.000)'
-                  : 'Contoh: Pelean IB Ibadah Minggu atau Pembayaran token listrik gedung gereja...'
+                  ? 'Ucapan Syukur dari Kel. ...'
+                  : 'Contoh: Pelean Ibadah IA / Pembayaran listrik gereja'
               }
-              className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary"
+              className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
               required
             />
           </div>
 
-          {/* Upload Nota / Camera */}
-          <div className="p-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/60">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                <Camera className="w-4 h-4 text-slate-500" />
-                Foto Nota / Kuitansi Fisik
-                {isReceiptMandatory && (
-                  <span className="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-md font-semibold">
-                    Wajib (≥ {formatRupiah(settings.receipt_required_threshold)})
-                  </span>
-                )}
-              </span>
-              {attachmentUrl && (
-                <button
-                  type="button"
-                  onClick={() => setAttachmentUrl(null)}
-                  className="text-xs text-rose-500 hover:text-rose-700"
-                >
-                  Hapus Foto
-                </button>
+          {/* Upload Nota */}
+          <div className="p-2.5 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 text-xs text-slate-700">
+              <Camera className="w-4 h-4 text-slate-400 shrink-0" />
+              <span className="font-medium">Foto Nota</span>
+              {isReceiptMandatory && (
+                <span className="text-[10px] text-rose-700 font-semibold">(Wajib)</span>
               )}
             </div>
 
             {attachmentUrl ? (
-              <div className="flex items-center gap-3">
-                <img
-                  src={attachmentUrl}
-                  alt="Nota Preview"
-                  className="w-14 h-14 object-cover rounded-lg border border-slate-200 shadow-2xs"
-                />
-                <div className="text-xs text-emerald-700 flex items-center gap-1">
-                  <CheckCircle className="w-4 h-4" />
-                  <span>Foto nota berhasil dilampirkan</span>
-                </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-emerald-700 font-medium flex items-center gap-1">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  Terlampir
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAttachmentUrl(null)}
+                  className="text-[11px] text-rose-600 hover:underline font-medium"
+                >
+                  Hapus
+                </button>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
-                <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-700 text-xs font-medium rounded-xl hover:bg-slate-50 shadow-2xs transition-colors">
-                  <Upload className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Pilih Berkas Foto</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    disabled={uploading}
-                  />
-                </label>
-                <span className="text-[11px] text-slate-400">Format JPG, PNG atau foto kamera langsung</span>
-                {uploading && <span className="text-xs text-primary animate-pulse">Mengunggah...</span>}
-              </div>
+              <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 text-xs font-medium rounded-lg hover:bg-slate-50">
+                <Upload className="w-3.5 h-3.5 text-slate-500" />
+                <span>{uploading ? 'Mengunggah...' : 'Unggah'}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  disabled={uploading}
+                />
+              </label>
             )}
           </div>
         </div>
 
-        {/* Footer Actions */}
-        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+        {/* Sticky Footer */}
+        <div className="px-5 py-3.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-2 shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200/50 rounded-xl transition-colors"
+            className="h-10 px-3.5 text-xs font-semibold text-slate-600 hover:bg-slate-200/60 rounded-xl transition-colors"
           >
             Batal
           </button>
@@ -1128,7 +907,7 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
               type="button"
               disabled={isSubmitting}
               onClick={() => handleSave(false)}
-              className="px-4 py-2 text-xs font-semibold text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-xl transition-colors"
+              className="h-10 px-3.5 text-xs font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 rounded-xl transition-colors"
             >
               Simpan Draft
             </button>
@@ -1136,9 +915,9 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
               type="button"
               disabled={isSubmitting}
               onClick={() => handleSave(true)}
-              className="px-5 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary-dark rounded-xl transition-colors shadow-xs"
+              className="h-10 px-4 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors"
             >
-              Ajukan (Submit)
+              Ajukan
             </button>
           </div>
         </div>

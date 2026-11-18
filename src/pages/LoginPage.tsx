@@ -34,21 +34,21 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="relative min-h-screen flex flex-col justify-center px-4 py-10 overflow-hidden bg-gradient-to-b from-slate-100 via-slate-50 to-blue-100/70">
-      {/* Silhouette Background of HKBP Hutaraja Church */}
+    <div className="relative min-h-screen flex flex-col justify-center px-4 py-10 overflow-hidden bg-slate-900">
+      {/* Background Foto Gereja HKBP Hutaraja */}
       <div className="pointer-events-none select-none absolute inset-0 z-0">
         <img
           src="/assets/aistudio/WhatsApp_Image_2025-05-14_at_16.01.56_15be8f1f_bea9a36b.jpg"
-          alt=""
+          alt="Gereja HKBP Hutaraja"
           aria-hidden="true"
-          className="w-full h-full object-cover object-center grayscale contrast-[2.2] brightness-[0.35] opacity-[0.22] mix-blend-multiply scale-[1.03]"
+          className="w-full h-full object-cover object-center scale-[1.02]"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-white/75 via-slate-50/45 to-slate-200/65" />
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/55 via-slate-900/35 to-slate-950/70" />
       </div>
 
       <div className="relative z-10 mx-auto w-full max-w-sm space-y-6">
         <div className="text-center space-y-2.5">
-          <div className="w-16 h-16 rounded-2xl bg-white/95 p-2 shadow-md border border-slate-200/90 flex items-center justify-center mx-auto">
+          <div className="w-16 h-16 rounded-2xl bg-white/95 p-2 shadow-lg border border-white/80 flex items-center justify-center mx-auto">
             <img
               src="/assets/aistudio/Logo-HKBP_02090ed7.png"
               alt="Logo HKBP"
@@ -56,16 +56,16 @@ export const LoginPage: React.FC = () => {
             />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+            <h1 className="text-xl font-bold text-white tracking-tight drop-shadow-sm">
               SISKEU HKBP Hutaraja
             </h1>
-            <p className="text-xs text-slate-600 mt-0.5 font-medium">
+            <p className="text-xs text-slate-100 mt-0.5 font-medium drop-shadow-sm">
               Masuk dengan akun pengurus &amp; pelayan gereja
             </p>
           </div>
         </div>
 
-        <div className="bg-white/95 backdrop-blur-md p-6 sm:p-7 rounded-2xl border border-slate-200/90 shadow-lg space-y-4">
+        <div className="bg-white/95 backdrop-blur-md p-6 sm:p-7 rounded-2xl border border-white/80 shadow-2xl space-y-4">
           {error && (
             <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -125,7 +125,7 @@ export const LoginPage: React.FC = () => {
           </form>
         </div>
 
-        <p className="text-center text-[11px] text-slate-600 font-medium">
+        <p className="text-center text-[11px] text-slate-100 font-medium drop-shadow-sm">
           Pengelolaan akun oleh Administrator HKBP Hutaraja
         </p>
       </div>

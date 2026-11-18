@@ -24,6 +24,7 @@ import {
   Landmark,
   CheckCircle2,
   Layers,
+  ClipboardCheck,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -67,6 +68,7 @@ export const DashboardPage: React.FC = () => {
     canApprove,
     canViewBpsk,
     canViewAuditModule,
+    canAssignAudit,
     canViewWarta,
     canViewConsolidatedLpj,
     canManageOpeningBook,
@@ -322,6 +324,16 @@ export const DashboardPage: React.FC = () => {
             >
               <FileText className="w-4 h-4 shrink-0 text-blue-700" />
               <span>Laporan Keuangan</span>
+            </NavLink>
+          )}
+
+          {isPendeta && (
+            <NavLink
+              to="/audit?action=penugasan"
+              className="px-4 py-2.5 min-h-[40px] bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors whitespace-nowrap shadow-xs"
+            >
+              <ClipboardCheck className="w-4 h-4 shrink-0 text-amber-300" />
+              <span>Buka Penugasan Audit</span>
             </NavLink>
           )}
 
@@ -781,13 +793,24 @@ export const DashboardPage: React.FC = () => {
                   </span>
                 </div>
               </div>
-              <NavLink
-                to="/audit"
-                className="px-3.5 py-2 bg-purple-900 hover:bg-purple-800 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1 shrink-0 whitespace-nowrap"
-              >
-                <span>Modul Audit</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </NavLink>
+              <div className="flex items-center gap-2 shrink-0">
+                {canAssignAudit && (
+                  <NavLink
+                    to="/audit?action=penugasan"
+                    className="px-3 py-2 bg-purple-100 hover:bg-purple-200 text-purple-900 text-xs font-semibold rounded-xl inline-flex items-center gap-1 whitespace-nowrap"
+                  >
+                    <ClipboardCheck className="w-3.5 h-3.5" />
+                    <span>Buka Penugasan Audit</span>
+                  </NavLink>
+                )}
+                <NavLink
+                  to="/audit"
+                  className="px-3.5 py-2 bg-purple-900 hover:bg-purple-800 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1 shrink-0 whitespace-nowrap"
+                >
+                  <span>Modul Audit</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </NavLink>
+              </div>
             </div>
           )}
         </div>

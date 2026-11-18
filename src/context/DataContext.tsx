@@ -308,6 +308,10 @@ interface DataContextType {
   saveAuditBodyMember: (memberData: Partial<AuditBodyMember>) => Promise<{ success: boolean; error?: string }>;
   removeAuditBodyMember: (id: string) => Promise<{ success: boolean; error?: string }>;
   saveAuditEngagement: (engData: Partial<AuditEngagement>) => Promise<{ success: boolean; id?: string; error?: string }>;
+  deleteAuditEngagement: (
+    id: string,
+    options?: { force?: boolean; reason?: string }
+  ) => Promise<{ success: boolean; error?: string }>;
   submitAuditReview: (reviewData: Partial<AuditReview>) => Promise<{ success: boolean; error?: string }>;
   saveAuditFinding: (findingData: Partial<AuditFinding>) => Promise<{ success: boolean; id?: string; error?: string }>;
   respondAuditFinding: (id: string, responseNotes: string) => Promise<{ success: boolean; error?: string }>;
@@ -4804,6 +4808,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const saveAuditEngagement = async (
     engData: Partial<AuditEngagement>
   ): Promise<{ success: boolean; id?: string; error?: string }> => {
+    if (currentUser && currentUser.role !== 'pendeta_ressort' && currentUser.role !== 'admin') {
+      return {
+        success: false,
+        error: 'Hanya Pendeta Ressort yang berwenang membuka penugasan audit.',
+      };
+    }
     if (!engData.tahun || !engData.jenis || !engData.judul || !engData.batas_waktu) {
       return { success: false, error: 'Tahun, jenis, judul, dan batas waktu pemeriksaan wajib diisi.' };
     }
@@ -4820,12 +4830,34 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (engId) {
       const existingEng = auditEngagements.find((e) => e.id === engId);
-      const updatedEng = { ...existingEng, ...engData, updated_at: nowIso } as AuditEngagement;
-      setAuditEngagements((prev) => prev.map((e) => (e.id === engId ? updatedEng : e)));
+      const updatedEng: AuditEngagement = {
+        ...existingEng,
+        ...engData,
+        combined_with_lpj:
+          engData.combined_with_lpj !== undefined
+            ? engData.combined_with_lpj
+            : engData.jenis === 'tahunan' || existingEng?.combined_with_lpj || false,
+        updated_at: nowIso,
+      } as AuditEngagement;
+
       if (isSupabaseConfigured) {
-        await syncUpsert('audit_engagements', updatedEng);
+        const syncRes = await syncUpsert('audit_engagements', updatedEng);
+        if (!syncRes.success) {
+          return {
+            success: false,
+            error: syncRes.error || 'Gagal menyimpan perubahan penugasan audit ke database.',
+          };
+        }
       }
-      addAuditLog('audit_engagements', engId, 'UPDATE', null, engData, `Memperbarui penugasan audit ${engData.judul}`);
+      setAuditEngagements((prev) => prev.map((e) => (e.id === engId ? updatedEng : e)));
+      addAuditLog(
+        'audit_engagements',
+        engId,
+        'UPDATE',
+        existingEng || null,
+        updatedEng,
+        `Memperbarui penugasan audit "${updatedEng.judul}" (${updatedEng.tahun})`
+      );
     } else {
       engId = `eng-${Date.now()}`;
       const newEng: AuditEngagement = {
@@ -4836,7 +4868,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deskripsi: engData.deskripsi || null,
         semester_report_id: engData.semester_report_id || null,
         lpj_id: engData.lpj_id || null,
-        status: 'in_progress',
+        status: engData.status || 'in_progress',
         dibuka_pada: engData.dibuka_pada || nowIso.split('T')[0],
         batas_waktu: engData.batas_waktu,
         combined_with_lpj: engData.combined_with_lpj || engData.jenis === 'tahunan',
@@ -4844,14 +4876,78 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         created_at: nowIso,
         updated_at: nowIso,
       };
-      setAuditEngagements((prev) => [newEng, ...prev]);
       if (isSupabaseConfigured) {
-        await syncUpsert('audit_engagements', newEng);
+        const syncRes = await syncUpsert('audit_engagements', newEng);
+        if (!syncRes.success) {
+          return {
+            success: false,
+            error: syncRes.error || 'Gagal menyimpan penugasan audit baru ke database.',
+          };
+        }
       }
+      setAuditEngagements((prev) => [newEng, ...prev]);
       addAuditLog('audit_engagements', engId, 'INSERT', null, newEng, `Membuka penugasan audit baru: ${newEng.judul}`);
     }
 
     return { success: true, id: engId };
+  };
+
+  const deleteAuditEngagement = async (
+    id: string,
+    options?: { force?: boolean; reason?: string }
+  ): Promise<{ success: boolean; error?: string }> => {
+    const eng = auditEngagements.find((e) => e.id === id);
+    if (!eng) {
+      return { success: false, error: 'Data penugasan audit tidak ditemukan.' };
+    }
+
+    if (currentUser && currentUser.role !== 'pendeta_ressort' && currentUser.role !== 'admin') {
+      return {
+        success: false,
+        error: 'Hanya Pendeta Ressort (atau Admin) yang berwenang menghapus penugasan audit.',
+      };
+    }
+
+    const reviewCount = auditReviews.filter((r) => r.engagement_id === id).length;
+    const findingCount = auditFindings.filter((f) => f.engagement_id === id).length;
+    const opinionCount = auditFinalOpinions.filter((o) => o.engagement_id === id).length;
+    const hasLinkedData = reviewCount > 0 || findingCount > 0 || opinionCount > 0;
+
+    if (hasLinkedData && !options?.force) {
+      return {
+        success: false,
+        error: `Penugasan "${eng.judul}" sudah memiliki data terkait (${reviewCount} lembar kerja auditor, ${findingCount} temuan, ${opinionCount} opini final). Konfirmasi penghapusan paksa diperlukan.`,
+      };
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      const delFindRes = await supabase.from('audit_findings').delete().eq('engagement_id', id);
+      if (delFindRes.error) {
+        return { success: false, error: `Gagal menghapus temuan terkait: ${delFindRes.error.message}` };
+      }
+
+      const delEngRes = await syncDelete('audit_engagements', 'id', id);
+      if (!delEngRes.success) {
+        return { success: false, error: delEngRes.error || 'Gagal menghapus penugasan audit dari Supabase.' };
+      }
+    }
+
+    setAuditEngagements((prev) => prev.filter((e) => e.id !== id));
+    setAuditReviews((prev) => prev.filter((r) => r.engagement_id !== id));
+    setAuditFindings((prev) => prev.filter((f) => f.engagement_id !== id));
+    setAuditFinalOpinions((prev) => prev.filter((o) => o.engagement_id !== id));
+
+    const summaryReason = options?.reason?.trim() ? ` | Alasan: ${options.reason.trim()}` : '';
+    addAuditLog(
+      'audit_engagements',
+      id,
+      'DELETE',
+      eng,
+      null,
+      `Penugasan audit "${eng.judul}" (${eng.tahun}) dihapus oleh ${currentUser?.full_name || 'Pendeta Ressort'} (${reviewCount} lembar kerja, ${findingCount} temuan, ${opinionCount} opini ikut dibersihkan)${summaryReason}`
+    );
+
+    return { success: true };
   };
 
   const submitAuditReview = async (
@@ -6569,6 +6665,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         saveAuditBodyMember,
         removeAuditBodyMember,
         saveAuditEngagement,
+        deleteAuditEngagement,
         submitAuditReview,
         saveAuditFinding,
         respondAuditFinding,

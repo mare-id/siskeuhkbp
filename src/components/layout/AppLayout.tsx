@@ -30,6 +30,7 @@ import {
   Landmark,
   FileText,
   FileEdit,
+  ClipboardCheck,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -55,6 +56,7 @@ export const AppLayout: React.FC = () => {
     canManageMasterData,
     canViewBpsk,
     canViewAuditModule,
+    canAssignAudit,
     canViewAuditTrail,
     canViewWarta,
     canViewConsolidatedLpj,
@@ -148,6 +150,12 @@ export const AppLayout: React.FC = () => {
       allowed: isAdmin || isBendaharaUmum || isPengurusKas || isPendeta || isSekretaris || isMajelis || isAuditor,
     },
     {
+      to: '/audit?action=penugasan',
+      label: 'Buka Penugasan Audit',
+      icon: ClipboardCheck,
+      allowed: canAssignAudit,
+    },
+    {
       to: '/audit',
       label: 'Badan Audit',
       icon: Shield,
@@ -194,6 +202,12 @@ export const AppLayout: React.FC = () => {
 
   const activeNavItem =
     navItems.find((item) => {
+      if (location.pathname === '/audit' && location.search.includes('action=penugasan')) {
+        return item.to.includes('action=penugasan');
+      }
+      if (location.pathname === '/audit') {
+        return item.to === '/audit';
+      }
       if (location.pathname === '/reports' && location.search.includes('tab=bpsk')) {
         return item.to.includes('tab=bpsk');
       }
@@ -213,6 +227,12 @@ export const AppLayout: React.FC = () => {
     }) || navItems[0];
 
   const isNavItemActive = (to: string, isActive: boolean) => {
+    if (to === '/audit?action=penugasan') {
+      return location.pathname === '/audit' && location.search.includes('action=penugasan');
+    }
+    if (to === '/audit') {
+      return location.pathname === '/audit' && !location.search.includes('action=penugasan');
+    }
     if (to.includes('tab=bpsk')) {
       return location.pathname === '/reports' && location.search.includes('tab=bpsk');
     }
@@ -283,6 +303,25 @@ export const AppLayout: React.FC = () => {
               <ShieldCheck className="w-4 h-4 text-amber-300" />
               <span>Modul Audit</span>
             </NavLink>
+          ) : isPendeta ? (
+            <>
+              <NavLink
+                to="/audit?action=penugasan"
+                className="w-full h-9 px-3 bg-purple-700 hover:bg-purple-600 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <ClipboardCheck className="w-4 h-4 text-amber-300" />
+                <span>Buka Penugasan Audit</span>
+              </NavLink>
+              {showApprovalAction && (
+                <NavLink
+                  to="/approvals"
+                  className="w-full h-8 px-3 bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <CheckSquare className="w-3.5 h-3.5" />
+                  <span>Persetujuan {pendingCount > 0 ? `(${pendingCount})` : ''}</span>
+                </NavLink>
+              )}
+            </>
           ) : showApprovalAction ? (
             <NavLink
               to="/approvals"
@@ -418,6 +457,16 @@ export const AppLayout: React.FC = () => {
               </button>
             )}
 
+            {isPendeta && (
+              <NavLink
+                to="/audit?action=penugasan"
+                className="h-8 px-3 rounded-lg text-xs font-semibold text-white bg-purple-700 hover:bg-purple-800 transition-colors flex items-center gap-1.5"
+              >
+                <ClipboardCheck className="w-3.5 h-3.5 text-amber-300" />
+                <span>Buka Penugasan Audit</span>
+              </NavLink>
+            )}
+
             {(isAuditor || isAdmin) && (
               <NavLink
                 to="/audit"
@@ -546,6 +595,34 @@ export const AppLayout: React.FC = () => {
                   >
                     <Search className="w-4 h-4" />
                     <span>Uji Bukti</span>
+                  </NavLink>
+                </>
+              ) : isPendeta ? (
+                <>
+                  <NavLink
+                    to="/audit?action=penugasan"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="h-11 px-3 bg-purple-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                  >
+                    <ClipboardCheck className="w-4 h-4" />
+                    <span>Buka Penugasan Audit</span>
+                  </NavLink>
+                  <NavLink
+                    to={showApprovalAction ? '/approvals' : '/audit'}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="h-11 px-3 bg-slate-100 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                  >
+                    {showApprovalAction ? (
+                      <>
+                        <CheckSquare className="w-4 h-4 text-amber-600" />
+                        <span>Persetujuan {pendingCount > 0 ? `(${pendingCount})` : ''}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Shield className="w-4 h-4 text-purple-700" />
+                        <span>Badan Audit</span>
+                      </>
+                    )}
                   </NavLink>
                 </>
               ) : showApprovalAction ? (

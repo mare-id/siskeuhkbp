@@ -33,6 +33,7 @@ interface AuthContextType {
   canTransfer: boolean;
   canApprove: boolean;
   canAudit: boolean;
+  canAssignAudit: boolean;
   canClosePeriod: boolean;
   canManageSettings: boolean;
   canManageMasterData: boolean;
@@ -435,6 +436,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const canAudit = Boolean(currentUser && (isAdmin || isAuditor));
+  const canAssignAudit = Boolean(currentUser && (isAdmin || isPendeta));
   const canClosePeriod = Boolean(currentUser && (isAdmin || isBendaharaUmum));
   const canManageSettings = Boolean(currentUser && isAdmin);
   const canManageMasterData = Boolean(currentUser && (isAdmin || isBendaharaUmum));
@@ -443,7 +445,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const canViewBpsk = Boolean(
     currentUser && (isAdmin || isBendaharaUmum || isPendeta || isSekretaris || isMajelis || isAuditor)
   );
-  const canViewAuditModule = Boolean(currentUser && (isAdmin || isAuditor));
+  const canViewAuditModule = Boolean(currentUser && (isAdmin || isAuditor || isPendeta));
   const canViewAuditTrail = Boolean(currentUser && (isAdmin || isAuditor));
   const canViewWarta = Boolean(
     currentUser && (isAdmin || isBendaharaUmum || isPendeta || isSekretaris || isMajelis || isPengurusKas)
@@ -496,6 +498,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         canTransfer,
         canApprove,
         canAudit,
+        canAssignAudit,
         canClosePeriod,
         canManageSettings,
         canManageMasterData,

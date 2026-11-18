@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -33,6 +34,9 @@ import {
   BookmarkCheck,
   ListChecks,
   CheckCircle,
+  Edit2,
+  Trash2,
+  ClipboardCheck,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -41,6 +45,7 @@ import { formatRupiah, formatDateIndo } from '../lib/formatters';
 import { generateBeritaAcaraAuditPDF } from '../lib/exportUtils';
 import {
   AuditEngagement,
+  AuditEngagementStatus,
   AuditPersonalOpinion,
   AuditFindingSeverity,
   AuditPeriodVerification,
@@ -74,6 +79,7 @@ export const AuditPage: React.FC = () => {
     saveAuditBodyMember,
     removeAuditBodyMember,
     saveAuditEngagement,
+    deleteAuditEngagement,
     submitAuditReview,
     saveAuditFinding,
     respondAuditFinding,
@@ -82,11 +88,14 @@ export const AuditPage: React.FC = () => {
     recordCashCount,
   } = useData();
 
-  const { currentUser, isAdmin } = useAuth();
+  const { currentUser, isAdmin, canAssignAudit } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const globalToast = useToast();
 
   // Active sub-navigation
-  const [activeTab, setActiveTab] = useState<'transaksi' | 'berkala' | 'pemeriksaan' | 'temuan' | 'opname' | 'anggota' | 'arsip'>('transaksi');
+  const [activeTab, setActiveTab] = useState<
+    'penugasan' | 'transaksi' | 'berkala' | 'pemeriksaan' | 'temuan' | 'opname' | 'anggota' | 'arsip'
+  >('transaksi');
 
   // Transaction verification state
   const [txPeriodFilter, setTxPeriodFilter] = useState<'all' | 'tw_1' | 'tw_2' | 'tw_3' | 'tw_4' | 'sem_1' | 'sem_2' | 'tahunan'>('all');
@@ -174,12 +183,32 @@ export const AuditPage: React.FC = () => {
     '1000': 0,
   });
 
-  // New Engagement Form State
+  // Add/Edit Engagement Form State
   const [showNewEngModal, setShowNewEngModal] = useState<boolean>(false);
+  const [editingEngId, setEditingEngId] = useState<string | null>(null);
   const [newEngTahun, setNewEngTahun] = useState<number>(settings.active_year || 2026);
   const [newEngJenis, setNewEngJenis] = useState<'semester_1' | 'semester_2' | 'tahunan' | 'opening'>('semester_2');
   const [newEngJudul, setNewEngJudul] = useState<string>('');
+  const [newEngDeskripsi, setNewEngDeskripsi] = useState<string>('');
+  const [newEngDibukaPada, setNewEngDibukaPada] = useState<string>(new Date().toISOString().split('T')[0]);
   const [newEngBatasWaktu, setNewEngBatasWaktu] = useState<string>('');
+  const [newEngStatus, setNewEngStatus] = useState<AuditEngagementStatus>('in_progress');
+  const [isSavingEng, setIsSavingEng] = useState<boolean>(false);
+
+  // Delete Engagement Modal State
+  const [deletingEng, setDeletingEng] = useState<AuditEngagement | null>(null);
+  const [confirmForceDeleteEng, setConfirmForceDeleteEng] = useState<boolean>(false);
+  const [deleteEngReason, setDeleteEngReason] = useState<string>('');
+  const [isDeletingEng, setIsDeletingEng] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (searchParams.get('action') === 'penugasan' && canAssignAudit) {
+      setActiveTab('penugasan');
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('action');
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, canAssignAudit]);
 
   // Member Management State
   const [showAddMemberModal, setShowAddMemberModal] = useState<boolean>(false);
@@ -526,21 +555,104 @@ export const AuditPage: React.FC = () => {
     }
   };
 
-  // Handle Create Engagement
-  const handleCreateEngagement = async () => {
+  const openNewEngagementModal = () => {
+    const activeYr = settings.active_year || 2026;
+    const todayStr = new Date().toISOString().split('T')[0];
+    setEditingEngId(null);
+    setNewEngTahun(activeYr);
+    setNewEngJenis('semester_2');
+    setNewEngJudul(`Pemeriksaan Keuangan Semester II Tahun ${activeYr}`);
+    setNewEngDeskripsi('');
+    setNewEngDibukaPada(todayStr);
+    setNewEngBatasWaktu(`${activeYr}-12-31`);
+    setNewEngStatus('in_progress');
+    setShowNewEngModal(true);
+  };
+
+  const openEditEngagementModal = (eng: AuditEngagement) => {
+    setEditingEngId(eng.id);
+    setNewEngTahun(eng.tahun);
+    setNewEngJenis(eng.jenis);
+    setNewEngJudul(eng.judul);
+    setNewEngDeskripsi(eng.deskripsi || '');
+    setNewEngDibukaPada(eng.dibuka_pada || new Date().toISOString().split('T')[0]);
+    setNewEngBatasWaktu(eng.batas_waktu || `${eng.tahun}-12-31`);
+    setNewEngStatus(eng.status || 'in_progress');
+    setShowNewEngModal(true);
+  };
+
+  // Handle Create / Update Engagement
+  const handleSaveEngagement = async () => {
+    setIsSavingEng(true);
+    const defaultJudul = `Pemeriksaan Keuangan ${
+      newEngJenis === 'semester_1'
+        ? 'Semester I'
+        : newEngJenis === 'semester_2'
+        ? 'Semester II'
+        : newEngJenis === 'opening'
+        ? 'Saldo Awal'
+        : 'Tahunan'
+    } Tahun ${newEngTahun}`;
     const res = await saveAuditEngagement({
+      ...(editingEngId ? { id: editingEngId } : {}),
       tahun: newEngTahun,
       jenis: newEngJenis,
-      judul: newEngJudul || `Pemeriksaan Keuangan ${newEngJenis === 'semester_1' ? 'Semester I' : newEngJenis === 'semester_2' ? 'Semester II' : 'Tahunan'} Tahun ${newEngTahun}`,
+      judul: newEngJudul.trim() || defaultJudul,
+      deskripsi: newEngDeskripsi.trim() || null,
+      dibuka_pada: newEngDibukaPada || new Date().toISOString().split('T')[0],
       batas_waktu: newEngBatasWaktu || `${newEngTahun}-12-31`,
+      status: editingEngId ? newEngStatus : 'in_progress',
     });
+    setIsSavingEng(false);
 
     if (res.success) {
-      showToast('Penugasan audit baru berhasil dibuka.');
+      showToast(editingEngId ? 'Penugasan audit berhasil diperbarui.' : 'Penugasan audit baru berhasil dibuka.');
       setShowNewEngModal(false);
+      setEditingEngId(null);
       if (res.id) setSelectedEngId(res.id);
     } else {
-      showToast(res.error || 'Gagal membuka penugasan audit.', 'error');
+      showToast(res.error || 'Gagal menyimpan penugasan audit.', 'error');
+    }
+  };
+
+  const deletingEngMetrics = useMemo(() => {
+    if (!deletingEng) {
+      return { reviewCount: 0, findingCount: 0, opinionCount: 0, hasLinkedData: false };
+    }
+    const reviewCount = auditReviews.filter((r) => r.engagement_id === deletingEng.id).length;
+    const findingCount = auditFindings.filter((f) => f.engagement_id === deletingEng.id).length;
+    const opinionCount = auditFinalOpinions.filter((o) => o.engagement_id === deletingEng.id).length;
+    return {
+      reviewCount,
+      findingCount,
+      opinionCount,
+      hasLinkedData: reviewCount > 0 || findingCount > 0 || opinionCount > 0,
+    };
+  }, [deletingEng, auditReviews, auditFindings, auditFinalOpinions]);
+
+  const handleExecuteDeleteEngagement = async () => {
+    if (!deletingEng) return;
+    if (deletingEngMetrics.hasLinkedData && !confirmForceDeleteEng) {
+      showToast('Centang persetujuan penghapusan data terkait terlebih dahulu.', 'error');
+      return;
+    }
+    setIsDeletingEng(true);
+    const res = await deleteAuditEngagement(deletingEng.id, {
+      force: true,
+      reason: deleteEngReason.trim() || undefined,
+    });
+    setIsDeletingEng(false);
+    if (res.success) {
+      showToast(`Penugasan "${deletingEng.judul}" berhasil dihapus.`);
+      if (selectedEngId === deletingEng.id) {
+        const nextEng = auditEngagements.find((e) => e.id !== deletingEng.id);
+        setSelectedEngId(nextEng?.id || '');
+      }
+      setDeletingEng(null);
+      setConfirmForceDeleteEng(false);
+      setDeleteEngReason('');
+    } else {
+      showToast(res.error || 'Gagal menghapus penugasan audit.', 'error');
     }
   };
 
@@ -620,12 +732,9 @@ export const AuditPage: React.FC = () => {
             </button>
           )}
 
-          {isAdmin && (
+          {canAssignAudit && (
             <button
-              onClick={() => {
-                setNewEngJudul(`Pemeriksaan Keuangan Semester II Tahun ${settings.active_year || 2026}`);
-                setShowNewEngModal(true);
-              }}
+              onClick={openNewEngagementModal}
               className="px-4 py-2 min-h-[40px] bg-white text-slate-900 hover:bg-slate-100 rounded-xl text-xs font-semibold inline-flex items-center gap-2 transition-colors"
             >
               <Plus className="w-4 h-4" />
@@ -637,6 +746,17 @@ export const AuditPage: React.FC = () => {
 
       {/* Main Tabs Segmented Bar */}
       <div className="flex items-center gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200/80 overflow-x-auto scrollbar-none">
+        <button
+          onClick={() => setActiveTab('penugasan')}
+          className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+            activeTab === 'penugasan'
+              ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/70'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <ClipboardCheck className="w-4 h-4 text-purple-700" />
+          <span>Daftar Penugasan ({auditEngagements.length})</span>
+        </button>
         <button
           onClick={() => setActiveTab('transaksi')}
           className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
@@ -721,6 +841,205 @@ export const AuditPage: React.FC = () => {
           <span>Arsip Berita Acara</span>
         </button>
       </div>
+
+      {/* ======================================================================= */}
+      {/* TAB 0: DAFTAR PENUGASAN AUDIT (KELOLA PENUGASAN OLEH PENDETA / ADMIN)   */}
+      {/* ======================================================================= */}
+      {activeTab === 'penugasan' && (
+        <div className="space-y-6">
+          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="font-bold text-sm sm:text-base text-slate-900 flex items-center gap-2">
+                <ClipboardCheck className="w-4 h-4 text-purple-700" />
+                <span>Daftar Penugasan Audit Resmi</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Pendeta Ressort berwenang membuka, mengubah jadwal/instruksi, dan menghapus penugasan pemeriksaan untuk Badan Audit Huria.
+              </p>
+            </div>
+            {canAssignAudit && (
+              <button
+                type="button"
+                onClick={openNewEngagementModal}
+                className="px-4 py-2.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors shrink-0 self-start sm:self-center"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Penugasan Audit</span>
+              </button>
+            )}
+          </div>
+
+          {/* KPI Ringkas Penugasan */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200/90 space-y-1">
+              <span className="text-[11px] font-semibold text-slate-500 block">Total Penugasan</span>
+              <p className="text-xl font-bold font-mono text-slate-900 tabular-nums">{auditEngagements.length}</p>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200/90 space-y-1">
+              <span className="text-[11px] font-semibold text-amber-700 block">Pemeriksaan Berjalan</span>
+              <p className="text-xl font-bold font-mono text-amber-800 tabular-nums">
+                {auditEngagements.filter((e) => e.status === 'in_progress' || e.status === 'draft').length}
+              </p>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200/90 space-y-1">
+              <span className="text-[11px] font-semibold text-emerald-700 block">Selesai (Disahkan)</span>
+              <p className="text-xl font-bold font-mono text-emerald-800 tabular-nums">
+                {auditEngagements.filter((e) => e.status === 'completed').length}
+              </p>
+            </div>
+          </div>
+
+          {/* Tabel Daftar Penugasan */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            {auditEngagements.length === 0 ? (
+              <div className="p-10 text-center space-y-3">
+                <ClipboardCheck className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="text-sm font-semibold text-slate-700">Belum ada penugasan audit yang dibuka.</p>
+                <p className="text-xs text-slate-500">
+                  Klik tombol &ldquo;Tambah Penugasan Audit&rdquo; untuk memberi mandat pemeriksaan kepada Badan Audit Huria.
+                </p>
+                {canAssignAudit && (
+                  <button
+                    type="button"
+                    onClick={openNewEngagementModal}
+                    className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Buka Penugasan Pertama</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-100">
+                    <tr>
+                      <th className="p-3.5">Tahun &amp; Jenis</th>
+                      <th className="p-3.5">Judul &amp; Ruang Lingkup Penugasan</th>
+                      <th className="p-3.5">Jadwal Pemeriksaan</th>
+                      <th className="p-3.5">Progres Audit</th>
+                      <th className="p-3.5">Status</th>
+                      <th className="p-3.5 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {auditEngagements.map((eng) => {
+                      const engReviews = auditReviews.filter((r) => r.engagement_id === eng.id);
+                      const engFindings = auditFindings.filter((f) => f.engagement_id === eng.id);
+                      const engOpinion = auditFinalOpinions.find((o) => o.engagement_id === eng.id);
+                      const jenisLabel =
+                        eng.jenis === 'semester_1'
+                          ? 'Semester I'
+                          : eng.jenis === 'semester_2'
+                          ? 'Semester II'
+                          : eng.jenis === 'opening'
+                          ? 'Saldo Awal'
+                          : 'LPJ Tahunan (ISAK 35)';
+
+                      return (
+                        <tr key={eng.id} className="hover:bg-slate-50/70">
+                          <td className="p-3.5 align-top whitespace-nowrap">
+                            <div className="font-mono font-bold text-slate-900">T.A. {eng.tahun}</div>
+                            <span className="inline-block mt-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-800 text-[10px] font-bold">
+                              {jenisLabel}
+                            </span>
+                          </td>
+                          <td className="p-3.5 align-top max-w-xs">
+                            <div className="font-bold text-slate-900">{eng.judul}</div>
+                            {eng.deskripsi && (
+                              <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{eng.deskripsi}</p>
+                            )}
+                          </td>
+                          <td className="p-3.5 align-top whitespace-nowrap text-slate-600 space-y-0.5">
+                            <div>
+                              <span className="text-slate-400">Dibuka:</span>{' '}
+                              <span className="font-medium">{formatDateIndo(eng.dibuka_pada)}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400">Batas:</span>{' '}
+                              <span className="font-semibold text-slate-800">{formatDateIndo(eng.batas_waktu)}</span>
+                            </div>
+                          </td>
+                          <td className="p-3.5 align-top whitespace-nowrap space-y-1">
+                            <div className="text-[11px] font-semibold text-slate-700">
+                              {engReviews.length}/3 Lembar Kerja Auditor
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              {engFindings.length} Temuan{' '}
+                              {engOpinion ? '• Opini Ditetapkan' : '• Belum Opini Final'}
+                            </div>
+                          </td>
+                          <td className="p-3.5 align-top whitespace-nowrap">
+                            <span
+                              className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                                eng.status === 'completed'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : eng.status === 'cancelled'
+                                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                  : eng.status === 'draft'
+                                  ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}
+                            >
+                              {eng.status === 'completed'
+                                ? 'Selesai (Disahkan)'
+                                : eng.status === 'cancelled'
+                                ? 'Dibatalkan'
+                                : eng.status === 'draft'
+                                ? 'Draf'
+                                : 'Berjalan'}
+                            </span>
+                          </td>
+                          <td className="p-3.5 align-top whitespace-nowrap text-right">
+                            <div className="inline-flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedEngId(eng.id);
+                                  setActiveTab('pemeriksaan');
+                                }}
+                                className="px-2.5 py-1.5 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                              >
+                                Lihat Opini
+                              </button>
+                              {canAssignAudit && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditEngagementModal(eng)}
+                                    className="px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg inline-flex items-center gap-1 transition-colors"
+                                    title="Ubah penugasan audit"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5 text-blue-600" />
+                                    <span>Ubah</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setConfirmForceDeleteEng(false);
+                                      setDeleteEngReason('');
+                                      setDeletingEng(eng);
+                                    }}
+                                    className="px-2.5 py-1.5 text-[11px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg inline-flex items-center gap-1 transition-colors"
+                                    title="Hapus penugasan audit"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                                    <span>Hapus</span>
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ======================================================================= */}
       {/* TAB 1: VERIFIKASI TRANSAKSI OLEH BADAN AUDIT HURIA                     */}
@@ -1350,15 +1669,26 @@ export const AuditPage: React.FC = () => {
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Pilih Penugasan Pemeriksaan
                 </span>
-                <span
-                  className={`px-2.5 py-0.5 rounded-full text-xs font-medium w-fit ${
-                    currentEngagement?.status === 'completed'
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      : 'bg-amber-50 text-amber-700 border border-amber-200'
-                  }`}
-                >
-                  Status: {currentEngagement?.status === 'completed' ? 'Selesai (Disahkan)' : 'Pemeriksaan Berjalan'}
-                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {canAssignAudit && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('penugasan')}
+                      className="text-xs font-semibold text-purple-700 hover:text-purple-900 underline"
+                    >
+                      Kelola Daftar Penugasan →
+                    </button>
+                  )}
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-medium w-fit ${
+                      currentEngagement?.status === 'completed'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-amber-50 text-amber-700 border border-amber-200'
+                    }`}
+                  >
+                    Status: {currentEngagement?.status === 'completed' ? 'Selesai (Disahkan)' : 'Pemeriksaan Berjalan'}
+                  </span>
+                </div>
               </div>
 
               <select
@@ -2429,13 +2759,27 @@ export const AuditPage: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL 6: BUKA PENUGASAN AUDIT BARU */}
+      {/* MODAL 6: TAMBAH / UBAH PENUGASAN AUDIT */}
       {showNewEngModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="font-bold text-gray-900 text-base">Buka Penugasan Pemeriksaan Baru</h3>
-              <button onClick={() => setShowNewEngModal(false)} className="text-gray-400 hover:text-gray-600">
+              <div>
+                <h3 className="font-bold text-gray-900 text-base">
+                  {editingEngId ? 'Ubah Penugasan Pemeriksaan Audit' : 'Buka Penugasan Pemeriksaan Baru'}
+                </h3>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  Kewenangan Pendeta Ressort · Penugasan resmi pemeriksaan kepada Badan Audit Huria
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNewEngModal(false);
+                  setEditingEngId(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -2457,7 +2801,7 @@ export const AuditPage: React.FC = () => {
                   <select
                     value={newEngJenis}
                     onChange={(e) => setNewEngJenis(e.target.value as any)}
-                    className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2"
+                    className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2 bg-white"
                   >
                     <option value="semester_1">Semester I</option>
                     <option value="semester_2">Semester II</option>
@@ -2473,33 +2817,193 @@ export const AuditPage: React.FC = () => {
                   type="text"
                   value={newEngJudul}
                   onChange={(e) => setNewEngJudul(e.target.value)}
+                  placeholder="Contoh: Pemeriksaan Keuangan Semester II Tahun 2026"
                   className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Batas Waktu Pemeriksaan</label>
-                <input
-                  type="date"
-                  value={newEngBatasWaktu}
-                  onChange={(e) => setNewEngBatasWaktu(e.target.value)}
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Instruksi / Ruang Lingkup Pemeriksaan (Opsional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={newEngDeskripsi}
+                  onChange={(e) => setNewEngDeskripsi(e.target.value)}
+                  placeholder="Contoh: Fokus audit pada bukti pengeluaran pembangunan & setoran BPSK 55%..."
                   className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2"
                 />
               </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Tanggal Dibuka</label>
+                  <input
+                    type="date"
+                    value={newEngDibukaPada}
+                    onChange={(e) => setNewEngDibukaPada(e.target.value)}
+                    className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Batas Waktu Pemeriksaan</label>
+                  <input
+                    type="date"
+                    value={newEngBatasWaktu}
+                    onChange={(e) => setNewEngBatasWaktu(e.target.value)}
+                    className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2"
+                  />
+                </div>
+              </div>
+
+              {editingEngId && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Status Penugasan</label>
+                  <select
+                    value={newEngStatus}
+                    onChange={(e) => setNewEngStatus(e.target.value as AuditEngagementStatus)}
+                    className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2 bg-white"
+                  >
+                    <option value="draft">Draf</option>
+                    <option value="in_progress">Sedang Berjalan</option>
+                    <option value="completed">Selesai (Disahkan)</option>
+                    <option value="cancelled">Dibatalkan</option>
+                  </select>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
               <button
-                onClick={() => setShowNewEngModal(false)}
-                className="px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-xs font-medium"
+                type="button"
+                disabled={isSavingEng}
+                onClick={() => {
+                  setShowNewEngModal(false);
+                  setEditingEngId(null);
+                }}
+                className="px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-xs font-medium disabled:opacity-50"
               >
                 Batal
               </button>
               <button
-                onClick={handleCreateEngagement}
-                className="px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold"
+                type="button"
+                disabled={isSavingEng}
+                onClick={handleSaveEngagement}
+                className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-semibold disabled:opacity-50"
               >
-                Buka Penugasan
+                {isSavingEng ? 'Menyimpan...' : editingEngId ? 'Simpan Perubahan' : 'Buka Penugasan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 6B: KONFIRMASI HAPUS PENUGASAN AUDIT */}
+      {deletingEng && canAssignAudit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3 text-rose-600">
+                <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">Konfirmasi Hapus Penugasan Audit</h3>
+                  <p className="text-xs text-slate-500">
+                    {deletingEng.judul} (T.A. {deletingEng.tahun})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isDeletingEng}
+                onClick={() => {
+                  setDeletingEng(null);
+                  setConfirmForceDeleteEng(false);
+                  setDeleteEngReason('');
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {!deletingEngMetrics.hasLinkedData ? (
+              <div className="space-y-3 text-xs">
+                <p className="text-slate-600 leading-relaxed">
+                  Penugasan audit ini belum memiliki lembar kerja auditor, temuan audit, maupun opini final. Apakah Anda yakin ingin menghapus penugasan{' '}
+                  <strong>{deletingEng.judul}</strong> secara permanen?
+                </p>
+                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-800 text-[11px]">
+                  Pemeriksaan integritas lolos: aman dihapus permanen.
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 text-xs">
+                <div className="p-3.5 bg-rose-50 rounded-xl border border-rose-200 text-rose-950 space-y-2">
+                  <p className="font-bold text-rose-800">Peringatan Data Pemeriksaan Terkait</p>
+                  <p className="text-[11px] leading-relaxed">
+                    Penugasan audit ini sudah memiliki data pemeriksaan yang ikut terhapus bila dilanjutkan:
+                  </p>
+                  <ul className="list-disc list-inside text-[11px] space-y-0.5 font-medium">
+                    {deletingEngMetrics.reviewCount > 0 && (
+                      <li>{deletingEngMetrics.reviewCount} Lembar Kerja / Opini Anggota Auditor</li>
+                    )}
+                    {deletingEngMetrics.findingCount > 0 && (
+                      <li>{deletingEngMetrics.findingCount} Catatan Temuan Audit</li>
+                    )}
+                    {deletingEngMetrics.opinionCount > 0 && (
+                      <li>{deletingEngMetrics.opinionCount} Dokumen Opini Final Berita Acara</li>
+                    )}
+                  </ul>
+                </div>
+
+                <label className="flex items-start gap-2.5 p-3 rounded-xl border border-rose-200 bg-rose-50/40 cursor-pointer text-[11px] text-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={confirmForceDeleteEng}
+                    onChange={(e) => setConfirmForceDeleteEng(e.target.checked)}
+                    className="mt-0.5 rounded border-rose-300 text-rose-600 focus:ring-rose-500"
+                  />
+                  <span>
+                    Saya yakin untuk menghapus Penugasan Audit <strong>{deletingEng.judul}</strong> beserta seluruh data pemeriksaan terkait di atas.
+                  </span>
+                </label>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-slate-700">
+                Alasan Penghapusan (Audit Trail, Opsional)
+              </label>
+              <input
+                type="text"
+                value={deleteEngReason}
+                onChange={(e) => setDeleteEngReason(e.target.value)}
+                placeholder="Contoh: Jadwal penugasan diubah atau duplikat periode..."
+                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-rose-300"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={isDeletingEng}
+                onClick={() => {
+                  setDeletingEng(null);
+                  setConfirmForceDeleteEng(false);
+                  setDeleteEngReason('');
+                }}
+                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-medium disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingEng || (deletingEngMetrics.hasLinkedData && !confirmForceDeleteEng)}
+                onClick={handleExecuteDeleteEngagement}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-45 disabled:cursor-not-allowed"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeletingEng ? 'Menghapus...' : 'Hapus Permanen'}</span>
               </button>
             </div>
           </div>

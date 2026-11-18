@@ -88,14 +88,14 @@ export const AuditPage: React.FC = () => {
     recordCashCount,
   } = useData();
 
-  const { currentUser, isAdmin, canAssignAudit } = useAuth();
+  const { currentUser, isAdmin, isPendeta, canAssignAudit } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const globalToast = useToast();
 
   // Active sub-navigation
   const [activeTab, setActiveTab] = useState<
     'penugasan' | 'transaksi' | 'berkala' | 'pemeriksaan' | 'temuan' | 'opname' | 'anggota' | 'arsip'
-  >('transaksi');
+  >(isPendeta ? 'penugasan' : 'transaksi');
 
   // Transaction verification state
   const [txPeriodFilter, setTxPeriodFilter] = useState<'all' | 'tw_1' | 'tw_2' | 'tw_3' | 'tw_4' | 'sem_1' | 'sem_2' | 'tahunan'>('all');

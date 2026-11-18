@@ -1116,10 +1116,10 @@ export function generateWartaJemaatPDF(params: {
   doc.setTextColor(31, 36, 64);
   doc.text('Ringkasan Arus Kas Masuk dan Keluar (Konsolidasi Huria & Seksi):', 15, tblY);
 
-  const inc = posisiSummary?.totalPenerimaan || 168450000;
-  const exp = posisiSummary?.totalPengeluaran || 124800000;
-  const sur = inc - exp;
-  const kas = posisiSummary?.totalKas || 125850000;
+  const inc = posisiSummary?.totalPenerimaan ?? 0;
+  const exp = posisiSummary?.totalPengeluaran ?? 0;
+  const sur = posisiSummary?.surplus ?? (inc - exp);
+  const kas = posisiSummary?.totalKas ?? 0;
 
   autoTable(doc, {
     startY: tblY + 4,
@@ -1127,7 +1127,11 @@ export function generateWartaJemaatPDF(params: {
     body: [
       ['Total Penerimaan Kas & Pelean', formatRupiah(inc), 'Pelean I-V, Persembahan Ibadah, Donasi Terikat & Seksi'],
       ['Total Pengeluaran Pelayanan', formatRupiah(exp), 'Operasional Gereja, Listrik, Pelayanan Ibadah & Sosial'],
-      ['Surplus / (Defisit) Semester Berjalan', formatRupiah(sur), sur >= 0 ? 'Surplus Operasional' : 'Defisit Terkendali'],
+      [
+        'Surplus / (Defisit) Semester Berjalan',
+        formatRupiah(sur),
+        sur > 0 ? 'Surplus Operasional' : sur === 0 ? 'Berimbang / Nihil' : 'Defisit Terkendali',
+      ],
       ['Total Saldo Akhir Kas & Bank Per Akhir Periode', formatRupiah(kas), 'Tersimpan aman di Brankas Gereja & Rekening Bank'],
     ],
     headStyles: { fillColor: [50, 70, 120], textColor: [255, 255, 255], fontSize: 8.5 },

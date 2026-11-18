@@ -334,23 +334,41 @@ interface DataContextType {
   semesterReports: SemesterReport[];
   lpjReports: LpjReport[];
   lpjExceptions: LpjException[];
+  evaluateSemesterChecklist: (tahun: number, semester: 1 | 2) => {
+    checklist: SemesterReport['checklist_result'];
+    passed: boolean;
+    blockers: string[];
+  };
   runSemesterChecklist: (tahun: number, semester: 1 | 2) => Promise<{
     checklist: SemesterReport['checklist_result'];
     passed: boolean;
     blockers: string[];
   }>;
-  lockSemesterSnapshot: (reportId: string) => Promise<{ success: boolean; error?: string }>;
+  lockSemesterSnapshot: (
+    reportId: string,
+    fallbackPeriod?: { tahun: number; semester: 1 | 2 }
+  ) => Promise<{ success: boolean; error?: string; report?: SemesterReport }>;
+  unlockSemesterSnapshot: (reportId: string) => Promise<{ success: boolean; error?: string }>;
   forwardSemesterToPastor: (reportId: string, sentRef: string) => Promise<{ success: boolean; error?: string }>;
   acknowledgeSemesterReport: (reportId: string, pastorNote: string) => Promise<{ success: boolean; error?: string }>;
   announceSemesterReport: (reportId: string, medium: 'warta_jemaat' | 'mimbar' | 'papan_pengumuman' | 'lainnya', text: string) => Promise<{ success: boolean; error?: string }>;
   returnSemesterReport: (reportId: string, returnNotes: string) => Promise<{ success: boolean; error?: string }>;
 
+  evaluateLpjChecklist: (tahun: number) => {
+    checklist: LpjReport['checklist_result'];
+    passed: boolean;
+    blockers: string[];
+  };
   runLpjChecklist: (tahun: number) => Promise<{
     checklist: LpjReport['checklist_result'];
     passed: boolean;
     blockers: string[];
   }>;
-  lockLpjSnapshot: (lpjId: string) => Promise<{ success: boolean; error?: string }>;
+  lockLpjSnapshot: (
+    lpjId: string,
+    fallbackTahun?: number
+  ) => Promise<{ success: boolean; error?: string; report?: LpjReport }>;
+  unlockLpjSnapshot: (lpjId: string) => Promise<{ success: boolean; error?: string }>;
   submitLpjToMeeting: (lpjId: string, meetingDate: string, meetingRef: string) => Promise<{ success: boolean; error?: string }>;
   approveLpjReport: (lpjId: string, meetingNotes: string, attendeesCount: number) => Promise<{ success: boolean; error?: string }>;
   returnLpjReport: (lpjId: string, returnNotes: string) => Promise<{ success: boolean; error?: string }>;
@@ -5272,21 +5290,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // LAPORAN SEMESTER & LPJ TAHUNAN (ISAK 35) OPERATIONS
   // ===========================================================================
 
-  const runSemesterChecklist = async (
+  const evaluateSemesterChecklist = (
     tahun: number,
     semester: 1 | 2
-  ): Promise<{
+  ): {
     checklist: SemesterReport['checklist_result'];
     passed: boolean;
     blockers: string[];
-  }> => {
+  } => {
     const startMonth = semester === 1 ? 1 : 7;
     const endMonth = semester === 1 ? 6 : 12;
 
     // 1. Months closed
     const requiredMonths = [startMonth, startMonth + 1, startMonth + 2, startMonth + 3, startMonth + 4, endMonth];
     const closedMonths = periodClosings.filter((pc) => pc.tahun === tahun && pc.is_closed).map((pc) => pc.bulan);
-    const monthsClosed = requiredMonths.every((m) => closedMonths.includes(m));
+    const missingMonths = requiredMonths.filter((m) => !closedMonths.includes(m));
+    const monthsClosed = missingMonths.length === 0;
 
     // 2. No draft or submitted transactions in that semester
     const semTxs = transactions.filter((t) => {
@@ -5294,36 +5313,42 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const m = d.getMonth() + 1;
       return d.getFullYear() === tahun && m >= startMonth && m <= endMonth;
     });
-    const hasPendingTx = semTxs.some((t) => t.status === 'draft' || t.status === 'submitted');
+    const pendingTxCount = semTxs.filter((t) => t.status === 'draft' || t.status === 'submitted').length;
+    const hasPendingTx = pendingTxCount > 0;
 
-    // 3. Storage reconciliations
+    // 3. Storage reconciliations (every active storage account must be reconciled in this semester)
     const semRecs = reconciliations.filter((r) => {
       const d = new Date(r.tanggal);
       const m = d.getMonth() + 1;
       return d.getFullYear() === tahun && m >= startMonth && m <= endMonth;
     });
-    const storagesReconciled = semRecs.length >= storageAccounts.filter((s) => s.is_active).length;
+    const activeStorages = storageAccounts.filter((s) => s.is_active);
+    const missingStorages = activeStorages.filter((sa) => !semRecs.some((r) => r.storage_account_id === sa.id));
+    const storagesReconciled = activeStorages.length === 0 || missingStorages.length === 0;
 
     // 4. Overdue advances reviewed
-    const unaddressedOverdueAdvances = advances.some((a) => {
+    const unaddressedAdvancesCount = advances.filter((a) => {
       const isOverdue = a.status === 'overdue' || (a.status === 'active' && new Date(a.due_date) < new Date());
       const hasSettlement = advanceSettlements.some((s) => s.advance_id === a.id);
       return isOverdue && !hasSettlement;
-    });
+    }).length;
+    const unaddressedOverdueAdvances = unaddressedAdvancesCount > 0;
 
     // 5. Budget variance explained (threshold default 10%)
     const budgetVarianceExplained = true;
 
     // 6. Prior mandatory findings resolved
-    const unresolvedFindings = auditFindings.some(
+    const unresolvedFindingsCount = auditFindings.filter(
       (f) => f.severity === 'wajib_diperbaiki' && f.status !== 'selesai' && f.status !== 'diterima'
-    );
+    ).length;
+    const unresolvedFindings = unresolvedFindingsCount > 0;
 
-    // Check exceptions
+    // Check exceptions (match either report DB id or deterministic fallback id)
     const semReport = semesterReports.find((r) => r.tahun === tahun && r.semester === semester);
-    const grantedExceptions = semReport
-      ? lpjExceptions.filter((e) => e.target_type === 'semester' && e.target_id === semReport.id)
-      : [];
+    const deterministicId = `sem-rep-${tahun}-${semester}`;
+    const grantedExceptions = lpjExceptions.filter(
+      (e) => e.target_type === 'semester' && (e.target_id === semReport?.id || e.target_id === deterministicId)
+    );
 
     const isRuleExempted = (ruleCode: string) => grantedExceptions.some((e) => e.rule_code === ruleCode);
 
@@ -5334,12 +5359,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       advances_reviewed: !unaddressedOverdueAdvances || isRuleExempted('advances_reviewed'),
       budget_variance_explained: budgetVarianceExplained || isRuleExempted('budget_variance_explained'),
       prior_findings_resolved: !unresolvedFindings || isRuleExempted('prior_findings_resolved'),
+      details: {
+        missing_months: missingMonths,
+        pending_tx_count: pendingTxCount,
+        missing_storages: missingStorages.map((s) => s.nama),
+        overdue_advances_count: unaddressedAdvancesCount,
+        unresolved_findings_count: unresolvedFindingsCount,
+      },
     };
 
     const blockers: string[] = [];
     if (!checklist.months_closed) blockers.push(`Seluruh 6 bulan pada Semester ${semester} belum ditutup buku secara resmi.`);
-    if (!checklist.no_draft_transactions) blockers.push('Masih ada transaksi dalam status Draf atau Diajukan pada periode semester ini.');
-    if (!checklist.storages_reconciled) blockers.push('Belum semua tempat penyimpanan kas fisik / bank memiliki rekonsiliasi akhir semester.');
+    if (!checklist.no_draft_transactions) blockers.push(`Masih ada ${pendingTxCount} transaksi dalam status Draf atau Diajukan pada periode semester ini.`);
+    if (!checklist.storages_reconciled) {
+      blockers.push(
+        missingStorages.length > 0
+          ? `Belum direkonsiliasi pada Semester ${semester}: ${missingStorages.map((s) => s.nama).join(', ')}.`
+          : 'Belum semua tempat penyimpanan kas fisik / bank memiliki rekonsiliasi akhir semester.'
+      );
+    }
     if (!checklist.advances_reviewed) blockers.push('Terdapat panjar kegiatan yang melewati batas waktu tanpa pertanggungjawaban.');
     if (!checklist.prior_findings_resolved) blockers.push('Masih ada temuan audit dengan tingkat Wajib Diperbaiki yang belum ditutup.');
 
@@ -5350,11 +5388,45 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   };
 
-  const lockSemesterSnapshot = async (reportId: string): Promise<{ success: boolean; error?: string }> => {
-    const report = semesterReports.find((r) => r.id === reportId);
+  const runSemesterChecklist = async (
+    tahun: number,
+    semester: 1 | 2
+  ): Promise<{
+    checklist: SemesterReport['checklist_result'];
+    passed: boolean;
+    blockers: string[];
+  }> => {
+    return evaluateSemesterChecklist(tahun, semester);
+  };
+
+  const lockSemesterSnapshot = async (
+    reportId: string,
+    fallbackPeriod?: { tahun: number; semester: 1 | 2 }
+  ): Promise<{ success: boolean; error?: string; report?: SemesterReport }> => {
+    let report =
+      semesterReports.find((r) => r.id === reportId) ||
+      (fallbackPeriod
+        ? semesterReports.find((r) => r.tahun === fallbackPeriod.tahun && r.semester === fallbackPeriod.semester)
+        : undefined);
+
+    if (!report && fallbackPeriod) {
+      const nowInit = new Date().toISOString();
+      report = {
+        id: reportId || `sem-rep-${fallbackPeriod.tahun}-${fallbackPeriod.semester}`,
+        tahun: fallbackPeriod.tahun,
+        semester: fallbackPeriod.semester,
+        status: 'preparation',
+        version: 1,
+        checklist_result: evaluateSemesterChecklist(fallbackPeriod.tahun, fallbackPeriod.semester).checklist,
+        created_by: currentUser?.id || 'user-admin',
+        created_at: nowInit,
+        updated_at: nowInit,
+      };
+    }
+
     if (!report) return { success: false, error: 'Laporan Semester tidak ditemukan.' };
 
-    const check = await runSemesterChecklist(report.tahun, report.semester);
+    const check = evaluateSemesterChecklist(report.tahun, report.semester);
     if (!check.passed) {
       return {
         success: false,
@@ -5362,13 +5434,44 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
+    const startMonth = report.semester === 1 ? 1 : 7;
+    const endMonth = report.semester === 1 ? 6 : 12;
+    let totalPenerimaan = 0;
+    let totalPengeluaran = 0;
+    let totalTransferMasuk = 0;
+    let totalTransferKeluar = 0;
+
+    transactions
+      .filter((tx) => {
+        if (tx.status !== 'approved') return false;
+        const d = new Date(tx.tanggal);
+        const m = d.getMonth() + 1;
+        return d.getFullYear() === report!.tahun && m >= startMonth && m <= endMonth;
+      })
+      .forEach((tx) => {
+        const amt = Number(tx.amount) || 0;
+        if (tx.type === 'income') totalPenerimaan += amt;
+        else if (tx.type === 'expense') totalPengeluaran += amt;
+        else if (tx.type === 'transfer_in') totalTransferMasuk += amt;
+        else if (tx.type === 'transfer_out') totalTransferKeluar += amt;
+      });
+
     const kasBalances = getKasBalances();
+    const totalKasDanBank = kasBalances.reduce((sum, k) => sum + k.saldo_resmi, 0);
     const storageBalances = getStorageBalances();
-    const budgetSummary = getConsolidatedBudgetRealization(report.tahun, report.semester === 1 ? 6 : 12);
+    const budgetSummary = getConsolidatedBudgetRealization(report.tahun, endMonth);
 
     const snapshot = {
       locked_at: new Date().toISOString(),
       locked_by: currentUser?.id,
+      semesterSummary: {
+        totalPenerimaan,
+        totalPengeluaran,
+        surplus: totalPenerimaan - totalPengeluaran,
+        totalTransferMasuk,
+        totalTransferKeluar,
+        totalKas: totalKasDanBank,
+      },
       kasBalances,
       storageBalances,
       budgetSummary,
@@ -5377,29 +5480,74 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const nowIso = new Date().toISOString();
-    setSemesterReports((prev) =>
-      prev.map((r) =>
-        r.id === reportId
-          ? {
-              ...r,
-              status: 'drafted',
-              snapshot_data: snapshot,
-              checklist_result: check.checklist,
-              updated_at: nowIso,
-            }
-          : r
-      )
-    );
+    const updatedReport: SemesterReport = {
+      ...report,
+      status: 'drafted',
+      snapshot_data: snapshot,
+      checklist_result: check.checklist,
+      updated_at: nowIso,
+    };
+
     if (isSupabaseConfigured) {
-      await syncUpdate(
+      const syncRes = await syncUpsert('semester_reports', updatedReport);
+      if (!syncRes.success) {
+        return {
+          success: false,
+          error: `Gagal menyimpan snapshot ke database: ${syncRes.error || 'Terjadi kesalahan sinkronisasi.'}`,
+        };
+      }
+    }
+
+    setSemesterReports((prev) => {
+      const exists = prev.some((r) => r.id === updatedReport.id);
+      if (exists) {
+        return prev.map((r) => (r.id === updatedReport.id ? updatedReport : r));
+      }
+      return [...prev, updatedReport];
+    });
+
+    addAuditLog(
+      'semester_reports',
+      updatedReport.id,
+      'LOCK_SNAPSHOT',
+      null,
+      snapshot,
+      `Mengunci snapshot angka Laporan Semester ${updatedReport.semester} Tahun ${updatedReport.tahun}`
+    );
+    return { success: true, report: updatedReport };
+  };
+
+  const unlockSemesterSnapshot = async (reportId: string): Promise<{ success: boolean; error?: string }> => {
+    const report = semesterReports.find((r) => r.id === reportId);
+    if (!report) return { success: false, error: 'Laporan Semester tidak ditemukan.' };
+    if (report.status === 'announced') {
+      return { success: false, error: 'Laporan yang sudah diwartakan ke jemaat tidak dapat dibuka kembali.' };
+    }
+
+    const nowIso = new Date().toISOString();
+    if (isSupabaseConfigured) {
+      const syncRes = await syncUpdate(
         'semester_reports',
-        { status: 'drafted', snapshot_data: snapshot, checklist_result: check.checklist, updated_at: nowIso },
+        { status: 'preparation', snapshot_data: null, updated_at: nowIso },
         'id',
         reportId
       );
+      if (!syncRes.success) {
+        return { success: false, error: `Gagal membuka kunci snapshot di database: ${syncRes.error}` };
+      }
     }
 
-    addAuditLog('semester_reports', reportId, 'LOCK_SNAPSHOT', null, snapshot, `Mengunci snapshot angka Laporan Semester ${report.semester} Tahun ${report.tahun}`);
+    setSemesterReports((prev) =>
+      prev.map((r) => (r.id === reportId ? { ...r, status: 'preparation', snapshot_data: null, updated_at: nowIso } : r))
+    );
+    addAuditLog(
+      'semester_reports',
+      reportId,
+      'UNLOCK_SNAPSHOT',
+      null,
+      { status: 'preparation' },
+      `Membuka kembali kunci snapshot Laporan Semester ${report.semester} Tahun ${report.tahun} untuk pembaruan data`
+    );
     return { success: true };
   };
 
@@ -5413,6 +5561,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const nowIso = new Date().toISOString();
     const sentDate = nowIso.split('T')[0];
+    if (isSupabaseConfigured) {
+      const syncRes = await syncUpdate(
+        'semester_reports',
+        { status: 'sent_to_pastor', sent_ref: sentRef, sent_to_pastor_date: sentDate, updated_at: nowIso },
+        'id',
+        reportId
+      );
+      if (!syncRes.success) {
+        return { success: false, error: `Gagal meneruskan ke Pendeta: ${syncRes.error}` };
+      }
+    }
     setSemesterReports((prev) =>
       prev.map((r) =>
         r.id === reportId
@@ -5426,14 +5585,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : r
       )
     );
-    if (isSupabaseConfigured) {
-      await syncUpdate(
-        'semester_reports',
-        { status: 'sent_to_pastor', sent_ref: sentRef, sent_to_pastor_date: sentDate, updated_at: nowIso },
-        'id',
-        reportId
-      );
-    }
     addAuditLog('semester_reports', reportId, 'FORWARD_TO_PASTOR', null, { sentRef }, 'Meneruskan Laporan Semester ke Pendeta Ressort');
     return { success: true };
   };
@@ -5447,6 +5598,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const nowIso = new Date().toISOString();
+    if (isSupabaseConfigured) {
+      const syncRes = await syncUpdate(
+        'semester_reports',
+        { pastor_ack_by: currentUser?.id, pastor_ack_at: nowIso, pastor_note: pastorNote, updated_at: nowIso },
+        'id',
+        reportId
+      );
+      if (!syncRes.success) {
+        return { success: false, error: `Gagal menyimpan verifikasi Pendeta: ${syncRes.error}` };
+      }
+    }
     setSemesterReports((prev) =>
       prev.map((r) =>
         r.id === reportId
@@ -5460,14 +5622,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : r
       )
     );
-    if (isSupabaseConfigured) {
-      await syncUpdate(
-        'semester_reports',
-        { pastor_ack_by: currentUser?.id, pastor_ack_at: nowIso, pastor_note: pastorNote, updated_at: nowIso },
-        'id',
-        reportId
-      );
-    }
     addAuditLog('semester_reports', reportId, 'PASTOR_ACKNOWLEDGE', null, { pastorNote }, 'Pendeta Ressort menerima dan memeriksa Laporan Semester');
     return { success: true };
   };
@@ -5479,6 +5633,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): Promise<{ success: boolean; error?: string }> => {
     const nowIso = new Date().toISOString();
     const announcedDate = nowIso.split('T')[0];
+    if (isSupabaseConfigured) {
+      const syncRes = await syncUpdate(
+        'semester_reports',
+        { status: 'announced', announced_date: announcedDate, announcement_medium: medium, announcement_text: text, updated_at: nowIso },
+        'id',
+        reportId
+      );
+      if (!syncRes.success) {
+        return { success: false, error: `Gagal menyimpan status pewartaan: ${syncRes.error}` };
+      }
+    }
     setSemesterReports((prev) =>
       prev.map((r) =>
         r.id === reportId
@@ -5493,14 +5658,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : r
       )
     );
-    if (isSupabaseConfigured) {
-      await syncUpdate(
-        'semester_reports',
-        { status: 'announced', announced_date: announcedDate, announcement_medium: medium, announcement_text: text, updated_at: nowIso },
-        'id',
-        reportId
-      );
-    }
     addAuditLog('semester_reports', reportId, 'ANNOUNCE', null, { medium, text }, 'Mencatat pewartaan laporan keuangan kepada jemaat');
     return { success: true };
   };
@@ -5510,6 +5667,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     returnNotes: string
   ): Promise<{ success: boolean; error?: string }> => {
     const nowIso = new Date().toISOString();
+    if (isSupabaseConfigured) {
+      const syncRes = await syncUpdate(
+        'semester_reports',
+        { status: 'returned', return_notes: returnNotes, updated_at: nowIso },
+        'id',
+        reportId
+      );
+      if (!syncRes.success) {
+        return { success: false, error: `Gagal mengembalikan laporan semester: ${syncRes.error}` };
+      }
+    }
     setSemesterReports((prev) =>
       prev.map((r) =>
         r.id === reportId
@@ -5522,60 +5690,59 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : r
       )
     );
-    if (isSupabaseConfigured) {
-      await syncUpdate(
-        'semester_reports',
-        { status: 'returned', return_notes: returnNotes, updated_at: nowIso },
-        'id',
-        reportId
-      );
-    }
     addAuditLog('semester_reports', reportId, 'RETURN', null, { returnNotes }, 'Mengembalikan Laporan Semester dengan catatan perbaikan');
     return { success: true };
   };
 
-  const runLpjChecklist = async (
+  const evaluateLpjChecklist = (
     tahun: number
-  ): Promise<{
+  ): {
     checklist: LpjReport['checklist_result'];
     passed: boolean;
     blockers: string[];
-  }> => {
+  } => {
     // 1. All 12 months closed
     const closedMonths = periodClosings.filter((pc) => pc.tahun === tahun && pc.is_closed).map((pc) => pc.bulan);
-    const allMonthsClosed = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].every((m) => closedMonths.includes(m));
+    const missingMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter((m) => !closedMonths.includes(m));
+    const allMonthsClosed = missingMonths.length === 0;
 
     // 2. No pending transactions
     const yearTxs = transactions.filter((t) => new Date(t.tanggal).getFullYear() === tahun);
-    const hasPendingTx = yearTxs.some((t) => t.status === 'draft' || t.status === 'submitted');
+    const pendingTxCount = yearTxs.filter((t) => t.status === 'draft' || t.status === 'submitted').length;
+    const hasPendingTx = pendingTxCount > 0;
 
     // 3. All reconciliations completed
-    const storagesReconciled = storageAccounts.filter((s) => s.is_active).every((sa) =>
-      reconciliations.some((r) => r.storage_account_id === sa.id && new Date(r.tanggal).getFullYear() === tahun)
+    const activeStorages = storageAccounts.filter((s) => s.is_active);
+    const missingStorages = activeStorages.filter(
+      (sa) => !reconciliations.some((r) => r.storage_account_id === sa.id && new Date(r.tanggal).getFullYear() === tahun)
     );
+    const storagesReconciled = activeStorages.length === 0 || missingStorages.length === 0;
 
     // 4. Overdue advances cleared or reserved
-    const unaddressedOverdueAdvances = advances.some((a) => {
+    const unaddressedAdvancesCount = advances.filter((a) => {
       const isOverdue = a.status === 'overdue' || (a.status === 'active' && new Date(a.due_date) < new Date());
       const hasSettlement = advanceSettlements.some((s) => s.advance_id === a.id);
       return isOverdue && !hasSettlement;
-    });
+    }).length;
+    const unaddressedOverdueAdvances = unaddressedAdvancesCount > 0;
 
     // 5. Budget deviations clarified
     const budgetDeviationsClarified = true;
 
     // 6. Audit findings settled
-    const unresolvedFindings = auditFindings.some(
+    const unresolvedFindingsCount = auditFindings.filter(
       (f) => f.severity === 'wajib_diperbaiki' && f.status !== 'selesai' && f.status !== 'diterima'
-    );
+    ).length;
+    const unresolvedFindings = unresolvedFindingsCount > 0;
 
     // 7. Inventory physical checked
     const inventoryChecked = fixedAssets.length > 0;
 
     const lpj = lpjReports.find((l) => l.tahun === tahun);
-    const grantedExceptions = lpj
-      ? lpjExceptions.filter((e) => e.target_type === 'lpj' && e.target_id === lpj.id)
-      : [];
+    const deterministicId = `lpj-rep-${tahun}`;
+    const grantedExceptions = lpjExceptions.filter(
+      (e) => e.target_type === 'lpj' && (e.target_id === lpj?.id || e.target_id === deterministicId)
+    );
 
     const isExempt = (code: string) => grantedExceptions.some((e) => e.rule_code === code);
 
@@ -5587,15 +5754,29 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       budget_deviations_clarified: budgetDeviationsClarified || isExempt('budget_deviations_clarified'),
       audit_findings_settled: !unresolvedFindings || isExempt('audit_findings_settled'),
       inventory_physical_checked: inventoryChecked || isExempt('inventory_physical_checked'),
+      details: {
+        missing_months: missingMonths,
+        pending_tx_count: pendingTxCount,
+        missing_storages: missingStorages.map((s) => s.nama),
+        overdue_advances_count: unaddressedAdvancesCount,
+        unresolved_findings_count: unresolvedFindingsCount,
+        assets_count: fixedAssets.length,
+      },
     };
 
     const blockers: string[] = [];
     if (!checklist.all_months_closed) blockers.push(`Seluruh 12 bulan pada Tahun ${tahun} belum ditutup buku.`);
-    if (!checklist.no_pending_transactions) blockers.push('Masih ada transaksi dalam status Draf atau Diajukan pada tahun berjalan.');
-    if (!checklist.all_reconciliations_completed) blockers.push('Belum semua rekening bank/kas fisik selesai direkonsiliasi akhir tahun.');
+    if (!checklist.no_pending_transactions) blockers.push(`Masih ada ${pendingTxCount} transaksi dalam status Draf atau Diajukan pada tahun berjalan.`);
+    if (!checklist.all_reconciliations_completed) {
+      blockers.push(
+        missingStorages.length > 0
+          ? `Rekening/kas belum direkonsiliasi tahun ${tahun}: ${missingStorages.map((s) => s.nama).join(', ')}.`
+          : 'Belum semua rekening bank/kas fisik selesai direkonsiliasi akhir tahun.'
+      );
+    }
     if (!checklist.overdue_advances_cleared_or_reserved) blockers.push('Terdapat panjar kegiatan belum diselesaikan.');
     if (!checklist.audit_findings_settled) blockers.push('Terdapat temuan wajib periksa dari Badan Audit yang belum tuntas ditindaklanjuti.');
-    if (!checklist.inventory_physical_checked) blockers.push('Cek fisik inventaris gereja belum dilakukan.');
+    if (!checklist.inventory_physical_checked) blockers.push('Cek fisik inventaris gereja belum dilakukan (atau belum ada data aset tetap).');
 
     return {
       checklist,
@@ -5604,14 +5785,60 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   };
 
-  const lockLpjSnapshot = async (lpjId: string): Promise<{ success: boolean; error?: string }> => {
-    const lpj = lpjReports.find((l) => l.id === lpjId);
+  const runLpjChecklist = async (
+    tahun: number
+  ): Promise<{
+    checklist: LpjReport['checklist_result'];
+    passed: boolean;
+    blockers: string[];
+  }> => {
+    return evaluateLpjChecklist(tahun);
+  };
+
+  const lockLpjSnapshot = async (
+    lpjId: string,
+    fallbackTahun?: number
+  ): Promise<{ success: boolean; error?: string; report?: LpjReport }> => {
+    let lpj =
+      lpjReports.find((l) => l.id === lpjId) ||
+      (fallbackTahun ? lpjReports.find((l) => l.tahun === fallbackTahun) : undefined);
+
+    if (!lpj && fallbackTahun) {
+      const nowInit = new Date().toISOString();
+      lpj = {
+        id: lpjId || `lpj-rep-${fallbackTahun}`,
+        tahun: fallbackTahun,
+        nomor_dokumen: `HKBP-HTR/LPJ/${fallbackTahun}/001`,
+        status: 'preparation',
+        version: 1,
+        checklist_result: evaluateLpjChecklist(fallbackTahun).checklist,
+        created_by: currentUser?.id || 'user-admin',
+        created_at: nowInit,
+        updated_at: nowInit,
+      };
+    }
+
     if (!lpj) return { success: false, error: 'LPJ tidak ditemukan.' };
 
-    const check = await runLpjChecklist(lpj.tahun);
+    const check = evaluateLpjChecklist(lpj.tahun);
     if (!check.passed) {
       return { success: false, error: `Checklist LPJ belum terpenuhi: ${check.blockers.join('; ')}` };
     }
+
+    let penerimaanMurni = 0;
+    let pengeluaranMurni = 0;
+    let transferMasuk = 0;
+    let transferKeluar = 0;
+
+    transactions
+      .filter((tx) => tx.status === 'approved' && new Date(tx.tanggal).getFullYear() === lpj!.tahun)
+      .forEach((tx) => {
+        const amt = Number(tx.amount) || 0;
+        if (tx.type === 'income') penerimaanMurni += amt;
+        else if (tx.type === 'expense') pengeluaranMurni += amt;
+        else if (tx.type === 'transfer_in') transferMasuk += amt;
+        else if (tx.type === 'transfer_out') transferKeluar += amt;
+      });
 
     const posisiKeuangan = getPosisiKeuangan(lpj.tahun);
     const perubahanSaldoDana = getPerubahanSaldoDana(lpj.tahun);
@@ -5621,6 +5848,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const snapshot = {
       locked_at: new Date().toISOString(),
       locked_by: currentUser?.id,
+      annualSummary: {
+        penerimaanMurni,
+        pengeluaranMurni,
+        transferMasuk,
+        transferKeluar,
+      },
       posisiKeuangan,
       perubahanSaldoDana,
       arusKas,
@@ -5633,29 +5866,60 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const nowIso = new Date().toISOString();
-    setLpjReports((prev) =>
-      prev.map((l) =>
-        l.id === lpjId
-          ? {
-              ...l,
-              status: 'drafted',
-              snapshot_data: snapshot,
-              checklist_result: check.checklist,
-              updated_at: nowIso,
-            }
-          : l
-      )
-    );
+    const updatedLpj: LpjReport = {
+      ...lpj,
+      status: 'drafted',
+      snapshot_data: snapshot,
+      checklist_result: check.checklist,
+      updated_at: nowIso,
+    };
+
     if (isSupabaseConfigured) {
-      await syncUpdate(
+      const syncRes = await syncUpsert('lpj_reports', updatedLpj);
+      if (!syncRes.success) {
+        return {
+          success: false,
+          error: `Gagal menyimpan snapshot LPJ ke database: ${syncRes.error || 'Terjadi kesalahan sinkronisasi.'}`,
+        };
+      }
+    }
+
+    setLpjReports((prev) => {
+      const exists = prev.some((l) => l.id === updatedLpj.id);
+      if (exists) {
+        return prev.map((l) => (l.id === updatedLpj.id ? updatedLpj : l));
+      }
+      return [...prev, updatedLpj];
+    });
+
+    addAuditLog('lpj_reports', updatedLpj.id, 'LOCK_SNAPSHOT', null, snapshot, `Mengunci snapshot angka LPJ ISAK 35 Tahun ${updatedLpj.tahun}`);
+    return { success: true, report: updatedLpj };
+  };
+
+  const unlockLpjSnapshot = async (lpjId: string): Promise<{ success: boolean; error?: string }> => {
+    const lpj = lpjReports.find((l) => l.id === lpjId);
+    if (!lpj) return { success: false, error: 'LPJ tidak ditemukan.' };
+    if (lpj.status === 'approved') {
+      return { success: false, error: 'LPJ yang telah disahkan Rapat Huria terkunci permanen.' };
+    }
+
+    const nowIso = new Date().toISOString();
+    if (isSupabaseConfigured) {
+      const syncRes = await syncUpdate(
         'lpj_reports',
-        { status: 'drafted', snapshot_data: snapshot, checklist_result: check.checklist, updated_at: nowIso },
+        { status: 'preparation', snapshot_data: null, updated_at: nowIso },
         'id',
         lpjId
       );
+      if (!syncRes.success) {
+        return { success: false, error: `Gagal membuka kunci snapshot LPJ: ${syncRes.error}` };
+      }
     }
 
-    addAuditLog('lpj_reports', lpjId, 'LOCK_SNAPSHOT', null, snapshot, `Mengunci snapshot angka LPJ ISAK 35 Tahun ${lpj.tahun}`);
+    setLpjReports((prev) =>
+      prev.map((l) => (l.id === lpjId ? { ...l, status: 'preparation', snapshot_data: null, updated_at: nowIso } : l))
+    );
+    addAuditLog('lpj_reports', lpjId, 'UNLOCK_SNAPSHOT', null, { status: 'preparation' }, `Membuka kunci snapshot LPJ Tahun ${lpj.tahun}`);
     return { success: true };
   };
 
@@ -5665,6 +5929,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     meetingRef: string
   ): Promise<{ success: boolean; error?: string }> => {
     const nowIso = new Date().toISOString();
+    if (isSupabaseConfigured) {
+      const syncRes = await syncUpdate(
+        'lpj_reports',
+        { status: 'submitted_to_meeting', meeting_date: meetingDate, meeting_ref: meetingRef, updated_at: nowIso },
+        'id',
+        lpjId
+      );
+      if (!syncRes.success) return { success: false, error: `Gagal mengajukan LPJ: ${syncRes.error}` };
+    }
     setLpjReports((prev) =>
       prev.map((l) =>
         l.id === lpjId
@@ -5678,14 +5951,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : l
       )
     );
-    if (isSupabaseConfigured) {
-      await syncUpdate(
-        'lpj_reports',
-        { status: 'submitted_to_meeting', meeting_date: meetingDate, meeting_ref: meetingRef, updated_at: nowIso },
-        'id',
-        lpjId
-      );
-    }
     addAuditLog('lpj_reports', lpjId, 'SUBMIT_TO_MEETING', null, { meetingDate, meetingRef }, 'Mengajukan LPJ ke Rapat Huria');
     return { success: true };
   };
@@ -5699,6 +5964,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!lpj) return { success: false, error: 'LPJ tidak ditemukan.' };
 
     const nowIso = new Date().toISOString();
+    if (isSupabaseConfigured) {
+      const syncRes = await syncUpdate(
+        'lpj_reports',
+        {
+          status: 'approved',
+          meeting_notes: meetingNotes,
+          meeting_attendees_count: attendeesCount,
+          approved_by: currentUser?.id,
+          approved_at: nowIso,
+          updated_at: nowIso,
+        },
+        'id',
+        lpjId
+      );
+      if (!syncRes.success) return { success: false, error: `Gagal mengesahkan LPJ: ${syncRes.error}` };
+    }
     setLpjReports((prev) =>
       prev.map((l) =>
         l.id === lpjId
@@ -5714,21 +5995,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : l
       )
     );
-    if (isSupabaseConfigured) {
-      await syncUpdate(
-        'lpj_reports',
-        {
-          status: 'approved',
-          meeting_notes: meetingNotes,
-          meeting_attendees_count: attendeesCount,
-          approved_by: currentUser?.id,
-          approved_at: nowIso,
-          updated_at: nowIso,
-        },
-        'id',
-        lpjId
-      );
-    }
 
     addAuditLog(
       'lpj_reports',
@@ -5747,6 +6013,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     returnNotes: string
   ): Promise<{ success: boolean; error?: string }> => {
     const nowIso = new Date().toISOString();
+    if (isSupabaseConfigured) {
+      const syncRes = await syncUpdate(
+        'lpj_reports',
+        { status: 'returned', return_notes: returnNotes, updated_at: nowIso },
+        'id',
+        lpjId
+      );
+      if (!syncRes.success) return { success: false, error: `Gagal mengembalikan LPJ: ${syncRes.error}` };
+    }
     setLpjReports((prev) =>
       prev.map((l) =>
         l.id === lpjId
@@ -5759,14 +6034,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : l
       )
     );
-    if (isSupabaseConfigured) {
-      await syncUpdate(
-        'lpj_reports',
-        { status: 'returned', return_notes: returnNotes, updated_at: nowIso },
-        'id',
-        lpjId
-      );
-    }
     addAuditLog('lpj_reports', lpjId, 'RETURN_LPJ', null, { returnNotes }, 'Mengembalikan LPJ dengan catatan perbaikan Rapat Huria');
     return { success: true };
   };
@@ -5787,15 +6054,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       target_type: targetType,
       target_id: targetId,
       rule_code: ruleCode,
-      reason,
+      reason: reason.trim(),
       granted_by: currentUser?.id || 'admin',
       granted_at: nowIso,
     };
 
-    setLpjExceptions((prev) => [...prev, newExc]);
     if (isSupabaseConfigured) {
-      await syncInsert('lpj_exceptions', newExc);
+      const syncRes = await syncInsert('lpj_exceptions', newExc);
+      if (!syncRes.success) {
+        return { success: false, error: `Gagal menyimpan dispensasi ke database: ${syncRes.error}` };
+      }
     }
+    setLpjExceptions((prev) => [...prev, newExc]);
     addAuditLog('lpj_exceptions', newExc.id, 'INSERT', null, newExc, `Memberikan dispensasi aturan ${ruleCode}: ${reason}`);
     return { success: true };
   };
@@ -5878,7 +6148,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const getPerubahanSaldoDana = (_year: number): LaporanPerubahanSaldoDanaItem[] => {
     return kasList.map((k) => {
       const initial = openingBalances
-        .filter((ob) => ob.kas_id === k.id)
+        .filter((ob) => ob.kas_id === k.id && ob.tahun === _year)
         .reduce((sum, item) => sum + Number(item.amount), 0);
 
       let penerimaan_murni = 0;
@@ -5887,7 +6157,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let transfer_antar_dana_keluar = 0;
 
       transactions
-        .filter((tx) => tx.kas_id === k.id && tx.status === 'approved')
+        .filter((tx) => tx.kas_id === k.id && tx.status === 'approved' && new Date(tx.tanggal).getFullYear() === _year)
         .forEach((tx) => {
           const amt = Number(tx.amount);
           if (tx.type === 'income') penerimaan_murni += amt;
@@ -5997,8 +6267,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuditReviews([]);
     setAuditFindings([]);
     setAuditFinalOpinions([]);
-    setSemesterReports(DEMO_SEMESTER_REPORTS);
-    setLpjReports(DEMO_LPJ_REPORTS);
+    setSemesterReports((prev) =>
+      (prev.length > 0 ? prev : DEMO_SEMESTER_REPORTS).map((r) => ({
+        ...r,
+        status: 'preparation',
+        snapshot_data: null,
+      }))
+    );
+    setLpjReports((prev) =>
+      (prev.length > 0 ? prev : DEMO_LPJ_REPORTS).map((l) => ({
+        ...l,
+        status: 'preparation',
+        snapshot_data: null,
+      }))
+    );
 
     const resetLog: AuditLog = {
       id: `audit-${Date.now()}`,
@@ -6174,14 +6456,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         semesterReports,
         lpjReports,
         lpjExceptions,
+        evaluateSemesterChecklist,
         runSemesterChecklist,
         lockSemesterSnapshot,
+        unlockSemesterSnapshot,
         forwardSemesterToPastor,
         acknowledgeSemesterReport,
         announceSemesterReport,
         returnSemesterReport,
+        evaluateLpjChecklist,
         runLpjChecklist,
         lockLpjSnapshot,
+        unlockLpjSnapshot,
         submitLpjToMeeting,
         approveLpjReport,
         returnLpjReport,

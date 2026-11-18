@@ -458,8 +458,14 @@ export async function syncResetZeroDataInSupabase(): Promise<{ success: boolean;
     await supabase.from('opening_balance_adjustments').delete().neq('id', '');
     await supabase.from('opening_other_positions').delete().neq('id', '');
     // 9. Reset semester & LPJ report statuses
-    await supabase.from('semester_reports').update({ status: 'preparation', snapshot_data: null, updated_at: new Date().toISOString() }).neq('id', '');
-    await supabase.from('lpj_reports').update({ status: 'preparation', snapshot_data: null, updated_at: new Date().toISOString() }).neq('id', '');
+    await supabase
+      .from('semester_reports')
+      .update({ status: 'preparation', snapshot_data: null, checklist_result: {}, updated_at: new Date().toISOString() })
+      .neq('id', '');
+    await supabase
+      .from('lpj_reports')
+      .update({ status: 'preparation', snapshot_data: null, checklist_result: {}, updated_at: new Date().toISOString() })
+      .neq('id', '');
 
     return { success: true };
   } catch (err: any) {

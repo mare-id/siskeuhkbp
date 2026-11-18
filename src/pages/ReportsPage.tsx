@@ -31,9 +31,12 @@ import {
   BookmarkCheck,
   Landmark,
   Wallet,
+  Unlock,
+  X,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { formatRupiah, formatDateIndo, getIndoMonthName, MONTH_NAMES_INDO } from '../lib/formatters';
 import {
   exportToExcel,
@@ -72,14 +75,16 @@ export const ReportsPage: React.FC = () => {
     semesterReports,
     lpjReports,
     lpjExceptions,
-    runSemesterChecklist,
+    evaluateSemesterChecklist,
     lockSemesterSnapshot,
+    unlockSemesterSnapshot,
     forwardSemesterToPastor,
     acknowledgeSemesterReport,
     announceSemesterReport,
     returnSemesterReport,
-    runLpjChecklist,
+    evaluateLpjChecklist,
     lockLpjSnapshot,
+    unlockLpjSnapshot,
     submitLpjToMeeting,
     approveLpjReport,
     returnLpjReport,
@@ -156,23 +161,56 @@ export const ReportsPage: React.FC = () => {
   const [meetingNotesInput, setMeetingNotesInput] = useState<string>('Disahkan secara mufakat oleh seluruh perwakilan seksi dan majelis huria.');
   const [copiedWarta, setCopiedWarta] = useState<boolean>(false);
 
-  // Toast feedback
+  const globalToast = useToast();
+
+  // Toast feedback (visible globally via ToastContext AND inline banner if scrolled to top)
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ text, type });
-    setTimeout(() => setToastMessage(null), 4000);
+    globalToast.showToast(text, type);
+    setTimeout(() => setToastMessage(null), 5000);
   };
 
-  // Find Current Semester Report
+  // Snapshot lock/dispensation UI states
+  const [isLockingSemester, setIsLockingSemester] = useState(false);
+  const [semesterLockError, setSemesterLockError] = useState<string | null>(null);
+  const [isLockingLpj, setIsLockingLpj] = useState(false);
+  const [lpjLockError, setLpjLockError] = useState<string | null>(null);
+  const [activeDispensationKey, setActiveDispensationKey] = useState<string | null>(null);
+  const [dispensationReason, setDispensationReason] = useState<string>('');
+  const [isSavingDispensation, setIsSavingDispensation] = useState<boolean>(false);
+  const [showApproveLpjModal, setShowApproveLpjModal] = useState<boolean>(false);
+
+  // Find Current Semester Report (exact match for year & semester; no cross-period fallback)
   const currentSemesterReport = useMemo(
-    () => semesterReports.find((r) => r.tahun === selectedYear && r.semester === selectedSemester) || semesterReports[0],
+    () => semesterReports.find((r) => r.tahun === selectedYear && r.semester === selectedSemester),
     [semesterReports, selectedYear, selectedSemester]
   );
+  const effectiveSemesterReportId = currentSemesterReport?.id || `sem-rep-${selectedYear}-${selectedSemester}`;
 
-  // Find Current LPJ Report
+  // Find Current LPJ Report (exact match for year)
   const currentLpjReport = useMemo(
-    () => lpjReports.find((l) => l.tahun === selectedYear) || lpjReports[0],
+    () => lpjReports.find((l) => l.tahun === selectedYear),
     [lpjReports, selectedYear]
+  );
+  const effectiveLpjReportId = currentLpjReport?.id || `lpj-rep-${selectedYear}`;
+
+  // Clear inline errors when switching period
+  useEffect(() => {
+    setSemesterLockError(null);
+    setLpjLockError(null);
+    setActiveDispensationKey(null);
+    setDispensationReason('');
+  }, [selectedYear, selectedSemester, activeTab]);
+
+  // Live Checklist Evaluations (always computed from live transactions/closings/reconciliations + exceptions)
+  const liveSemesterChecklist = useMemo(
+    () => evaluateSemesterChecklist(selectedYear, selectedSemester),
+    [evaluateSemesterChecklist, selectedYear, selectedSemester]
+  );
+  const liveLpjChecklist = useMemo(
+    () => evaluateLpjChecklist(selectedYear),
+    [evaluateLpjChecklist, selectedYear]
   );
 
   // Available kas based on role
@@ -196,6 +234,98 @@ export const ReportsPage: React.FC = () => {
     () => getConsolidatedBudgetRealization(selectedYear, selectedSemester === 1 ? 6 : 12),
     [getConsolidatedBudgetRealization, selectedYear, selectedSemester]
   );
+
+  // Live or Locked Snapshot Summary for Semester Tab
+  const semesterSummary = useMemo(() => {
+    if (
+      currentSemesterReport &&
+      currentSemesterReport.status !== 'preparation' &&
+      currentSemesterReport.snapshot_data?.semesterSummary
+    ) {
+      return currentSemesterReport.snapshot_data.semesterSummary as {
+        totalPenerimaan: number;
+        totalPengeluaran: number;
+        surplus: number;
+        totalTransferMasuk: number;
+        totalTransferKeluar: number;
+        totalKas: number;
+      };
+    }
+
+    const startMonth = selectedSemester === 1 ? 1 : 7;
+    const endMonth = selectedSemester === 1 ? 6 : 12;
+    let totalPenerimaan = 0;
+    let totalPengeluaran = 0;
+    let totalTransferMasuk = 0;
+    let totalTransferKeluar = 0;
+
+    transactions
+      .filter((tx) => {
+        if (tx.status !== 'approved') return false;
+        const d = new Date(tx.tanggal);
+        const m = d.getMonth() + 1;
+        return d.getFullYear() === selectedYear && m >= startMonth && m <= endMonth;
+      })
+      .forEach((tx) => {
+        const amt = Number(tx.amount) || 0;
+        if (tx.type === 'income') totalPenerimaan += amt;
+        else if (tx.type === 'expense') totalPengeluaran += amt;
+        else if (tx.type === 'transfer_in') totalTransferMasuk += amt;
+        else if (tx.type === 'transfer_out') totalTransferKeluar += amt;
+      });
+
+    return {
+      totalPenerimaan,
+      totalPengeluaran,
+      surplus: totalPenerimaan - totalPengeluaran,
+      totalTransferMasuk,
+      totalTransferKeluar,
+      totalKas: posisiKeuanganData.total_kas_dan_bank,
+    };
+  }, [currentSemesterReport, transactions, selectedYear, selectedSemester, posisiKeuanganData.total_kas_dan_bank]);
+
+  // Live or Locked Snapshot Summary for Annual LPJ Section 4
+  const lpjAnnualSummary = useMemo(() => {
+    if (
+      currentLpjReport &&
+      currentLpjReport.status !== 'preparation' &&
+      currentLpjReport.snapshot_data?.annualSummary
+    ) {
+      const snap = currentLpjReport.snapshot_data.annualSummary as {
+        penerimaanMurni: number;
+        pengeluaranMurni: number;
+        transferMasuk: number;
+        transferKeluar: number;
+      };
+      return {
+        ...snap,
+        selisihMutasi: snap.transferMasuk - snap.transferKeluar,
+      };
+    }
+
+    let penerimaanMurni = 0;
+    let pengeluaranMurni = 0;
+    let transferMasuk = 0;
+    let transferKeluar = 0;
+
+    transactions
+      .filter((tx) => tx.status === 'approved' && new Date(tx.tanggal).getFullYear() === selectedYear)
+      .forEach((tx) => {
+        const amt = Number(tx.amount) || 0;
+        if (tx.type === 'income') penerimaanMurni += amt;
+        else if (tx.type === 'expense') pengeluaranMurni += amt;
+        else if (tx.type === 'transfer_in') transferMasuk += amt;
+        else if (tx.type === 'transfer_out') transferKeluar += amt;
+      });
+
+    return {
+      penerimaanMurni,
+      pengeluaranMurni,
+      transferMasuk,
+      transferKeluar,
+      selisihMutasi: transferMasuk - transferKeluar,
+    };
+  }, [currentLpjReport, transactions, selectedYear]);
 
   // Initial balance for single kas
   const initialBalance = openingBalances
@@ -274,7 +404,7 @@ export const ReportsPage: React.FC = () => {
   const handleCopyWartaText = () => {
     const textToCopy =
       currentSemesterReport?.announcement_text ||
-      `Warta Keuangan Semester ${selectedSemester} Tahun ${selectedYear} HKBP Ressort Hutaraja: Total Penerimaan Rp ${formatRupiah(posisiKeuanganData.total_kas_dan_bank)}, Kas & Setara Kas Rp ${formatRupiah(posisiKeuanganData.total_kas_dan_bank)}. Laporan telah diaudit dan disahkan.`;
+      `Warta Keuangan Semester ${selectedSemester} Tahun ${selectedYear} ${settings.church_name || 'HKBP Ressort Hutaraja'}: Total Penerimaan ${formatRupiah(semesterSummary.totalPenerimaan)}, Total Pengeluaran ${formatRupiah(semesterSummary.totalPengeluaran)}, Surplus/Defisit ${formatRupiah(semesterSummary.surplus)}, Saldo Kas & Bank Akhir Periode ${formatRupiah(semesterSummary.totalKas)}.`;
     navigator.clipboard.writeText(textToCopy);
     setCopiedWarta(true);
     setTimeout(() => setCopiedWarta(false), 3000);
@@ -1265,18 +1395,24 @@ export const ReportsPage: React.FC = () => {
 
               <button
                 onClick={() => {
-                  if (currentSemesterReport) {
-                    generateWartaJemaatPDF({
-                      report: currentSemesterReport,
-                      settings,
-                      posisiSummary: {
-                        totalKas: posisiKeuanganData.total_kas_dan_bank,
-                        totalPenerimaan: 168450000,
-                        totalPengeluaran: 124800000,
-                        surplus: 43650000,
-                      },
-                    });
-                  }
+                  const reportForPdf: SemesterReport = currentSemesterReport || {
+                    id: effectiveSemesterReportId,
+                    tahun: selectedYear,
+                    semester: selectedSemester,
+                    status: 'preparation',
+                    version: 1,
+                    checklist_result: liveSemesterChecklist.checklist,
+                  };
+                  generateWartaJemaatPDF({
+                    report: reportForPdf,
+                    settings,
+                    posisiSummary: {
+                      totalKas: semesterSummary.totalKas,
+                      totalPenerimaan: semesterSummary.totalPenerimaan,
+                      totalPengeluaran: semesterSummary.totalPengeluaran,
+                      surplus: semesterSummary.surplus,
+                    },
+                  });
                 }}
                 className="px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
               >
@@ -1292,49 +1428,227 @@ export const ReportsPage: React.FC = () => {
             <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                 <h3 className="font-bold text-gray-900 text-sm">Checklist Kesiapan Semester</h3>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  Prasyarat Mutlak
+                <span
+                  className={`text-[10px] font-bold px-2.5 py-1 rounded-md border ${
+                    currentSemesterReport && currentSemesterReport.status !== 'preparation'
+                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                      : liveSemesterChecklist.passed
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-amber-50 text-amber-800 border-amber-200'
+                  }`}
+                >
+                  {currentSemesterReport && currentSemesterReport.status !== 'preparation'
+                    ? 'Snapshot Terkunci'
+                    : liveSemesterChecklist.passed
+                    ? 'Siap Dikunci'
+                    : 'Prasyarat Mutlak'}
                 </span>
               </div>
 
-              <div className="space-y-2.5 text-xs">
+              <div className="space-y-3 text-xs">
                 {[
-                  { label: 'Semua 6 bulan semester telah ditutup buku', passed: currentSemesterReport?.checklist_result?.months_closed ?? true },
-                  { label: 'Tidak ada transaksi Draf / Diajukan yang tertunda', passed: currentSemesterReport?.checklist_result?.no_draft_transactions ?? true },
-                  { label: 'Rekonsiliasi seluruh tempat penyimpanan selesai', passed: currentSemesterReport?.checklist_result?.storages_reconciled ?? true },
-                  { label: 'Panjar kegiatan telah ditinjau & dipertanggungjawabkan', passed: currentSemesterReport?.checklist_result?.advances_reviewed ?? true },
-                  { label: 'Varians anggaran signifikan telah dijelaskan', passed: currentSemesterReport?.checklist_result?.budget_variance_explained ?? true },
-                  { label: 'Temuan wajib periksa dari audit sebelumnya tuntas', passed: currentSemesterReport?.checklist_result?.prior_findings_resolved ?? true },
-                ].map((item, idx) => (
-                  <div key={idx} className="flex items-start gap-2.5">
-                    {item.passed ? (
-                      <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-                    ) : (
-                      <AlertCircle className="w-4 h-4 text-rose-500 flex-shrink-0 mt-0.5" />
-                    )}
-                    <span className={item.passed ? 'text-gray-700 font-medium' : 'text-rose-700 font-medium'}>
-                      {item.label}
-                    </span>
-                  </div>
-                ))}
+                  {
+                    code: 'months_closed',
+                    label: 'Semua 6 bulan semester telah ditutup buku',
+                    passed: liveSemesterChecklist.checklist.months_closed,
+                    detail:
+                      !liveSemesterChecklist.checklist.months_closed &&
+                      liveSemesterChecklist.checklist.details?.missing_months?.length
+                        ? `Belum ditutup: ${(liveSemesterChecklist.checklist.details.missing_months as number[])
+                            .map((m) => getIndoMonthName(m))
+                            .join(', ')}`
+                        : null,
+                  },
+                  {
+                    code: 'no_draft_transactions',
+                    label: 'Tidak ada transaksi Draf / Diajukan yang tertunda',
+                    passed: liveSemesterChecklist.checklist.no_draft_transactions,
+                    detail:
+                      !liveSemesterChecklist.checklist.no_draft_transactions &&
+                      liveSemesterChecklist.checklist.details?.pending_tx_count
+                        ? `${liveSemesterChecklist.checklist.details.pending_tx_count} transaksi masih Draf/Diajukan`
+                        : null,
+                  },
+                  {
+                    code: 'storages_reconciled',
+                    label: 'Rekonsiliasi seluruh tempat penyimpanan selesai',
+                    passed: liveSemesterChecklist.checklist.storages_reconciled,
+                    detail:
+                      !liveSemesterChecklist.checklist.storages_reconciled &&
+                      liveSemesterChecklist.checklist.details?.missing_storages?.length
+                        ? `Belum direkonsiliasi: ${(liveSemesterChecklist.checklist.details.missing_storages as string[]).join(', ')}`
+                        : null,
+                  },
+                  {
+                    code: 'advances_reviewed',
+                    label: 'Panjar kegiatan telah ditinjau & dipertanggungjawabkan',
+                    passed: liveSemesterChecklist.checklist.advances_reviewed,
+                    detail: !liveSemesterChecklist.checklist.advances_reviewed
+                      ? 'Ada panjar jatuh tempo yang belum diselesaikan'
+                      : null,
+                  },
+                  {
+                    code: 'budget_variance_explained',
+                    label: 'Varians anggaran signifikan telah dijelaskan',
+                    passed: liveSemesterChecklist.checklist.budget_variance_explained,
+                    detail: null,
+                  },
+                  {
+                    code: 'prior_findings_resolved',
+                    label: 'Temuan wajib periksa dari audit sebelumnya tuntas',
+                    passed: liveSemesterChecklist.checklist.prior_findings_resolved,
+                    detail: !liveSemesterChecklist.checklist.prior_findings_resolved
+                      ? 'Ada temuan Wajib Diperbaiki yang belum tuntas'
+                      : null,
+                  },
+                ].map((item) => {
+                  const dispKey = `sem-${selectedYear}-${selectedSemester}-${item.code}`;
+                  const isDispensing = activeDispensationKey === dispKey;
+                  const canGrantDispensation = isAdmin || isLeader;
+                  const isLocked = Boolean(currentSemesterReport && currentSemesterReport.status !== 'preparation');
+
+                  return (
+                    <div key={item.code} className="space-y-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2.5">
+                          {item.passed ? (
+                            <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                          ) : (
+                            <AlertCircle className="w-4 h-4 text-rose-500 flex-shrink-0 mt-0.5" />
+                          )}
+                          <div>
+                            <span className={item.passed ? 'text-gray-700 font-medium' : 'text-rose-700 font-semibold'}>
+                              {item.label}
+                            </span>
+                            {item.detail && !item.passed && (
+                              <p className="text-[11px] text-rose-600/90 mt-0.5">{item.detail}</p>
+                            )}
+                          </div>
+                        </div>
+                        {!item.passed && !isLocked && canGrantDispensation && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveDispensationKey(isDispensing ? null : dispKey);
+                              setDispensationReason('');
+                            }}
+                            className="shrink-0 px-2 py-1 rounded-md text-[10px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 transition-colors"
+                          >
+                            {isDispensing ? 'Batal' : 'Dispensasi'}
+                          </button>
+                        )}
+                      </div>
+
+                      {isDispensing && (
+                        <div className="ml-6 p-2.5 rounded-xl bg-amber-50/70 border border-amber-200 space-y-2">
+                          <input
+                            type="text"
+                            value={dispensationReason}
+                            onChange={(e) => setDispensationReason(e.target.value)}
+                            placeholder="Alasan dispensasi (mis. periode awal / saldo nol)..."
+                            className="w-full px-2.5 py-1.5 text-[11px] rounded-lg border border-amber-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-400"
+                          />
+                          <div className="flex justify-end gap-1.5">
+                            <button
+                              type="button"
+                              disabled={isSavingDispensation}
+                              onClick={async () => {
+                                setIsSavingDispensation(true);
+                                const res = await grantLpjException(
+                                  'semester',
+                                  effectiveSemesterReportId,
+                                  item.code,
+                                  dispensationReason
+                                );
+                                setIsSavingDispensation(false);
+                                if (res.success) {
+                                  setActiveDispensationKey(null);
+                                  setDispensationReason('');
+                                  setSemesterLockError(null);
+                                  showToast('Dispensasi checklist berhasil dicatat.');
+                                } else {
+                                  showToast(res.error || 'Gagal menyimpan dispensasi.', 'error');
+                                }
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold disabled:opacity-50"
+                            >
+                              {isSavingDispensation ? 'Menyimpan...' : 'Simpan Dispensasi'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
-              {/* Snapshot Locking Button */}
-              {currentSemesterReport && currentSemesterReport.status === 'preparation' && (
+              {semesterLockError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-[11px] text-rose-800 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <span>{semesterLockError}</span>
+                </div>
+              )}
+
+              {/* Snapshot Locking / Locked Status Controls */}
+              {(!currentSemesterReport || currentSemesterReport.status === 'preparation') ? (
                 <button
+                  type="button"
+                  disabled={isLockingSemester}
                   onClick={async () => {
-                    const res = await lockSemesterSnapshot(currentSemesterReport.id);
+                    setSemesterLockError(null);
+                    setIsLockingSemester(true);
+                    const res = await lockSemesterSnapshot(effectiveSemesterReportId, {
+                      tahun: selectedYear,
+                      semester: selectedSemester,
+                    });
+                    setIsLockingSemester(false);
                     if (res.success) {
-                      showToast('Snapshot angka Laporan Semester berhasil dikunci.');
+                      showToast(`Snapshot angka Laporan Semester ${selectedSemester} Tahun ${selectedYear} berhasil dikunci.`);
                     } else {
-                      showToast(res.error || 'Gagal mengunci snapshot.', 'error');
+                      const errMsg = res.error || 'Gagal mengunci snapshot.';
+                      setSemesterLockError(errMsg);
+                      showToast(errMsg, 'error');
                     }
                   }}
-                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-colors mt-2"
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-colors mt-2"
                 >
                   <Lock className="w-3.5 h-3.5" />
-                  Kunci Snapshot Angka Semester
+                  {isLockingSemester ? 'Mengunci Snapshot...' : 'Kunci Snapshot Angka Semester'}
                 </button>
+              ) : (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
+                    <span className="flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-emerald-700" />
+                      Snapshot Semester Terkunci
+                    </span>
+                    <span className="text-[10px] font-mono text-emerald-700">
+                      {currentSemesterReport.snapshot_data?.locked_at
+                        ? formatDateIndo(currentSemesterReport.snapshot_data.locked_at)
+                        : 'Aktif'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-800">
+                    Angka laporan telah dibekukan dan siap diteruskan ke Pendeta Ressort / diwartakan.
+                  </p>
+                  {currentSemesterReport.status !== 'announced' && (isAdmin || isLeader) && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const res = await unlockSemesterSnapshot(currentSemesterReport.id);
+                        if (res.success) {
+                          showToast('Kunci snapshot Semester dibuka kembali untuk pembaruan data.');
+                        } else {
+                          showToast(res.error || 'Gagal membuka kunci snapshot.', 'error');
+                        }
+                      }}
+                      className="w-full py-1.5 px-3 bg-white hover:bg-emerald-100/60 text-emerald-800 border border-emerald-300 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                    >
+                      <Unlock className="w-3 h-3" />
+                      Buka Kunci Snapshot (Revisi)
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -1345,8 +1659,15 @@ export const ReportsPage: React.FC = () => {
                   <Printer className="w-4 h-4 text-[#7C9CF5]" />
                   <h3 className="font-bold text-gray-900 text-sm">Pratinjau Ringkasan Warta Jemaat (Ramah Publik)</h3>
                 </div>
-                <span className="text-xs text-gray-400">
-                  Status: {currentSemesterReport?.status === 'announced' ? 'Telah Diwartakan' : 'Draf Warta'}
+                <span className="text-xs text-gray-500 font-medium">
+                  Status:{' '}
+                  {currentSemesterReport?.status === 'announced'
+                    ? 'Telah Diwartakan'
+                    : currentSemesterReport?.status === 'sent_to_pastor'
+                    ? 'Diteruskan ke Pendeta'
+                    : currentSemesterReport?.status === 'drafted'
+                    ? 'Snapshot Terkunci'
+                    : 'Draf Warta'}
                 </span>
               </div>
 
@@ -1360,22 +1681,32 @@ export const ReportsPage: React.FC = () => {
                     `Puji syukur kepada Tuhan Yang Maha Esa atas berkat dan penyertaan-Nya bagi peribadahan dan pelayanan di HKBP Ressort Hutaraja. Laporan Keuangan Semester ${selectedSemester} Tahun ${selectedYear} telah diperiksa secara tertib oleh Badan Audit Huria dengan opini Wajar Tanpa Pengecualian dan telah diterima oleh Pendeta Ressort.`}
                 </p>
 
-                <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-1 font-sans">
+                <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-1.5 font-sans">
                   <div className="flex justify-between font-semibold">
                     <span>1. Total Penerimaan Kas & Pelean:</span>
-                    <span className="text-emerald-700">Rp 168.450.000</span>
+                    <span className="text-emerald-700 font-mono tabular-nums">
+                      {formatRupiah(semesterSummary.totalPenerimaan)}
+                    </span>
                   </div>
                   <div className="flex justify-between font-semibold">
                     <span>2. Total Pengeluaran Pelayanan:</span>
-                    <span className="text-rose-700">Rp 124.800.000</span>
+                    <span className="text-rose-700 font-mono tabular-nums">
+                      {formatRupiah(semesterSummary.totalPengeluaran)}
+                    </span>
                   </div>
                   <div className="flex justify-between font-bold pt-1 border-t border-gray-100">
-                    <span>3. Surplus Operasional Semester:</span>
-                    <span className="text-blue-700">Rp 43.650.000</span>
+                    <span>3. Surplus / (Defisit) Operasional Semester:</span>
+                    <span
+                      className={`font-mono tabular-nums ${
+                        semesterSummary.surplus >= 0 ? 'text-blue-700' : 'text-rose-700'
+                      }`}
+                    >
+                      {formatRupiah(semesterSummary.surplus)}
+                    </span>
                   </div>
                   <div className="flex justify-between font-bold text-gray-900 pt-1">
                     <span>4. Saldo Kas & Bank Per Akhir Periode:</span>
-                    <span>{formatRupiah(posisiKeuanganData.total_kas_dan_bank)}</span>
+                    <span className="font-mono tabular-nums">{formatRupiah(semesterSummary.totalKas)}</span>
                   </div>
                 </div>
 
@@ -1400,6 +1731,7 @@ export const ReportsPage: React.FC = () => {
                         `HKBP-HTR/SEM${selectedSemester}/${selectedYear}/01`
                       );
                       if (res.success) showToast('Laporan Semester berhasil diteruskan ke Pendeta Ressort.');
+                      else showToast(res.error || 'Gagal meneruskan laporan.', 'error');
                     }}
                     className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
                   >
@@ -1426,11 +1758,13 @@ export const ReportsPage: React.FC = () => {
                   {currentLpjReport?.nomor_dokumen || `HKBP-HTR/LPJ/${selectedYear}/001`}
                 </span>
                 <span
-                  className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                  className={`px-2.5 py-0.5 rounded-md text-xs font-bold ${
                     currentLpjReport?.status === 'approved'
                       ? 'bg-purple-100 text-purple-800'
                       : currentLpjReport?.status === 'submitted_to_meeting'
                       ? 'bg-amber-100 text-amber-800'
+                      : currentLpjReport?.status === 'drafted'
+                      ? 'bg-emerald-100 text-emerald-800'
                       : 'bg-blue-100 text-blue-800'
                   }`}
                 >
@@ -1438,6 +1772,8 @@ export const ReportsPage: React.FC = () => {
                     ? 'DISAHKAN RAPAT HURIA'
                     : currentLpjReport?.status === 'submitted_to_meeting'
                     ? 'DIAJUKAN KE RAPAT HURIA'
+                    : currentLpjReport?.status === 'drafted'
+                    ? 'SNAPSHOT LPJ TERKUNCI'
                     : 'DRAFT LPJ ISAK 35'}
                 </span>
               </div>
@@ -1450,17 +1786,23 @@ export const ReportsPage: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => {
-                  if (currentLpjReport) {
-                    generateLpjTahunanPDF({
-                      lpj: currentLpjReport,
-                      settings,
-                      posisiKeuangan: posisiKeuanganData,
-                      perubahanSaldoDana: perubahanSaldoDanaData,
-                      arusKas: arusKasData,
-                      budgetRows: budgetConsolidated.rows,
-                      notes: lpjNotes,
-                    });
-                  }
+                  const lpjForPdf: LpjReport = currentLpjReport || {
+                    id: effectiveLpjReportId,
+                    tahun: selectedYear,
+                    nomor_dokumen: `HKBP-HTR/LPJ/${selectedYear}/001`,
+                    status: 'preparation',
+                    version: 1,
+                    checklist_result: liveLpjChecklist.checklist,
+                  };
+                  generateLpjTahunanPDF({
+                    lpj: lpjForPdf,
+                    settings,
+                    posisiKeuangan: posisiKeuanganData,
+                    perubahanSaldoDana: perubahanSaldoDanaData,
+                    arusKas: arusKasData,
+                    budgetRows: budgetConsolidated.rows,
+                    notes: lpjNotes,
+                  });
                 }}
                 className="px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
               >
@@ -1469,20 +1811,46 @@ export const ReportsPage: React.FC = () => {
               </button>
 
               {/* Action Button: Lock Snapshot */}
-              {currentLpjReport?.status === 'preparation' && (
+              {(!currentLpjReport || currentLpjReport.status === 'preparation') && (
                 <button
+                  type="button"
+                  disabled={isLockingLpj}
                   onClick={async () => {
-                    const res = await lockLpjSnapshot(currentLpjReport.id);
+                    setLpjLockError(null);
+                    setIsLockingLpj(true);
+                    const res = await lockLpjSnapshot(effectiveLpjReportId, selectedYear);
+                    setIsLockingLpj(false);
                     if (res.success) {
-                      showToast('Snapshot LPJ ISAK 35 berhasil dikunci.');
+                      showToast(`Snapshot LPJ ISAK 35 Tahun ${selectedYear} berhasil dikunci.`);
                     } else {
-                      showToast(res.error || 'Gagal mengunci snapshot LPJ.', 'error');
+                      const errMsg = res.error || 'Gagal mengunci snapshot LPJ.';
+                      setLpjLockError(errMsg);
+                      showToast(errMsg, 'error');
                     }
                   }}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
                 >
                   <Lock className="w-3.5 h-3.5" />
-                  Kunci Snapshot LPJ
+                  {isLockingLpj ? 'Mengunci Snapshot...' : 'Kunci Snapshot LPJ'}
+                </button>
+              )}
+
+              {/* Action Button: Unlock Snapshot before Rapat Huria approval */}
+              {currentLpjReport && currentLpjReport.status === 'drafted' && (isAdmin || isLeader) && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const res = await unlockLpjSnapshot(currentLpjReport.id);
+                    if (res.success) {
+                      showToast('Kunci snapshot LPJ dibuka kembali untuk pembaruan data.');
+                    } else {
+                      showToast(res.error || 'Gagal membuka kunci snapshot LPJ.', 'error');
+                    }
+                  }}
+                  className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                >
+                  <Unlock className="w-3.5 h-3.5" />
+                  Buka Kunci
                 </button>
               )}
 
@@ -1496,6 +1864,7 @@ export const ReportsPage: React.FC = () => {
                       meetingRefInput
                     );
                     if (res.success) showToast('LPJ berhasil diajukan ke Rapat Huria.');
+                    else showToast(res.error || 'Gagal mengajukan LPJ.', 'error');
                   }}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
                 >
@@ -1507,22 +1876,8 @@ export const ReportsPage: React.FC = () => {
               {/* Action Button: Approve by Rapat Huria (Permanent Lock Trigger Effect) */}
               {currentLpjReport?.status === 'submitted_to_meeting' && isAdmin && (
                 <button
-                  onClick={async () => {
-                    if (
-                      confirm(
-                        `PERINGATAN PENTING: Pengesahan LPJ oleh Rapat Huria akan MENGUNCI PERMANEN seluruh transaksi tahun ${selectedYear}. Transaksi tidak dapat diubah atau dihapus lagi. Lanjutkan pengesahan?`
-                      )
-                    ) {
-                      const res = await approveLpjReport(
-                        currentLpjReport.id,
-                        meetingNotesInput,
-                        meetingAttendeesInput
-                      );
-                      if (res.success) {
-                        showToast(`LPJ Tahun ${selectedYear} RESMI DISAHKAN Rapat Huria! Seluruh transaksi tahun ini terkunci permanen.`);
-                      }
-                    }
-                  }}
+                  type="button"
+                  onClick={() => setShowApproveLpjModal(true)}
                   className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors"
                 >
                   <Award className="w-3.5 h-3.5" />
@@ -1531,6 +1886,167 @@ export const ReportsPage: React.FC = () => {
               )}
             </div>
           </div>
+
+          {/* Checklist Kesiapan LPJ Card (visible while in preparation or if error occurred) */}
+          {(!currentLpjReport || currentLpjReport.status === 'preparation') && (
+            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-3">
+                <div>
+                  <h4 className="font-bold text-gray-900 text-sm">Checklist Kesiapan Snapshot LPJ Tahunan ({selectedYear})</h4>
+                  <p className="text-[11px] text-gray-500">
+                    Seluruh prasyarat ini harus terpenuhi (atau diberi dispensasi resmi) sebelum snapshot LPJ dikunci.
+                  </p>
+                </div>
+                <span
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-bold border ${
+                    liveLpjChecklist.passed
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-amber-50 text-amber-800 border-amber-200'
+                  }`}
+                >
+                  {liveLpjChecklist.passed ? 'Semua Prasyarat Terpenuhi' : `${liveLpjChecklist.blockers.length} Prasyarat Tertunda`}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                {[
+                  {
+                    code: 'all_months_closed',
+                    label: 'Seluruh 12 bulan tahun buku telah ditutup buku',
+                    passed: liveLpjChecklist.checklist.all_months_closed,
+                    detail:
+                      !liveLpjChecklist.checklist.all_months_closed &&
+                      liveLpjChecklist.checklist.details?.missing_months?.length
+                        ? `${(liveLpjChecklist.checklist.details.missing_months as number[]).length} bulan belum ditutup`
+                        : null,
+                  },
+                  {
+                    code: 'no_pending_transactions',
+                    label: 'Tidak ada transaksi Draf / Diajukan tertunda',
+                    passed: liveLpjChecklist.checklist.no_pending_transactions,
+                    detail:
+                      !liveLpjChecklist.checklist.no_pending_transactions &&
+                      liveLpjChecklist.checklist.details?.pending_tx_count
+                        ? `${liveLpjChecklist.checklist.details.pending_tx_count} transaksi tertunda`
+                        : null,
+                  },
+                  {
+                    code: 'all_reconciliations_completed',
+                    label: 'Rekonsiliasi akhir tahun seluruh kas & bank selesai',
+                    passed: liveLpjChecklist.checklist.all_reconciliations_completed,
+                    detail:
+                      !liveLpjChecklist.checklist.all_reconciliations_completed &&
+                      liveLpjChecklist.checklist.details?.missing_storages?.length
+                        ? `Belum direkonsiliasi: ${(liveLpjChecklist.checklist.details.missing_storages as string[]).join(', ')}`
+                        : null,
+                  },
+                  {
+                    code: 'overdue_advances_cleared_or_reserved',
+                    label: 'Panjar kegiatan telah diselesaikan / dicadangkan',
+                    passed: liveLpjChecklist.checklist.overdue_advances_cleared_or_reserved,
+                    detail: null,
+                  },
+                  {
+                    code: 'audit_findings_settled',
+                    label: 'Temuan wajib periksa Badan Audit tuntas',
+                    passed: liveLpjChecklist.checklist.audit_findings_settled,
+                    detail: null,
+                  },
+                  {
+                    code: 'inventory_physical_checked',
+                    label: 'Data aset tetap & cek fisik inventaris tersedia',
+                    passed: liveLpjChecklist.checklist.inventory_physical_checked,
+                    detail: !liveLpjChecklist.checklist.inventory_physical_checked
+                      ? 'Belum ada data aset tetap / cek fisik inventaris'
+                      : null,
+                  },
+                ].map((item) => {
+                  const dispKey = `lpj-${selectedYear}-${item.code}`;
+                  const isDispensing = activeDispensationKey === dispKey;
+                  const canGrantDispensation = isAdmin || isLeader;
+                  return (
+                    <div key={item.code} className="p-3 rounded-xl bg-gray-50/70 border border-gray-200/80 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2">
+                          {item.passed ? (
+                            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                          ) : (
+                            <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                          )}
+                          <div>
+                            <span className={item.passed ? 'text-gray-800 font-medium' : 'text-rose-700 font-semibold'}>
+                              {item.label}
+                            </span>
+                            {item.detail && !item.passed && (
+                              <p className="text-[11px] text-rose-600 mt-0.5">{item.detail}</p>
+                            )}
+                          </div>
+                        </div>
+                        {!item.passed && canGrantDispensation && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveDispensationKey(isDispensing ? null : dispKey);
+                              setDispensationReason('');
+                            }}
+                            className="shrink-0 px-2 py-1 rounded-md text-[10px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300"
+                          >
+                            {isDispensing ? 'Batal' : 'Dispensasi'}
+                          </button>
+                        )}
+                      </div>
+
+                      {isDispensing && (
+                        <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 space-y-2">
+                          <input
+                            type="text"
+                            value={dispensationReason}
+                            onChange={(e) => setDispensationReason(e.target.value)}
+                            placeholder="Alasan dispensasi checklist LPJ..."
+                            className="w-full px-2.5 py-1.5 text-[11px] rounded-lg border border-amber-300 bg-white focus:outline-hidden"
+                          />
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              disabled={isSavingDispensation}
+                              onClick={async () => {
+                                setIsSavingDispensation(true);
+                                const res = await grantLpjException(
+                                  'lpj',
+                                  effectiveLpjReportId,
+                                  item.code,
+                                  dispensationReason
+                                );
+                                setIsSavingDispensation(false);
+                                if (res.success) {
+                                  setActiveDispensationKey(null);
+                                  setDispensationReason('');
+                                  setLpjLockError(null);
+                                  showToast('Dispensasi checklist LPJ berhasil disimpan.');
+                                } else {
+                                  showToast(res.error || 'Gagal menyimpan dispensasi.', 'error');
+                                }
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold disabled:opacity-50"
+                            >
+                              {isSavingDispensation ? 'Menyimpan...' : 'Simpan Dispensasi'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {lpjLockError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <span>{lpjLockError}</span>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 12-Section Sub-Navigation */}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -1694,13 +2210,17 @@ export const ReportsPage: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-white p-4 rounded-2xl border border-slate-200/90 space-y-1.5">
                       <span className="text-xs font-semibold text-emerald-700">Penerimaan Pelayanan Murni</span>
-                      <p className="text-2xl font-bold font-mono text-slate-900 tabular-nums">Rp 168.450.000</p>
+                      <p className="text-2xl font-bold font-mono text-slate-900 tabular-nums">
+                        {formatRupiah(lpjAnnualSummary.penerimaanMurni)}
+                      </p>
                       <p className="text-[11px] text-slate-500">Pelean I-V, Kantong Diakonia, Donasi Terikat, &amp; Persembahan Khusus.</p>
                     </div>
 
                     <div className="bg-white p-4 rounded-2xl border border-slate-200/90 space-y-1.5">
                       <span className="text-xs font-semibold text-rose-700">Pengeluaran Pelayanan Murni</span>
-                      <p className="text-2xl font-bold font-mono text-slate-900 tabular-nums">Rp 124.800.000</p>
+                      <p className="text-2xl font-bold font-mono text-slate-900 tabular-nums">
+                        {formatRupiah(lpjAnnualSummary.pengeluaranMurni)}
+                      </p>
                       <p className="text-[11px] text-slate-500">Operasional Sekretariat, Listrik, Honor Pelayan, Pelayanan Sosial.</p>
                     </div>
                   </div>
@@ -1708,10 +2228,27 @@ export const ReportsPage: React.FC = () => {
                   {/* Transfer inter-kas separation table */}
                   <div className="pt-2">
                     <span className="text-xs font-bold text-gray-700 block mb-2">Mutasi Transfer Antar Kas (Tersaji di Baris Terpisah):</span>
-                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 text-xs text-gray-600 flex justify-between items-center">
-                      <span>Total Transfer Masuk Antar Kas: <strong className="text-gray-900 font-mono">Rp 18.500.000</strong></span>
-                      <span>Total Transfer Keluar Antar Kas: <strong className="text-gray-900 font-mono">Rp 18.500.000</strong></span>
-                      <span className="font-bold text-emerald-700">Selisih Mutasi: Rp 0 (Nihil)</span>
+                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 text-xs text-gray-600 flex flex-wrap justify-between items-center gap-2">
+                      <span>
+                        Total Transfer Masuk Antar Kas:{' '}
+                        <strong className="text-gray-900 font-mono tabular-nums">
+                          {formatRupiah(lpjAnnualSummary.transferMasuk)}
+                        </strong>
+                      </span>
+                      <span>
+                        Total Transfer Keluar Antar Kas:{' '}
+                        <strong className="text-gray-900 font-mono tabular-nums">
+                          {formatRupiah(lpjAnnualSummary.transferKeluar)}
+                        </strong>
+                      </span>
+                      <span
+                        className={`font-bold font-mono tabular-nums ${
+                          lpjAnnualSummary.selisihMutasi === 0 ? 'text-emerald-700' : 'text-amber-700'
+                        }`}
+                      >
+                        Selisih Mutasi: {formatRupiah(lpjAnnualSummary.selisihMutasi)}{' '}
+                        {lpjAnnualSummary.selisihMutasi === 0 ? '(Nihil)' : ''}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -2736,6 +3273,69 @@ export const ReportsPage: React.FC = () => {
           </div>
         );
       })()}
+
+      {/* Modal Konfirmasi Pengesahan LPJ di Rapat Huria */}
+      {showApproveLpjModal && currentLpjReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                  <Award className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm">Pengesahan LPJ Tahunan {selectedYear}</h4>
+                  <p className="text-[11px] text-slate-500">Penguncian Permanen Buku Kas</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowApproveLpjModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 leading-relaxed">
+              <strong>PERINGATAN PENTING:</strong> Pengesahan LPJ oleh Rapat Huria akan{' '}
+              <strong>MENGUNCI PERMANEN</strong> seluruh transaksi tahun {selectedYear}. Transaksi tidak dapat diubah
+              atau dihapus lagi setelah disahkan.
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowApproveLpjModal(false)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const res = await approveLpjReport(
+                    currentLpjReport.id,
+                    meetingNotesInput,
+                    meetingAttendeesInput
+                  );
+                  setShowApproveLpjModal(false);
+                  if (res.success) {
+                    showToast(
+                      `LPJ Tahun ${selectedYear} RESMI DISAHKAN Rapat Huria! Seluruh transaksi tahun ini terkunci permanen.`
+                    );
+                  } else {
+                    showToast(res.error || 'Gagal mengesahkan LPJ.', 'error');
+                  }
+                }}
+                className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-sm"
+              >
+                Ya, Sahkan LPJ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

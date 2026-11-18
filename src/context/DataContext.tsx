@@ -250,6 +250,10 @@ interface DataContextType {
   saveKas: (kasData: Partial<Kas>) => Promise<void>;
   deleteKas: (id: string, options?: { force?: boolean; reason?: string }) => Promise<{ success: boolean; error?: string }>;
   saveStorageAccount: (data: Partial<StorageAccount>) => Promise<void>;
+  deleteStorageAccount: (
+    id: string,
+    options?: { force?: boolean; reason?: string }
+  ) => Promise<{ success: boolean; error?: string }>;
   saveCategory: (data: Partial<Category>) => Promise<void>;
   saveOpeningBalance: (data: Partial<OpeningBalance>) => Promise<void>;
   saveUserKasAccess: (data: Omit<UserKasAccess, 'id'>) => Promise<{ success: boolean; error?: string }>;
@@ -2371,6 +2375,126 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await syncUpsert('storage_accounts', newStorage);
       }
     }
+  };
+
+  const deleteStorageAccount = async (
+    id: string,
+    options?: { force?: boolean; reason?: string }
+  ): Promise<{ success: boolean; error?: string }> => {
+    const stor = storageAccounts.find((s) => s.id === id);
+    if (!stor) {
+      return { success: false, error: 'Data rekening / tempat penyimpanan tidak ditemukan.' };
+    }
+
+    if (currentUser?.role !== 'admin') {
+      return {
+        success: false,
+        error: 'Hanya Administrator yang memiliki hak untuk menghapus Rekening / Tempat Penyimpanan.',
+      };
+    }
+
+    const txCount = transactions.filter(
+      (t) => t.storage_account_id === id || t.transfer_target_storage_id === id
+    ).length;
+    const obCount = openingBalances.filter((b) => b.storage_account_id === id).length;
+    const obEntryCount = openingEntries.filter((e) => e.storage_account_id === id).length;
+    const obAdjCount = openingAdjustments.filter((a) => a.storage_account_id === id).length;
+    const recCount = reconciliations.filter((r) => r.storage_account_id === id).length;
+    const ccCount = cashCounts.filter((c) => c.storage_account_id === id).length;
+    const advCount = advances.filter((a) => a.storage_account_id === id).length;
+
+    const hasLinkedData =
+      txCount > 0 ||
+      obCount > 0 ||
+      obEntryCount > 0 ||
+      obAdjCount > 0 ||
+      recCount > 0 ||
+      ccCount > 0 ||
+      advCount > 0;
+
+    if (hasLinkedData && !options?.force) {
+      return {
+        success: false,
+        error: `Rekening "${stor.nama}" masih memiliki data terkait (${txCount} transaksi, ${obCount + obEntryCount} saldo awal, ${recCount} rekonsiliasi, ${ccCount} opname fisik). Konfirmasi penghapusan paksa diperlukan.`,
+      };
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      // 1. Lepas referensi opsional pada transfer, panjar, & pembayaran piutang/utang
+      await supabase
+        .from('transactions')
+        .update({ transfer_target_storage_id: null })
+        .eq('transfer_target_storage_id', id);
+      await supabase.from('advances').update({ storage_account_id: null }).eq('storage_account_id', id);
+      await supabase
+        .from('receivable_payable_payments')
+        .update({ storage_account_id: null })
+        .eq('storage_account_id', id);
+
+      // 2. Hapus tabel anak dengan ON DELETE RESTRICT pada storage_account_id
+      const delCcRes = await supabase.from('cash_counts').delete().eq('storage_account_id', id);
+      if (delCcRes.error) {
+        return {
+          success: false,
+          error: `Gagal menghapus data opname kas terkait rekening: ${delCcRes.error.message}`,
+        };
+      }
+
+      const delTxRes = await supabase.from('transactions').delete().eq('storage_account_id', id);
+      if (delTxRes.error) {
+        return {
+          success: false,
+          error: `Gagal menghapus transaksi terkait rekening: ${delTxRes.error.message}`,
+        };
+      }
+
+      // 3. Hapus rekening dari tabel utama (opening_balances, opening_balance_entries, opening_balance_adjustments, reconciliations cascade otomatis)
+      const delStorRes = await syncDelete('storage_accounts', 'id', id);
+      if (!delStorRes.success) {
+        return {
+          success: false,
+          error: delStorRes.error || 'Gagal menghapus data Rekening dari Supabase.',
+        };
+      }
+    }
+
+    // Sinkronkan seluruh state lokal aplikasi
+    setStorageAccounts((prev) => prev.filter((s) => s.id !== id));
+    setTransactions((prev) =>
+      prev
+        .filter((t) => t.storage_account_id !== id)
+        .map((t) =>
+          t.transfer_target_storage_id === id ? { ...t, transfer_target_storage_id: null } : t
+        )
+    );
+    setOpeningBalances((prev) => prev.filter((ob) => ob.storage_account_id !== id));
+    setOpeningEntries((prev) => prev.filter((oe) => oe.storage_account_id !== id));
+    setOpeningAdjustments((prev) => prev.filter((oa) => oa.storage_account_id !== id));
+    setReconciliations((prev) => prev.filter((r) => r.storage_account_id !== id));
+    setCashCounts((prev) => prev.filter((cc) => cc.storage_account_id !== id));
+    setAdvances((prev) =>
+      prev.map((a) => (a.storage_account_id === id ? { ...a, storage_account_id: null } : a))
+    );
+    setReceivablesPayables((prev) =>
+      prev.map((rp) => ({
+        ...rp,
+        payments: rp.payments?.map((p) =>
+          p.storage_account_id === id ? { ...p, storage_account_id: null } : p
+        ),
+      }))
+    );
+
+    const summaryReason = options?.reason?.trim() ? ` | Alasan: ${options.reason.trim()}` : '';
+    addAuditLog(
+      'storage_accounts',
+      id,
+      'DELETE',
+      stor,
+      null,
+      `Rekening "${stor.nama}" (${stor.tipe === 'cash' ? 'Tunai' : 'Bank'}) dihapus permanen oleh ${currentUser?.full_name || 'Admin'} (${txCount} transaksi, ${obCount + obEntryCount} saldo awal, ${recCount} rekonsiliasi, ${ccCount} opname ikut dibersihkan)${summaryReason}`
+    );
+
+    return { success: true };
   };
 
   const saveCategory = async (data: Partial<Category>) => {
@@ -6389,6 +6513,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteProfile,
         toggleProfileActive,
         saveStorageAccount,
+        deleteStorageAccount,
         saveCategory,
         saveOpeningBalance,
         saveUserKasAccess,

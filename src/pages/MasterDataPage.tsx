@@ -76,6 +76,7 @@ export const MasterDataPage: React.FC = () => {
     saveKas,
     deleteKas,
     saveStorageAccount,
+    deleteStorageAccount,
     saveCategory,
     saveOpeningBalance,
     saveUserKasAccess,
@@ -84,6 +85,10 @@ export const MasterDataPage: React.FC = () => {
     deleteProfile,
     toggleProfileActive,
     transactions,
+    openingEntries,
+    openingAdjustments,
+    reconciliations,
+    cashCounts,
     fixedAssets,
     advances,
     budgets,
@@ -196,6 +201,10 @@ export const MasterDataPage: React.FC = () => {
 
   // Modal states for Storage & Category & Balances
   const [editingStorage, setEditingStorage] = useState<Partial<StorageAccount> | null>(null);
+  const [deletingStorage, setDeletingStorage] = useState<StorageAccount | null>(null);
+  const [confirmForceDeleteStorage, setConfirmForceDeleteStorage] = useState(false);
+  const [deleteStorageReason, setDeleteStorageReason] = useState('');
+  const [isDeletingStorageLoading, setIsDeletingStorageLoading] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Partial<Category> | null>(null);
   const [editingBalance, setEditingBalance] = useState<Partial<OpeningBalance> | null>(null);
   const [newAccessUserId, setNewAccessUserId] = useState<string>('');
@@ -269,6 +278,37 @@ export const MasterDataPage: React.FC = () => {
     await saveStorageAccount(editingStorage);
     showToast('Tempat penyimpanan berhasil disimpan');
     setEditingStorage(null);
+  };
+
+  const handleExecuteDeleteStorage = async () => {
+    if (!deletingStorage) return;
+    if (deletingStorageMetrics.hasLinkedData && !confirmForceDeleteStorage) {
+      showToast('Centang persetujuan penghapusan data terkait terlebih dahulu.', 'error');
+      return;
+    }
+    setIsDeletingStorageLoading(true);
+    const res = await deleteStorageAccount(deletingStorage.id, {
+      force: true,
+      reason: deleteStorageReason.trim() || undefined,
+    });
+    setIsDeletingStorageLoading(false);
+    if (res.success) {
+      showToast(`Rekening "${deletingStorage.nama}" berhasil dihapus secara permanen.`);
+      setDeletingStorage(null);
+      setConfirmForceDeleteStorage(false);
+      setDeleteStorageReason('');
+    } else {
+      showToast(res.error || 'Gagal menghapus rekening', 'error');
+    }
+  };
+
+  const handleDeactivateStorage = async () => {
+    if (!deletingStorage) return;
+    await saveStorageAccount({ ...deletingStorage, is_active: false });
+    showToast(`Rekening "${deletingStorage.nama}" telah dinonaktifkan`);
+    setDeletingStorage(null);
+    setConfirmForceDeleteStorage(false);
+    setDeleteStorageReason('');
   };
 
   // Handlers for Category
@@ -459,6 +499,33 @@ export const MasterDataPage: React.FC = () => {
       txCount > 0 || obCount > 0 || budgetCount > 0 || assetCount > 0 || advCount > 0 || rpCount > 0;
     return { txCount, obCount, budgetCount, assetCount, advCount, rpCount, accessCount, hasLinkedData };
   }, [deletingKas, transactions, openingBalances, budgets, fixedAssets, advances, receivablesPayables, userKasAccessList]);
+
+  // Storage delete integrity metrics
+  const deletingStorageMetrics = useMemo(() => {
+    if (!deletingStorage) {
+      return {
+        txCount: 0,
+        obCount: 0,
+        recCount: 0,
+        ccCount: 0,
+        advCount: 0,
+        hasLinkedData: false,
+      };
+    }
+    const id = deletingStorage.id;
+    const txCount = transactions.filter(
+      (t) => t.storage_account_id === id || t.transfer_target_storage_id === id
+    ).length;
+    const obCount =
+      openingBalances.filter((b) => b.storage_account_id === id).length +
+      openingEntries.filter((e) => e.storage_account_id === id).length +
+      openingAdjustments.filter((a) => a.storage_account_id === id).length;
+    const recCount = reconciliations.filter((r) => r.storage_account_id === id).length;
+    const ccCount = cashCounts.filter((c) => c.storage_account_id === id).length;
+    const advCount = advances.filter((a) => a.storage_account_id === id).length;
+    const hasLinkedData = txCount > 0 || obCount > 0 || recCount > 0 || ccCount > 0 || advCount > 0;
+    return { txCount, obCount, recCount, ccCount, advCount, hasLinkedData };
+  }, [deletingStorage, transactions, openingBalances, openingEntries, openingAdjustments, reconciliations, cashCounts, advances]);
 
   return (
     <div className="space-y-6 w-full max-w-7xl mx-auto min-w-0 overflow-hidden">
@@ -1274,27 +1341,49 @@ export const MasterDataPage: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {storageAccounts.map((s) => (
-              <div key={s.id} className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-sm text-slate-900">{s.nama}</span>
-                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700">
-                    {s.tipe === 'cash' ? 'Tunai / Brankas' : 'Rekening Bank'}
-                  </span>
+              <div key={s.id} className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-1">
+                      <span className="font-bold text-sm text-slate-900 block">{s.nama}</span>
+                      {s.is_active === false && (
+                        <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                          Non-Aktif
+                        </span>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-[10px] uppercase font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700">
+                      {s.tipe === 'cash' ? 'Tunai / Brankas' : 'Rekening Bank'}
+                    </span>
+                  </div>
+                  {s.nomor_rekening && (
+                    <p className="text-xs font-mono text-slate-600">No. Rek: {s.nomor_rekening}</p>
+                  )}
+                  {s.atas_nama && (
+                    <p className="text-xs text-slate-500">a.n: {s.atas_nama}</p>
+                  )}
                 </div>
-                {s.nomor_rekening && (
-                  <p className="text-xs font-mono text-slate-600">No. Rek: {s.nomor_rekening}</p>
-                )}
-                {s.atas_nama && (
-                  <p className="text-xs text-slate-500">a.n: {s.atas_nama}</p>
-                )}
                 {isAdmin && (
-                  <div className="pt-2 border-t border-slate-100 flex justify-end">
+                  <div className="pt-2.5 border-t border-slate-100 flex items-center justify-end gap-1.5">
                     <button
                       onClick={() => setEditingStorage(s)}
-                      className="px-2 py-1 text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1"
+                      className="px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition-colors"
+                      title="Ubah data rekening"
                     >
-                      <Edit2 className="w-3.5 h-3.5" />
+                      <Edit2 className="w-3.5 h-3.5 text-blue-600" />
                       <span>Ubah</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setConfirmForceDeleteStorage(false);
+                        setDeleteStorageReason('');
+                        setDeletingStorage(s);
+                      }}
+                      className="px-2.5 py-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg flex items-center gap-1 transition-colors"
+                      title="Hapus rekening"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Hapus</span>
                     </button>
                   </div>
                 )}
@@ -2671,8 +2760,20 @@ export const MasterDataPage: React.FC = () => {
                   value={editingStorage.atas_nama || ''}
                   onChange={(e) => setEditingStorage({ ...editingStorage, atas_nama: e.target.value })}
                   placeholder="Contoh: BPH HKBP Hutaraja"
-                  className="w-full p-2 rounded-xl border border-slate-200"
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
                 />
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="storage_active"
+                  checked={editingStorage.is_active !== false}
+                  onChange={(e) => setEditingStorage({ ...editingStorage, is_active: e.target.checked })}
+                  className="rounded text-primary focus:ring-primary w-4 h-4"
+                />
+                <label htmlFor="storage_active" className="text-xs text-slate-700 font-medium">
+                  Rekening / Brankas Aktif (digunakan pada transaksi &amp; rekonsiliasi)
+                </label>
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
@@ -2690,6 +2791,136 @@ export const MasterDataPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Hapus Rekening / Tempat Penyimpanan (Admin) */}
+      {deletingStorage && isAdmin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-3 text-rose-600">
+                <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900">Konfirmasi Hapus Rekening / Brankas</h3>
+                  <p className="text-xs text-slate-500">
+                    {deletingStorage.nama} ({deletingStorage.tipe === 'cash' ? 'Tunai / Brankas' : 'Rekening Bank'})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isDeletingStorageLoading}
+                onClick={() => {
+                  setDeletingStorage(null);
+                  setConfirmForceDeleteStorage(false);
+                  setDeleteStorageReason('');
+                }}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {!deletingStorageMetrics.hasLinkedData ? (
+              <div className="space-y-3 text-xs">
+                <p className="text-slate-600 leading-relaxed">
+                  Rekening ini belum memiliki transaksi, saldo awal, rekonsiliasi, maupun opname kas terkait. Apakah Anda yakin ingin menghapus{' '}
+                  <strong>{deletingStorage.nama}</strong> secara permanen dari sistem dan database?
+                </p>
+                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-800 text-[11px]">
+                  Pemeriksaan integritas lolos: aman dihapus permanen.
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 text-xs">
+                <div className="p-3.5 bg-rose-50 rounded-xl border border-rose-200 text-rose-950 space-y-2">
+                  <p className="font-bold flex items-center gap-1.5 text-rose-800">
+                    <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>Peringatan Penghapusan Rekening Beserta Data Terkait</span>
+                  </p>
+                  <p className="text-[11px] leading-relaxed">
+                    Rekening / tempat penyimpanan ini masih terhubung dengan rekam data berikut:
+                  </p>
+                  <ul className="list-disc list-inside text-[11px] space-y-0.5 font-medium">
+                    {deletingStorageMetrics.txCount > 0 && <li>{deletingStorageMetrics.txCount} Catatan Transaksi Kas</li>}
+                    {deletingStorageMetrics.obCount > 0 && <li>{deletingStorageMetrics.obCount} Data Saldo Awal / Pembukaan Buku</li>}
+                    {deletingStorageMetrics.recCount > 0 && <li>{deletingStorageMetrics.recCount} Berita Acara Rekonsiliasi</li>}
+                    {deletingStorageMetrics.ccCount > 0 && <li>{deletingStorageMetrics.ccCount} Catatan Opname Kas Fisik</li>}
+                    {deletingStorageMetrics.advCount > 0 && <li>{deletingStorageMetrics.advCount} Data Panjar Kegiatan (keterkaitan rekening akan dilepas)</li>}
+                  </ul>
+                  <p className="text-[11px] pt-1 text-rose-900">
+                    Jika memilih <strong>Hapus Permanen</strong>, seluruh transaksi, saldo awal, rekonsiliasi, dan opname pada rekening ini ikut terhapus. Jika hanya ingin menyembunyikannya dari transaksi baru, pilih <strong>Nonaktifkan Saja</strong>.
+                  </p>
+                </div>
+
+                <label className="flex items-start gap-2.5 p-3 rounded-xl border border-rose-200 bg-rose-50/40 cursor-pointer text-[11px] text-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={confirmForceDeleteStorage}
+                    onChange={(e) => setConfirmForceDeleteStorage(e.target.checked)}
+                    className="mt-0.5 rounded border-rose-300 text-rose-600 focus:ring-rose-500"
+                  />
+                  <span>
+                    Saya yakin sebagai <strong>Admin</strong> untuk menghapus Rekening <strong>{deletingStorage.nama}</strong> secara permanen beserta data terkait di atas.
+                  </span>
+                </label>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-slate-700">
+                Alasan Penghapusan (Audit Trail, Opsional)
+              </label>
+              <input
+                type="text"
+                value={deleteStorageReason}
+                onChange={(e) => setDeleteStorageReason(e.target.value)}
+                placeholder="Contoh: Rekening ditutup atau duplikat data rekening..."
+                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-rose-300"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                disabled={isDeletingStorageLoading}
+                onClick={() => {
+                  setDeletingStorage(null);
+                  setConfirmForceDeleteStorage(false);
+                  setDeleteStorageReason('');
+                }}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-semibold text-xs rounded-xl border border-slate-200 disabled:opacity-50"
+              >
+                Batal
+              </button>
+
+              {deletingStorage.is_active !== false && (
+                <button
+                  type="button"
+                  disabled={isDeletingStorageLoading}
+                  onClick={handleDeactivateStorage}
+                  className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-semibold text-xs rounded-xl flex items-center gap-1 disabled:opacity-50"
+                >
+                  <ToggleLeft className="w-4 h-4" />
+                  <span>Nonaktifkan Saja</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                disabled={
+                  isDeletingStorageLoading ||
+                  (deletingStorageMetrics.hasLinkedData && !confirmForceDeleteStorage)
+                }
+                onClick={handleExecuteDeleteStorage}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 disabled:opacity-45 disabled:cursor-not-allowed"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeletingStorageLoading ? 'Menghapus...' : 'Hapus Permanen'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

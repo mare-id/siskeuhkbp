@@ -1,0 +1,37 @@
+name: Backup Mingguan Supabase
+
+on:
+  schedule:
+    - cron: "0 18 * * 0"   # Minggu 18:00 UTC = Senin 01:00 WIB
+  workflow_dispatch:        # agar bisa dites manual
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump database
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          docker run --rm postgres:17 pg_dump "$DB_URL" \
+            --schema=public --no-owner --no-privileges \
+            > backup.sql
+          test -s backup.sql
+
+      - name: Enkripsi backup
+        env:
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          STAMP=$(date -u +%Y-%m-%d)
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$PASS" \
+            --symmetric --cipher-algo AES256 \
+            -o "backup-$STAMP.sql.gpg" backup.sql
+          rm backup.sql
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+
+      - name: Simpan sebagai artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-supabase-${{ env.STAMP }}
+          path: backup-${{ env.STAMP }}.sql.gpg
+          retention-days: 90

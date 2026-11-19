@@ -1185,9 +1185,9 @@ export async function parseTransactionExcelFile(
     isSentralisasiSplit: boolean,
     errors: string[]
   ) => {
-    const dt = new Date(`${dateStr}T00:00:00`);
-    const year = dt.getFullYear();
-    const month = dt.getMonth() + 1;
+    const [yrStr, moStr] = dateStr.split('-');
+    const year = parseInt(yrStr, 10);
+    const month = parseInt(moStr, 10);
 
     if (ctx.isYearLockedByLpj(year)) {
       errors.push(`Tahun Anggaran ${year} sudah terkunci permanen oleh LPJ.`);
@@ -1585,6 +1585,30 @@ export async function parseTransactionExcelFile(
         }
 
         if (
+          txType === 'income' &&
+          resolvedKas &&
+          amount > 0 &&
+          errors.length === 0
+        ) {
+          if (isSentral && sentralisasiKas && resolvedKas.id !== sentralisasiKas.id) {
+            const { bpskAmount, huriaAmount } = splitSentralisasiAmount(amount, true);
+            runningKasBalance.set(
+              resolvedKas.id,
+              (runningKasBalance.get(resolvedKas.id) ?? 0) + huriaAmount
+            );
+            runningKasBalance.set(
+              sentralisasiKas.id,
+              (runningKasBalance.get(sentralisasiKas.id) ?? 0) + bpskAmount
+            );
+          } else {
+            runningKasBalance.set(
+              resolvedKas.id,
+              (runningKasBalance.get(resolvedKas.id) ?? 0) + amount
+            );
+          }
+        }
+
+        if (
           txType === 'expense' &&
           resolvedKas &&
           amount > 0 &&
@@ -1595,7 +1619,7 @@ export async function parseTransactionExcelFile(
             errors.push(
               `Saldo ${resolvedKas.nama} tidak mencukupi (Tersedia: ${formatRupiah(currBal)}).`
             );
-          } else {
+          } else if (errors.length === 0) {
             runningKasBalance.set(resolvedKas.id, currBal - amount);
           }
         }
@@ -1739,6 +1763,22 @@ export async function parseTransactionExcelFile(
 
         // Deduplicate identical errors within the same group
         const uniqueErrors = Array.from(new Set(errors));
+
+        if (uniqueErrors.length === 0) {
+          allocations.forEach((a) => {
+            if (!a.kas_id || a.amount <= 0) return;
+            if (a.is_sentralisasi && sentralisasiKas && a.kas_id !== sentralisasiKas.id) {
+              const { bpskAmount, huriaAmount } = splitSentralisasiAmount(a.amount, true);
+              runningKasBalance.set(a.kas_id, (runningKasBalance.get(a.kas_id) ?? 0) + huriaAmount);
+              runningKasBalance.set(
+                sentralisasiKas.id,
+                (runningKasBalance.get(sentralisasiKas.id) ?? 0) + bpskAmount
+              );
+            } else {
+              runningKasBalance.set(a.kas_id, (runningKasBalance.get(a.kas_id) ?? 0) + a.amount);
+            }
+          });
+        }
 
         items.push({
           kind: 'multi_pos',
@@ -1893,9 +1933,9 @@ export async function parseTransactionExcelFile(
         }
 
         if (tanggalRes.value) {
-          const dt = new Date(`${tanggalRes.value}T00:00:00`);
-          const year = dt.getFullYear();
-          const month = dt.getMonth() + 1;
+          const [yrStr, moStr] = tanggalRes.value.split('-');
+          const year = parseInt(yrStr, 10);
+          const month = parseInt(moStr, 10);
           if (ctx.isYearLockedByLpj(year)) {
             errors.push(`Tahun Anggaran ${year} sudah terkunci permanen oleh LPJ.`);
           }
@@ -1907,6 +1947,18 @@ export async function parseTransactionExcelFile(
           }
           if (dstKas && ctx.isPeriodClosed(year, month, dstKas.id)) {
             errors.push(`Periode ${month}/${year} untuk ${dstKas.nama} sudah ditutup.`);
+          }
+        }
+
+        if (srcKas && dstKas && amount > 0 && ctx.settings.block_negative_balance && srcKas.id !== dstKas.id) {
+          const currSrcBal = runningKasBalance.get(srcKas.id) ?? 0;
+          if (amount > currSrcBal) {
+            errors.push(
+              `Saldo ${srcKas.nama} tidak mencukupi untuk transfer (Tersedia: ${formatRupiah(currSrcBal)}).`
+            );
+          } else if (errors.length === 0) {
+            runningKasBalance.set(srcKas.id, currSrcBal - amount);
+            runningKasBalance.set(dstKas.id, (runningKasBalance.get(dstKas.id) ?? 0) + amount);
           }
         }
 

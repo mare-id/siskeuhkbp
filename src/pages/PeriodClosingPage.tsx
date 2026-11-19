@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
-import { getIndoMonthName, MONTH_NAMES_INDO, formatDateIndo } from '../lib/formatters';
+import { getIndoMonthName, MONTH_NAMES_INDO, formatDateIndo, getYmdYear, getYmdMonth } from '../lib/formatters';
 import { PeriodClosing } from '../types/database';
 
 export const PeriodClosingPage: React.FC = () => {
@@ -40,11 +40,10 @@ export const PeriodClosingPage: React.FC = () => {
   // 1. Completeness inspection: check for each Kas whether it has Drafts or Submitted transactions in this period
   const completenessInspection = kasList.map((k) => {
     const periodTx = transactions.filter((tx) => {
-      const d = new Date(tx.tanggal);
       return (
         tx.kas_id === k.id &&
-        d.getFullYear() === selectedYear &&
-        d.getMonth() + 1 === selectedMonth
+        getYmdYear(tx.tanggal) === selectedYear &&
+        getYmdMonth(tx.tanggal) === selectedMonth
       );
     });
 
@@ -67,12 +66,18 @@ export const PeriodClosingPage: React.FC = () => {
   });
 
   const totalIncompleteKas = completenessInspection.filter((c) => !c.isComplete).length;
+  const targetIncompleteCount =
+    targetKasId === 'all'
+      ? totalIncompleteKas
+      : completenessInspection.filter((c) => c.kas.id === targetKasId && !c.isComplete).length;
   const isPeriodAlreadyClosed = periodClosings.some(
     (pc) =>
       pc.is_closed &&
       pc.tahun === selectedYear &&
       pc.bulan === selectedMonth &&
-      (targetKasId === 'all' ? pc.kas_id === null : pc.kas_id === targetKasId)
+      (targetKasId === 'all'
+        ? pc.kas_id === null || pc.kas_id === undefined
+        : pc.kas_id === targetKasId || pc.kas_id === null || pc.kas_id === undefined)
   );
 
   const handleClosePeriod = async () => {
@@ -222,10 +227,10 @@ export const PeriodClosingPage: React.FC = () => {
               </div>
             ) : (
               <button
-                disabled={isClosingSubmitting || totalIncompleteKas > 0}
+                disabled={isClosingSubmitting || targetIncompleteCount > 0}
                 onClick={handleClosePeriod}
                 className={`w-full sm:w-auto px-5 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 ${
-                  totalIncompleteKas > 0
+                  targetIncompleteCount > 0
                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                     : 'bg-primary hover:bg-primary-dark text-white'
                 }`}

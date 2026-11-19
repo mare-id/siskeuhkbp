@@ -95,9 +95,12 @@ export const ApprovalQueuePage: React.FC = () => {
     const res = await bulkApprove(selectedTxIds);
     if (res.success) {
       confetti({ particleCount: 80, spread: 80, origin: { y: 0.7 } });
-      setActionSuccessMsg(`${res.count} transaksi disetujui.`);
+      const skipNote = res.skipped ? ` (${res.skipped} transaksi dilewati karena aturan persetujuan/saldo)` : '';
+      setActionSuccessMsg(`${res.count} transaksi disetujui.${skipNote}`);
       setSelectedTxIds([]);
       setTimeout(() => setActionSuccessMsg(''), 4000);
+    } else {
+      toast.error(res.error || 'Gagal menyetujui transaksi terpilih.');
     }
   };
 

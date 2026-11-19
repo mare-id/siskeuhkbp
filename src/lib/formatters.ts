@@ -81,3 +81,43 @@ export function formatNamaKeluarga(raw: string | null | undefined): string {
   if (!withoutPrefix) return '';
   return `Kel. ${withoutPrefix}`;
 }
+
+export function parseYmdParts(
+  dateStr: string | null | undefined
+): { year: number; month: number; day: number } | null {
+  if (!dateStr) return null;
+  const match = String(dateStr).trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!match) return null;
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const day = parseInt(match[3], 10);
+  if (!Number.isFinite(year) || month < 1 || month > 12 || day < 1 || day > 31) {
+    return null;
+  }
+  return { year, month, day };
+}
+
+export function getYmdYear(dateStr: string | null | undefined): number {
+  const parts = parseYmdParts(dateStr);
+  if (parts) return parts.year;
+  if (!dateStr) return 0;
+  const parsed = new Date(dateStr);
+  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getFullYear();
+}
+
+export function getYmdMonth(dateStr: string | null | undefined): number {
+  const parts = parseYmdParts(dateStr);
+  if (parts) return parts.month;
+  if (!dateStr) return 0;
+  const parsed = new Date(dateStr);
+  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getMonth() + 1;
+}
+
+export function getTodayYmd(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+

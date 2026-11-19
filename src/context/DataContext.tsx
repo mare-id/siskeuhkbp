@@ -124,7 +124,7 @@ import {
   syncDelete,
   syncResetZeroDataInSupabase,
 } from '../lib/supabaseSync';
-import { formatNamaKeluarga } from '../lib/formatters';
+import { formatNamaKeluarga, getYmdYear, getYmdMonth, getTodayYmd } from '../lib/formatters';
 import { useAuth } from './AuthContext';
 
 interface DataContextType {
@@ -142,6 +142,7 @@ interface DataContextType {
   loading: boolean;
 
   // Calculators
+  getBaseOpeningYear: () => number;
   getKasBalances: () => KasBalanceSummary[];
   getStorageBalances: () => StorageBalanceSummary[];
   getSentralisasiSummary: (year?: number) => {
@@ -160,7 +161,10 @@ interface DataContextType {
   getPendingTransactionsCount: (kasId?: string) => number;
 
   // Actions
-  addTransaction: (tx: Omit<Transaction, 'id' | 'created_at' | 'updated_at' | 'is_reversal'>) => Promise<{ success: boolean; error?: string }>;
+  addTransaction: (
+    tx: Omit<Transaction, 'id' | 'created_at' | 'updated_at' | 'is_reversal'>,
+    options?: { batchBalanceDeltas?: Record<string, number> }
+  ) => Promise<{ success: boolean; error?: string }>;
   addCompoundIncomeTransactions: (params: {
     tanggal: string;
     tanggal_warta?: string | null;
@@ -175,18 +179,21 @@ interface DataContextType {
   updateTransaction: (id: string, updates: Partial<Transaction>, reason?: string) => Promise<{ success: boolean; error?: string }>;
   deleteTransaction: (id: string, reason?: string) => Promise<{ success: boolean; error?: string }>;
   changeStatus: (id: string, newStatus: TransactionStatus, rejectNote?: string) => Promise<{ success: boolean; error?: string }>;
-  bulkApprove: (ids: string[]) => Promise<{ success: boolean; count: number }>;
-  createTransfer: (params: {
-    tanggal: string;
-    sourceKasId: string;
-    sourceStorageId: string;
-    targetKasId: string;
-    targetStorageId: string;
-    amount: number;
-    description: string;
-    receiptNo?: string;
-    attachmentUrl?: string;
-  }) => Promise<{ success: boolean; error?: string }>;
+  bulkApprove: (ids: string[]) => Promise<{ success: boolean; count: number; skipped?: number; error?: string }>;
+  createTransfer: (
+    params: {
+      tanggal: string;
+      sourceKasId: string;
+      sourceStorageId: string;
+      targetKasId: string;
+      targetStorageId: string;
+      amount: number;
+      description: string;
+      receiptNo?: string;
+      attachmentUrl?: string;
+    },
+    options?: { batchBalanceDeltas?: Record<string, number> }
+  ) => Promise<{ success: boolean; error?: string }>;
   confirmTransferReceipt: (transferId: string) => Promise<{ success: boolean; error?: string }>;
   createReversalTransaction: (originalTxId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
 
@@ -926,12 +933,74 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Calculate official and projected balances for each Kas
+  // Canonical opening year (prevents double-counting across roll-forward years)
+  const getBaseOpeningYear = (): number => {
+    if (openingBalances.length > 0) {
+      return Math.min(...openingBalances.map((ob) => Number(ob.tahun) || 2026));
+    }
+    return openingSetup?.first_year || settings.active_year || 2026;
+  };
+
+  // Ending balance of a Kas (and optional Storage) as of Dec 31 of targetYear
+  const getKasEndingBalanceAsOfYear = (kasId: string, targetYear: number, storageId?: string): number => {
+    const baseYear = getBaseOpeningYear();
+    const availableYears = openingBalances
+      .map((ob) => Number(ob.tahun) || 0)
+      .filter((y) => y > 0 && y <= targetYear);
+    if (availableYears.length === 0) return 0;
+
+    const anchorYear = Math.max(...availableYears);
+    const initial = openingBalances
+      .filter(
+        (ob) =>
+          ob.kas_id === kasId &&
+          Number(ob.tahun) === anchorYear &&
+          (!storageId || ob.storage_account_id === storageId)
+      )
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+    let net = 0;
+    transactions.forEach((tx) => {
+      if (tx.status !== 'approved' || tx.kas_id !== kasId) return;
+      if (storageId && tx.storage_account_id !== storageId) return;
+      const txYear = getYmdYear(tx.tanggal);
+      if (txYear <= 0 || txYear > targetYear) return;
+      if (anchorYear > baseYear && txYear < anchorYear) return;
+
+      const amt = Number(tx.amount) || 0;
+      if (tx.type === 'income' || tx.type === 'transfer_in') net += amt;
+      else if (tx.type === 'expense' || tx.type === 'transfer_out') net -= amt;
+    });
+
+    return initial + net;
+  };
+
+  // Opening balance of a Kas (and optional Storage) as of Jan 1 of targetYear
+  const getKasOpeningForYear = (kasId: string, targetYear: number, storageId?: string): number => {
+    const hasYearRows = openingBalances.some((ob) => Number(ob.tahun) === targetYear);
+    if (hasYearRows) {
+      return openingBalances
+        .filter(
+          (ob) =>
+            ob.kas_id === kasId &&
+            Number(ob.tahun) === targetYear &&
+            (!storageId || ob.storage_account_id === storageId)
+        )
+        .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    }
+    const baseYear = getBaseOpeningYear();
+    if (targetYear > baseYear) {
+      return getKasEndingBalanceAsOfYear(kasId, targetYear - 1, storageId);
+    }
+    return 0;
+  };
+
+  // Calculate official and projected balances for each Kas (anchored strictly on baseOpeningYear)
   const getKasBalances = (): KasBalanceSummary[] => {
+    const baseYear = getBaseOpeningYear();
     return kasList.map((k) => {
-      // Saldo Awal from opening_balances
       const initial = openingBalances
-        .filter((ob) => ob.kas_id === k.id)
+        .filter((ob) => ob.kas_id === k.id && Number(ob.tahun) === baseYear)
         .reduce((sum, item) => sum + Number(item.amount), 0);
 
       // Approved mutations
@@ -983,11 +1052,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  // Calculate balances per storage account
+  // Calculate balances per storage account (anchored strictly on baseOpeningYear)
   const getStorageBalances = (): StorageBalanceSummary[] => {
+    const baseYear = getBaseOpeningYear();
     return storageAccounts.map((sa) => {
       const initial = openingBalances
-        .filter((ob) => ob.storage_account_id === sa.id)
+        .filter((ob) => ob.storage_account_id === sa.id && Number(ob.tahun) === baseYear)
         .reduce((sum, item) => sum + Number(item.amount), 0);
 
       let net = 0;
@@ -1019,11 +1089,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }).length;
   };
 
+  const isBpskRemittanceTx = (tx: Transaction, cat?: Category): boolean => {
+    if (cat?.id === 'cat-out-bpsk' || cat?.kode === 'OUT-01') return true;
+    const catName = (cat?.nama || '').toLowerCase();
+    if (catName.includes('bpsk') || catName.includes('sentralisasi ke kas pusat')) return true;
+    if (!cat) {
+      const desc = (tx.description || '').toLowerCase();
+      return (desc.includes('setoran') || desc.includes('transfer')) && desc.includes('bpsk');
+    }
+    return false;
+  };
+
   // Kalkulator Sentralisasi Keuangan PPKU HKBP (55% Kas Pusat BPSK / 45% Kas Huria Lokal)
   const getSentralisasiSummary = (year?: number) => {
+    const allApprovedById = new Map(
+      transactions.filter((t) => t.status === 'approved').map((t) => [t.id, t])
+    );
     let filteredTxs = transactions.filter((tx) => tx.status === 'approved');
     if (year) {
-      filteredTxs = filteredTxs.filter((tx) => new Date(tx.tanggal).getFullYear() === year);
+      filteredTxs = filteredTxs.filter((tx) => getYmdYear(tx.tanggal) === year);
     }
 
     let totalPenerimaan = 0;
@@ -1036,67 +1120,88 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let totalPembangunanLokal = 0;
     let totalBpskRemitted = 0;
 
+    const applySentralisasiIncome = (tx: Transaction, sign: 1 | -1) => {
+      const amt = Number(tx.amount) || 0;
+      totalPenerimaan += sign * amt;
+      const cat = categories.find((c) => c.id === tx.category_id);
+      const isExcluded = tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi';
+
+      if (isExcluded) {
+        totalDikecualikan += sign * amt;
+        const exType = tx.sentralisasi_exclusion_type || cat?.sentralisasi_exclusion_type;
+        if (exType === 'sosial_duka') {
+          totalSosialDuka += sign * amt;
+        } else if (exType === 'beasiswa') {
+          totalBeasiswa += sign * amt;
+        } else if (exType === 'pembangunan_lokal') {
+          totalPembangunanLokal += sign * amt;
+        } else if (exType !== 'transitoris' && exType !== 'lainnya') {
+          const nameLower = (cat?.nama || tx.description || '').toLowerCase();
+          if (nameLower.includes('sosial') || nameLower.includes('gariana') || cat?.kode?.includes('EX-01')) {
+            totalSosialDuka += sign * amt;
+          } else if (nameLower.includes('beasiswa') || nameLower.includes('belajar') || cat?.kode?.includes('EX-02')) {
+            totalBeasiswa += sign * amt;
+          } else if (nameLower.includes('pembangunan') || cat?.kode?.includes('EX-03')) {
+            totalPembangunanLokal += sign * amt;
+          }
+        }
+      } else {
+        totalObjekSentralisasi += sign * amt;
+        const bpskPart =
+          tx.sentralisasi_role === 'huria_share'
+            ? 0
+            : tx.sentralisasi_role === 'bpsk_share'
+            ? amt
+            : tx.bpsk_amount !== undefined && tx.bpsk_amount !== null
+            ? Number(tx.bpsk_amount)
+            : Math.round(amt * 0.55);
+        const huriaPart =
+          tx.sentralisasi_role === 'huria_share'
+            ? amt
+            : tx.sentralisasi_role === 'bpsk_share'
+            ? 0
+            : tx.huria_amount !== undefined && tx.huria_amount !== null
+            ? Number(tx.huria_amount)
+            : amt - bpskPart;
+        totalBpskObligation += sign * bpskPart;
+        totalHuriaShare += sign * huriaPart;
+      }
+    };
+
     filteredTxs.forEach((tx) => {
       const amt = Number(tx.amount) || 0;
-      if (tx.type === 'income') {
-        totalPenerimaan += amt;
-        const cat = categories.find((c) => c.id === tx.category_id);
-        const isExcluded = tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi';
-
-        if (isExcluded) {
-          totalDikecualikan += amt;
-          const exType = tx.sentralisasi_exclusion_type || cat?.sentralisasi_exclusion_type;
-          if (exType === 'sosial_duka') {
-            totalSosialDuka += amt;
-          } else if (exType === 'beasiswa') {
-            totalBeasiswa += amt;
-          } else if (exType === 'pembangunan_lokal') {
-            totalPembangunanLokal += amt;
-          } else if (exType !== 'transitoris' && exType !== 'lainnya') {
-            const nameLower = (cat?.nama || tx.description || '').toLowerCase();
-            if (nameLower.includes('sosial') || nameLower.includes('gariana') || cat?.kode?.includes('EX-01')) {
-              totalSosialDuka += amt;
-            } else if (nameLower.includes('beasiswa') || nameLower.includes('belajar') || cat?.kode?.includes('EX-02')) {
-              totalBeasiswa += amt;
-            } else if (nameLower.includes('pembangunan') || cat?.kode?.includes('EX-03')) {
-              totalPembangunanLokal += amt;
-            }
+      if (tx.is_reversal) {
+        const orig = tx.reverses_id ? allApprovedById.get(tx.reverses_id) : undefined;
+        if (tx.type === 'expense' || orig?.type === 'income') {
+          applySentralisasiIncome(orig || tx, -1);
+        } else if (tx.type === 'income' || orig?.type === 'expense') {
+          const cat = categories.find((c) => c.id === (orig?.category_id ?? tx.category_id));
+          if (isBpskRemittanceTx(orig || tx, cat)) {
+            totalBpskRemitted -= amt;
           }
-        } else {
-          // Objek Sentralisasi (55% Kas Sentralisasi BPSK / 45% Kas Tujuan Huria)
-          totalObjekSentralisasi += amt;
-          const bpskPart =
-            tx.sentralisasi_role === 'huria_share'
-              ? 0
-              : tx.sentralisasi_role === 'bpsk_share'
-              ? amt
-              : tx.bpsk_amount !== undefined
-              ? Number(tx.bpsk_amount)
-              : Math.round(amt * 0.55);
-          const huriaPart =
-            tx.sentralisasi_role === 'huria_share'
-              ? amt
-              : tx.sentralisasi_role === 'bpsk_share'
-              ? 0
-              : tx.huria_amount !== undefined
-              ? Number(tx.huria_amount)
-              : amt - bpskPart;
-          totalBpskObligation += bpskPart;
-          totalHuriaShare += huriaPart;
         }
+        return;
+      }
+
+      if (tx.type === 'income') {
+        applySentralisasiIncome(tx, 1);
       } else if (tx.type === 'expense') {
         const cat = categories.find((c) => c.id === tx.category_id);
-        const isBpskOut =
-          cat?.id === 'cat-out-bpsk' ||
-          cat?.kode === 'OUT-01' ||
-          (cat?.nama || '').toLowerCase().includes('bpsk') ||
-          (cat?.nama || '').toLowerCase().includes('sentralisasi ke kas pusat') ||
-          (tx.description || '').toLowerCase().includes('bpsk');
-        if (isBpskOut) {
+        if (isBpskRemittanceTx(tx, cat)) {
           totalBpskRemitted += amt;
         }
       }
     });
+
+    totalPenerimaan = Math.max(0, totalPenerimaan);
+    totalObjekSentralisasi = Math.max(0, totalObjekSentralisasi);
+    totalBpskObligation = Math.max(0, totalBpskObligation);
+    totalHuriaShare = Math.max(0, totalHuriaShare);
+    totalDikecualikan = Math.max(0, totalDikecualikan);
+    totalSosialDuka = Math.max(0, totalSosialDuka);
+    totalBeasiswa = Math.max(0, totalBeasiswa);
+    totalPembangunanLokal = Math.max(0, totalPembangunanLokal);
+    totalBpskRemitted = Math.max(0, totalBpskRemitted);
 
     const outstandingBpsk = Math.max(0, totalBpskObligation - totalBpskRemitted);
 
@@ -1132,11 +1237,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addTransaction = async (
-    txInput: Omit<Transaction, 'id' | 'created_at' | 'updated_at' | 'is_reversal'>
+    txInput: Omit<Transaction, 'id' | 'created_at' | 'updated_at' | 'is_reversal'>,
+    options?: { batchBalanceDeltas?: Record<string, number> }
   ): Promise<{ success: boolean; error?: string }> => {
-    const txDate = new Date(txInput.tanggal);
-    const year = txDate.getFullYear();
-    const month = txDate.getMonth() + 1;
+    const year = getYmdYear(txInput.tanggal);
+    const month = getYmdMonth(txInput.tanggal);
 
     // Check LPJ approved lock
     if (isYearLockedByLpj(year)) {
@@ -1183,9 +1288,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
-    // Check negative balance if enabled
+    // Check negative balance if enabled (supports in-batch cumulative delta)
     if (settings.block_negative_balance && txInput.type === 'expense') {
-      const kasBalance = getKasBalances().find((k) => k.kas_id === txInput.kas_id)?.saldo_resmi || 0;
+      const baseBal = getKasBalances().find((k) => k.kas_id === txInput.kas_id)?.saldo_resmi || 0;
+      const batchDelta = options?.batchBalanceDeltas?.[txInput.kas_id] || 0;
+      const kasBalance = baseBal + batchDelta;
       if (txInput.amount > kasBalance) {
         return {
           success: false,
@@ -1352,9 +1459,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Tambahkan minimal 1 baris alokasi kas tujuan.' };
     }
 
-    const txDate = new Date(tanggal);
-    const year = txDate.getFullYear();
-    const month = txDate.getMonth() + 1;
+    const year = getYmdYear(tanggal);
+    const month = getYmdMonth(tanggal);
 
     if (isYearLockedByLpj(year)) {
       return {
@@ -1541,8 +1647,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!existing) return { success: false, error: 'Transaksi tidak ditemukan.' };
 
     const isUserAdmin = currentUser?.role === 'admin';
-    const existingYear = new Date(existing.tanggal).getFullYear();
-    const targetYear = updates.tanggal ? new Date(updates.tanggal).getFullYear() : existingYear;
+    const existingYear = getYmdYear(existing.tanggal);
+    const existingMonth = getYmdMonth(existing.tanggal);
+    const targetTanggal = updates.tanggal || existing.tanggal;
+    const targetYear = getYmdYear(targetTanggal);
+    const targetMonth = getYmdMonth(targetTanggal);
+    const targetKasId = updates.kas_id || existing.kas_id;
 
     if (isYearLockedByLpj(existingYear) || isYearLockedByLpj(targetYear)) {
       return {
@@ -1551,11 +1661,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
-    if (existing.status === 'approved' && !isUserAdmin) {
-      return {
-        success: false,
-        error: 'Transaksi yang sudah Disetujui tidak dapat diubah secara langsung. Gunakan menu Koreksi/Pembalik atau hubungi Admin.',
-      };
+    if (!isUserAdmin) {
+      if (existing.status === 'approved') {
+        return {
+          success: false,
+          error: 'Transaksi yang sudah Disetujui tidak dapat diubah secara langsung. Gunakan menu Koreksi/Pembalik atau hubungi Admin.',
+        };
+      }
+      if (isPeriodClosed(existingYear, existingMonth, existing.kas_id) || isPeriodClosed(targetYear, targetMonth, targetKasId)) {
+        return {
+          success: false,
+          error: `Periode buku untuk transaksi ini sudah ditutup. Hubungi Admin/Bendahara Umum jika memerlukan pembukaan periode.`,
+        };
+      }
     }
 
     let computedSentralisasi: Partial<Transaction> = {};
@@ -1683,11 +1801,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!existing) return { success: false, error: 'Transaksi tidak ditemukan.' };
 
     const isUserAdmin = currentUser?.role === 'admin';
-    const txYear = new Date(existing.tanggal).getFullYear();
+    const txYear = getYmdYear(existing.tanggal);
+    const txMonth = getYmdMonth(existing.tanggal);
     if (isYearLockedByLpj(txYear)) {
       return {
         success: false,
         error: `Tahun Anggaran ${txYear} telah disahkan LPJ-nya oleh Rapat Huria dan telah terkunci permanen. Transaksi tidak dapat dihapus.`,
+      };
+    }
+
+    if (!isUserAdmin && isPeriodClosed(txYear, txMonth, existing.kas_id)) {
+      return {
+        success: false,
+        error: `Periode ${txMonth}/${txYear} untuk kas ini sudah ditutup. Transaksi tidak dapat dihapus.`,
       };
     }
 
@@ -1723,6 +1849,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const tx = transactions.find((t) => t.id === id);
     if (!tx) return { success: false, error: 'Transaksi tidak ditemukan.' };
 
+    const txYear = getYmdYear(tx.tanggal);
+    const txMonth = getYmdMonth(tx.tanggal);
+
+    if (isYearLockedByLpj(txYear)) {
+      return {
+        success: false,
+        error: `Tahun Anggaran ${txYear} telah disahkan LPJ-nya oleh Rapat Huria dan terkunci permanen.`,
+      };
+    }
+    if (isPeriodClosed(txYear, txMonth, tx.kas_id)) {
+      return {
+        success: false,
+        error: `Periode ${txMonth}/${txYear} untuk kas ini sudah ditutup. Status transaksi tidak dapat diubah.`,
+      };
+    }
+
     // Submitter cannot approve their own transaction
     if (newStatus === 'approved' && tx.created_by === currentUser?.id) {
       return {
@@ -1736,27 +1878,58 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Penolakan transaksi wajib menyertakan alasan/catatan penolakan.' };
     }
 
+    // Negative balance check upon approval for outflows
+    if (
+      newStatus === 'approved' &&
+      settings.block_negative_balance &&
+      (tx.type === 'expense' || tx.type === 'transfer_out')
+    ) {
+      const kasBal = getKasBalances().find((k) => k.kas_id === tx.kas_id)?.saldo_resmi || 0;
+      const pairedSameKasNet =
+        tx.transfer_id &&
+        transactions.some(
+          (item) =>
+            item.id !== id &&
+            item.transfer_id === tx.transfer_id &&
+            item.kas_id === tx.kas_id &&
+            item.type === 'transfer_in'
+        );
+      if (!pairedSameKasNet && Number(tx.amount) > kasBal) {
+        return {
+          success: false,
+          error: `Persetujuan ditolak: Saldo resmi kas saat ini (${kasBal.toLocaleString('id-ID')}) tidak mencukupi untuk pengeluaran Rp ${Number(tx.amount).toLocaleString('id-ID')}.`,
+        };
+      }
+    }
+
+    const nowIso = new Date().toISOString();
     const updatedTx: Transaction = {
       ...tx,
       status: newStatus,
       approved_by: newStatus === 'approved' ? currentUser?.id : tx.approved_by,
-      approved_at: newStatus === 'approved' ? new Date().toISOString() : tx.approved_at,
+      approved_at: newStatus === 'approved' ? nowIso : tx.approved_at,
       reject_note: newStatus === 'rejected' ? rejectNote : null,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso,
+    };
+
+    // For rejection of a transfer, reject ALL legs across kas so no orphaned pending transfer leg remains
+    const shouldUpdateCrossKasTransferLeg = (item: Transaction): boolean => {
+      if (!tx.transfer_id || item.transfer_id !== tx.transfer_id || item.id === id) return false;
+      if (newStatus === 'rejected') return true;
+      return item.kas_id === tx.kas_id;
     };
 
     setTransactions((prev) => {
       return prev.map((item) => {
         if (item.id === id) return updatedTx;
-        // If transfer in the same kas, update the paired side too
-        if (tx.transfer_id && item.transfer_id === tx.transfer_id && item.kas_id === tx.kas_id) {
+        if (shouldUpdateCrossKasTransferLeg(item)) {
           return {
             ...item,
             status: newStatus,
             approved_by: newStatus === 'approved' ? currentUser?.id : item.approved_by,
-            approved_at: newStatus === 'approved' ? new Date().toISOString() : item.approved_at,
+            approved_at: newStatus === 'approved' ? nowIso : item.approved_at,
             reject_note: newStatus === 'rejected' ? rejectNote : null,
-            updated_at: new Date().toISOString(),
+            updated_at: nowIso,
           };
         }
         return item;
@@ -1773,12 +1946,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       await syncUpdate('transactions', patch, 'id', id);
       if (tx.transfer_id && supabase) {
-        await supabase
+        let query = supabase
           .from('transactions')
           .update(patch)
           .eq('transfer_id', tx.transfer_id)
-          .eq('kas_id', tx.kas_id)
           .neq('id', id);
+        if (newStatus !== 'rejected') {
+          query = query.eq('kas_id', tx.kas_id);
+        }
+        await query;
       }
     }
 
@@ -1794,12 +1970,52 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
-  // Bulk Approve
-  const bulkApprove = async (ids: string[]): Promise<{ success: boolean; count: number }> => {
-    const approvableIds = transactions
-      .filter((tx) => ids.includes(tx.id) && tx.status === 'submitted' && tx.created_by !== currentUser?.id)
-      .map((tx) => tx.id);
+  // Bulk Approve (enforces SoD, LPJ locks, closed periods, and negative balance running guard)
+  const bulkApprove = async (ids: string[]): Promise<{ success: boolean; count: number; skipped?: number; error?: string }> => {
+    const runningBalMap = new Map<string, number>(
+      getKasBalances().map((kb) => [kb.kas_id, kb.saldo_resmi])
+    );
+    const approvableIds: string[] = [];
+    let skipped = 0;
+
+    for (const tx of transactions) {
+      if (!ids.includes(tx.id) || tx.status !== 'submitted') continue;
+      if (tx.created_by === currentUser?.id) {
+        skipped++;
+        continue;
+      }
+      const yr = getYmdYear(tx.tanggal);
+      const mo = getYmdMonth(tx.tanggal);
+      if (isYearLockedByLpj(yr) || isPeriodClosed(yr, mo, tx.kas_id)) {
+        skipped++;
+        continue;
+      }
+      const amt = Number(tx.amount) || 0;
+      const curBal = runningBalMap.get(tx.kas_id) ?? 0;
+      if (tx.type === 'expense' || tx.type === 'transfer_out') {
+        if (settings.block_negative_balance && amt > curBal) {
+          skipped++;
+          continue;
+        }
+        runningBalMap.set(tx.kas_id, curBal - amt);
+      } else if (tx.type === 'income' || tx.type === 'transfer_in') {
+        runningBalMap.set(tx.kas_id, curBal + amt);
+      }
+      approvableIds.push(tx.id);
+    }
+
     const count = approvableIds.length;
+    if (count === 0) {
+      return {
+        success: false,
+        count: 0,
+        skipped,
+        error: skipped > 0
+          ? 'Tidak ada transaksi yang dapat disetujui (terhalang batas pembuat sendiri, periode tertutup, atau saldo kas tidak mencukupi).'
+          : 'Tidak ada transaksi berstatus Diajukan yang dipilih.',
+      };
+    }
+
     const nowIso = new Date().toISOString();
 
     setTransactions((prev) =>
@@ -1827,22 +2043,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })
         .in('id', approvableIds);
     }
-    addAuditLog('transactions', 'bulk', 'BULK_APPROVE', null, { ids: approvableIds, count }, `${count} transaksi disetujui massal`);
-    return { success: true, count };
+    addAuditLog('transactions', 'bulk', 'BULK_APPROVE', null, { ids: approvableIds, count, skipped }, `${count} transaksi disetujui massal`);
+    return { success: true, count, skipped };
   };
 
   // Atomic Transfer
-  const createTransfer = async (params: {
-    tanggal: string;
-    sourceKasId: string;
-    sourceStorageId: string;
-    targetKasId: string;
-    targetStorageId: string;
-    amount: number;
-    description: string;
-    receiptNo?: string;
-    attachmentUrl?: string;
-  }): Promise<{ success: boolean; error?: string }> => {
+  const createTransfer = async (
+    params: {
+      tanggal: string;
+      sourceKasId: string;
+      sourceStorageId: string;
+      targetKasId: string;
+      targetStorageId: string;
+      amount: number;
+      description: string;
+      receiptNo?: string;
+      attachmentUrl?: string;
+    },
+    options?: { batchBalanceDeltas?: Record<string, number> }
+  ): Promise<{ success: boolean; error?: string }> => {
     const {
       tanggal,
       sourceKasId,
@@ -1856,6 +2075,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } = params;
 
     if (amount <= 0) return { success: false, error: 'Nominal transfer harus lebih dari 0.' };
+
+    if (sourceKasId === targetKasId && sourceStorageId === targetStorageId) {
+      return { success: false, error: 'Kas dan tempat penyimpanan asal & tujuan tidak boleh sama.' };
+    }
+
+    const year = getYmdYear(tanggal);
+    const month = getYmdMonth(tanggal);
+
+    if (isYearLockedByLpj(year)) {
+      return {
+        success: false,
+        error: `Tahun Anggaran ${year} telah disahkan LPJ-nya oleh Rapat Huria dan terkunci permanen.`,
+      };
+    }
 
     if (openingSetup?.go_live_date && tanggal < openingSetup.go_live_date) {
       return {
@@ -1878,7 +2111,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
-    const isSameKas = sourceKasId === targetKasId;
+    if (isPeriodClosed(year, month, sourceKasId)) {
+      return { success: false, error: `Periode ${month}/${year} untuk kas pengirim sudah ditutup.` };
+    }
+    if (isPeriodClosed(year, month, targetKasId)) {
+      return { success: false, error: `Periode ${month}/${year} untuk kas penerima sudah ditutup.` };
+    }
+
+    if (settings.block_negative_balance && sourceKasId !== targetKasId) {
+      const baseBal = getKasBalances().find((k) => k.kas_id === sourceKasId)?.saldo_resmi || 0;
+      const batchDelta = options?.batchBalanceDeltas?.[sourceKasId] || 0;
+      const availableBal = baseBal + batchDelta;
+      if (amount > availableBal) {
+        return {
+          success: false,
+          error: `Saldo kas pengirim tidak mencukupi (Tersedia: Rp ${availableBal.toLocaleString('id-ID')}).`,
+        };
+      }
+    }
+
     const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const transferId = `tf-pair-${uniqueSuffix}`;
     const initialStatus: TransactionStatus = 'submitted';
@@ -1933,36 +2184,69 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Confirm transfer receipt by recipient ketua
   const confirmTransferReceipt = async (transferId: string): Promise<{ success: boolean; error?: string }> => {
+    const pairLegs = transactions.filter((t) => t.transfer_id === transferId);
+    const pendingLegs = pairLegs.filter((t) => t.status === 'submitted');
+    if (pendingLegs.length === 0) {
+      return { success: false, error: 'Transfer tidak ditemukan atau sudah tidak dalam status menunggu konfirmasi.' };
+    }
+
+    if (pendingLegs.some((t) => t.created_by === currentUser?.id)) {
+      return {
+        success: false,
+        error: 'Penginput transfer tidak boleh mengonfirmasi/menyetujui transfernya sendiri.',
+      };
+    }
+
+    for (const leg of pendingLegs) {
+      const yr = getYmdYear(leg.tanggal);
+      const mo = getYmdMonth(leg.tanggal);
+      if (isYearLockedByLpj(yr)) {
+        return { success: false, error: `Tahun Anggaran ${yr} sudah terkunci permanen oleh LPJ.` };
+      }
+      if (isPeriodClosed(yr, mo, leg.kas_id)) {
+        return { success: false, error: `Periode ${mo}/${yr} untuk kas terkait sudah ditutup.` };
+      }
+      if (leg.type === 'transfer_out' && settings.block_negative_balance) {
+        const srcBal = getKasBalances().find((k) => k.kas_id === leg.kas_id)?.saldo_resmi || 0;
+        if (Number(leg.amount) > srcBal) {
+          return {
+            success: false,
+            error: `Saldo kas pengirim tidak mencukupi (Tersedia: Rp ${srcBal.toLocaleString('id-ID')}).`,
+          };
+        }
+      }
+    }
+
+    const nowIso = new Date().toISOString();
     setTransactions((prev) =>
       prev.map((t) => {
-        if (t.transfer_id === transferId) {
+        if (t.transfer_id === transferId && t.status === 'submitted') {
           return {
             ...t,
             status: 'approved',
             transfer_confirmed_by: currentUser?.id,
-            transfer_confirmed_at: new Date().toISOString(),
+            transfer_confirmed_at: nowIso,
             approved_by: currentUser?.id,
-            approved_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            approved_at: nowIso,
+            updated_at: nowIso,
           };
         }
         return t;
       })
     );
-    if (isSupabaseConfigured) {
-      await syncUpdate(
-        'transactions',
-        {
+    if (isSupabaseConfigured && supabase) {
+      await supabase
+        .from('transactions')
+        .update({
           status: 'approved',
           transfer_confirmed_by: currentUser?.id,
-          transfer_confirmed_at: new Date().toISOString(),
+          transfer_confirmed_at: nowIso,
           approved_by: currentUser?.id,
-          approved_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        'transfer_id',
-        transferId
-      );
+          approved_at: nowIso,
+          updated_at: nowIso,
+        })
+        .eq('transfer_id', transferId)
+        .eq('status', 'submitted');
     }
     addAuditLog('transactions', transferId, 'TRANSFER_CONFIRMED', null, { transferId }, `Transfer dikonfirmasi penerimaannya`);
     return { success: true };
@@ -1975,6 +2259,36 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): Promise<{ success: boolean; error?: string }> => {
     const original = transactions.find((t) => t.id === originalTxId);
     if (!original) return { success: false, error: 'Transaksi asli tidak ditemukan.' };
+    if (original.status !== 'approved') {
+      return { success: false, error: 'Hanya transaksi berstatus Disetujui yang dapat dibuatkan koreksi pembalik.' };
+    }
+    if (original.is_reversal) {
+      return { success: false, error: 'Transaksi koreksi pembalik tidak dapat dibalik ulang.' };
+    }
+    const alreadyReversed = transactions.some(
+      (t) => t.reverses_id === originalTxId && t.status === 'approved'
+    );
+    if (alreadyReversed) {
+      return { success: false, error: 'Transaksi ini sudah pernah dikoreksi/dibalik sebelumnya.' };
+    }
+
+    const todayStr = getTodayYmd();
+    const revYear = getYmdYear(todayStr);
+    const revMonth = getYmdMonth(todayStr);
+    const origYear = getYmdYear(original.tanggal);
+
+    if (isYearLockedByLpj(origYear) || isYearLockedByLpj(revYear)) {
+      return {
+        success: false,
+        error: `Tahun Anggaran ${isYearLockedByLpj(origYear) ? origYear : revYear} telah disahkan LPJ dan terkunci permanen.`,
+      };
+    }
+    if (isPeriodClosed(revYear, revMonth, original.kas_id)) {
+      return {
+        success: false,
+        error: `Periode ${revMonth}/${revYear} untuk kas ini sudah ditutup. Buka kembali periode atau hubungi Bendahara Umum.`,
+      };
+    }
 
     const reverseType =
       original.type === 'income'
@@ -1985,9 +2299,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ? 'transfer_in'
         : 'transfer_out';
 
+    const nowIso = new Date().toISOString();
     const reversalTx: Transaction = {
-      id: `tx-rev-${Date.now()}`,
-      tanggal: new Date().toISOString().split('T')[0],
+      id: `tx-rev-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      tanggal: todayStr,
       kas_id: original.kas_id,
       storage_account_id: original.storage_account_id,
       category_id: original.category_id,
@@ -2006,9 +2321,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       is_reversal: true,
       created_by: currentUser?.id,
       approved_by: currentUser?.id,
-      approved_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      approved_at: nowIso,
+      created_at: nowIso,
+      updated_at: nowIso,
     };
 
     setTransactions((prev) => [reversalTx, ...prev]);
@@ -2025,12 +2340,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     month: number,
     kasId?: string | null
   ): Promise<{ success: boolean; error?: string }> => {
+    const targetKas = kasId || null;
+    const alreadyClosed = periodClosings.some(
+      (pc) =>
+        pc.is_closed &&
+        pc.tahun === year &&
+        pc.bulan === month &&
+        (pc.kas_id || null) === targetKas
+    );
+    if (alreadyClosed) {
+      return {
+        success: false,
+        error: `Buku periode ${month}/${year} untuk target kas ini sudah ditutup sebelumnya.`,
+      };
+    }
+
     // Check if any draft or submitted transactions remain
     const unapproved = transactions.filter((tx) => {
-      const d = new Date(tx.tanggal);
       return (
-        d.getFullYear() === year &&
-        d.getMonth() + 1 === month &&
+        getYmdYear(tx.tanggal) === year &&
+        getYmdMonth(tx.tanggal) === month &&
         (kasId ? tx.kas_id === kasId : true) &&
         (tx.status === 'draft' || tx.status === 'submitted')
       );
@@ -2047,7 +2376,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: `pc-${Date.now()}`,
       tahun: year,
       bulan: month,
-      kas_id: kasId || null,
+      kas_id: targetKas,
       is_closed: true,
       closed_by: currentUser?.id,
       closed_at: new Date().toISOString(),
@@ -3055,7 +3384,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Tidak dapat menghapus Tahun Anggaran yang sedang aktif dalam sistem.' };
     }
 
-    const hasTx = transactions.some((tx) => new Date(tx.tanggal).getFullYear() === target.year);
+    const hasTx = transactions.some((tx) => getYmdYear(tx.tanggal) === target.year);
     if (hasTx) {
       return { success: false, error: `Tahun Anggaran ${target.year} memiliki transaksi keuangan tercatat. Hanya dapat diubah statusnya menjadi 'Ditutup'.` };
     }
@@ -3102,46 +3431,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const rollForwardBalancesToYear = async (fromYear: number, toYear: number): Promise<{ success: boolean; count: number; error?: string }> => {
+    if (toYear <= fromYear) {
+      return { success: false, count: 0, error: 'Tahun tujuan roll-forward harus lebih besar dari tahun sumber.' };
+    }
     let createdCount = 0;
     const createdRowsForTarget: OpeningBalance[] = [];
-    const newOpeningBalances = [...openingBalances.filter((ob) => ob.tahun !== toYear)];
+    const newOpeningBalances = [...openingBalances.filter((ob) => Number(ob.tahun) !== toYear)];
+    const nowIso = new Date().toISOString();
 
     for (const kas of kasList) {
       for (const storage of storageAccounts) {
-        const initialBal = openingBalances.find((ob) => ob.kas_id === kas.id && ob.storage_account_id === storage.id && ob.tahun === fromYear)?.amount || 0;
-        
-        const txForPair = transactions.filter((tx) => {
-          const d = new Date(tx.tanggal);
-          return d.getFullYear() <= fromYear && tx.status === 'approved';
-        });
-
-        const income = txForPair
-          .filter((tx) => tx.type === 'income' && tx.kas_id === kas.id && tx.storage_account_id === storage.id)
-          .reduce((sum, tx) => sum + (tx.huria_amount ?? tx.amount), 0);
-
-        const expense = txForPair
-          .filter((tx) => tx.type === 'expense' && tx.kas_id === kas.id && tx.storage_account_id === storage.id)
-          .reduce((sum, tx) => sum + tx.amount, 0);
-
-        const transferIn = txForPair
-          .filter((tx) => tx.type === 'transfer_in' && tx.kas_id === kas.id && tx.storage_account_id === storage.id)
-          .reduce((sum, tx) => sum + tx.amount, 0);
-
-        const transferOut = txForPair
-          .filter((tx) => tx.type === 'transfer_out' && tx.kas_id === kas.id && tx.storage_account_id === storage.id)
-          .reduce((sum, tx) => sum + tx.amount, 0);
-
-        const endingBalance = initialBal + income - expense + transferIn - transferOut;
+        const endingBalance = getKasEndingBalanceAsOfYear(kas.id, fromYear, storage.id);
 
         const row: OpeningBalance = {
           id: `ob-${toYear}-${kas.id.slice(0, 6)}-${storage.id.slice(0, 6)}`,
           tahun: toYear,
           kas_id: kas.id,
           storage_account_id: storage.id,
-          amount: Math.max(0, endingBalance),
+          amount: endingBalance,
           notes: `Roll-forward otomatis dari saldo akhir tahun buku ${fromYear}`,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          created_at: nowIso,
+          updated_at: nowIso,
         };
         newOpeningBalances.push(row);
         createdRowsForTarget.push(row);
@@ -3629,18 +3939,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const activeItems = activeBudget ? budgetItems.filter((i) => i.budget_id === activeBudget.id) : [];
 
-    // Calculate actual realization from approved transactions (excluding transfers, including reversals)
+    // Calculate actual realization from approved transactions (excluding transfers, subtracting reversals)
     const txApproved = transactions.filter((tx) => {
       if (tx.kas_id !== kasId || tx.status !== 'approved') return false;
       if (tx.type === 'transfer_in' || tx.type === 'transfer_out') return false;
-      const d = new Date(tx.tanggal);
-      return d.getFullYear() === year && d.getMonth() + 1 <= throughMonth;
+      const y = getYmdYear(tx.tanggal);
+      const m = getYmdMonth(tx.tanggal);
+      return y === year && m >= 1 && m <= throughMonth;
     });
 
+    const catById = new Map(categories.map((c) => [c.id, c]));
     const actualMap: { [catId: string]: number } = {};
     txApproved.forEach((tx) => {
-      if (tx.category_id) {
-        actualMap[tx.category_id] = (actualMap[tx.category_id] || 0) + Number(tx.amount);
+      if (!tx.category_id) return;
+      const cat = catById.get(tx.category_id);
+      const amt = Number(tx.amount) || 0;
+      if (!cat) {
+        actualMap[tx.category_id] = (actualMap[tx.category_id] || 0) + (tx.is_reversal ? -amt : amt);
+        return;
+      }
+      if (tx.type === cat.tipe) {
+        actualMap[tx.category_id] = (actualMap[tx.category_id] || 0) + amt;
+      } else if (tx.is_reversal) {
+        // Reversal of a transaction belonging to this category reduces actual YTD
+        actualMap[tx.category_id] = (actualMap[tx.category_id] || 0) - amt;
       }
     });
 
@@ -3662,8 +3984,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const variance = cat.tipe === 'income' ? actualYTD - budgetYTD : budgetYTD - actualYTD;
       const percentage = budgetYTD > 0 ? (actualYTD / budgetYTD) * 100 : 0;
 
-      // Only display if has budget or actual transaction
-      if (budgetAnnual > 0 || actualYTD > 0) {
+      // Display if budgeted or non-zero net realization
+      if (budgetAnnual > 0 || actualYTD !== 0) {
         rowMap[cat.id] = {
           category_id: cat.id,
           category_name: cat.nama,
@@ -3958,12 +4280,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
 
-    // Auto-sync into opening_balances so Phase 1 views work immediately
+    // Auto-sync into opening_balances scoped cleanly by entry year
     const updatedOpeningBalances = [...openingBalances];
     const upsertedBalances: OpeningBalance[] = [];
+    const defaultEntryYear = openingSetup?.first_year || settings.active_year || 2026;
     entriesToSync.forEach((entry) => {
+      const entryYear = Number(entry.tahun) || defaultEntryYear;
       const idx = updatedOpeningBalances.findIndex(
-        (ob) => ob.kas_id === entry.kas_id && ob.storage_account_id === entry.storage_account_id
+        (ob) =>
+          ob.kas_id === entry.kas_id &&
+          ob.storage_account_id === entry.storage_account_id &&
+          Number(ob.tahun) === entryYear
       );
       if (idx >= 0) {
         const nextOb: OpeningBalance = {
@@ -3977,7 +4304,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         const nextOb: OpeningBalance = {
           id: `ob-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          tahun: entry.tahun || 2026,
+          tahun: entryYear,
           kas_id: entry.kas_id,
           storage_account_id: entry.storage_account_id,
           amount: entry.amount,
@@ -4129,12 +4456,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         )
       );
 
-      // Apply adjustment directly to opening_balances & opening_balance_entries
+      // Apply adjustment directly to opening_balances & opening_balance_entries for adj.tahun
+      const targetAdjYear = Number(adj.tahun) || getBaseOpeningYear();
       const updatedObs = openingBalances
-        .filter((ob) => ob.kas_id === adj.kas_id && ob.storage_account_id === adj.storage_account_id)
+        .filter(
+          (ob) =>
+            ob.kas_id === adj.kas_id &&
+            ob.storage_account_id === adj.storage_account_id &&
+            Number(ob.tahun) === targetAdjYear
+        )
         .map((ob) => ({
           ...ob,
-          amount: ob.amount + adj.amount,
+          amount: Number(ob.amount) + Number(adj.amount),
           notes: `${ob.notes || ''} [Disesuaikan Rp ${adj.amount.toLocaleString('id-ID')}: ${adj.reason}]`,
           updated_at: nowIso,
         }));
@@ -4146,10 +4479,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
 
       const updatedObes = openingEntries
-        .filter((obe) => obe.kas_id === adj.kas_id && obe.storage_account_id === adj.storage_account_id)
+        .filter(
+          (obe) =>
+            obe.kas_id === adj.kas_id &&
+            obe.storage_account_id === adj.storage_account_id &&
+            Number(obe.tahun || targetAdjYear) === targetAdjYear
+        )
         .map((obe) => ({
           ...obe,
-          amount: obe.amount + adj.amount,
+          amount: Number(obe.amount) + Number(adj.amount),
           updated_at: nowIso,
         }));
       setOpeningEntries((prev) =>
@@ -4292,22 +4630,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // ---------------------------------------------------------------------------
 
   const calculateDepreciation = (asset: FixedAsset, year: number) => {
-    if (!lpjSettings.enable_depreciation || asset.useful_life_years <= 0) {
+    const cost = Math.max(0, Number(asset.nilai_perolehan) || 0);
+    const salvage = Math.min(cost, Math.max(0, Number(asset.salvage_value) || 0));
+    const usefulLife = Number(asset.useful_life_years) || 0;
+    const acqYear = getYmdYear(asset.tanggal_perolehan) || 2026;
+
+    if (!lpjSettings.enable_depreciation || usefulLife <= 0 || year < acqYear) {
       return {
         annualDepreciation: 0,
         accumulatedDepreciation: 0,
-        bookValue: asset.nilai_perolehan,
+        bookValue: year < acqYear ? 0 : cost,
       };
     }
-    const acqYear = new Date(asset.tanggal_perolehan).getFullYear() || 2026;
-    const depreciable = Math.max(0, asset.nilai_perolehan - (asset.salvage_value || 0));
-    const annual = Math.round(depreciable / asset.useful_life_years);
-    const yearsElapsed = Math.max(0, Math.min(asset.useful_life_years, year - acqYear));
+
+    const depreciable = Math.max(0, cost - salvage);
+    const annual = Math.round(depreciable / usefulLife);
+    const yearsElapsed = Math.max(0, Math.min(usefulLife, year - acqYear));
     const accumulated = Math.min(depreciable, annual * yearsElapsed);
-    const bookVal = Math.max(asset.salvage_value || 0, asset.nilai_perolehan - accumulated);
+    const bookVal = Math.max(salvage, cost - accumulated);
 
     return {
-      annualDepreciation: annual,
+      annualDepreciation: yearsElapsed >= usefulLife ? 0 : annual,
       accumulatedDepreciation: accumulated,
       bookValue: bookVal,
     };
@@ -5869,27 +6212,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   } => {
     const startMonth = semester === 1 ? 1 : 7;
     const endMonth = semester === 1 ? 6 : 12;
+    const todayStr = getTodayYmd();
+    const activeKasIds = kasList.filter((k) => k.is_active).map((k) => k.id);
+    const isMonthFullyClosed = (m: number) => {
+      const monthClosings = periodClosings.filter(
+        (pc) => pc.tahun === tahun && pc.bulan === m && pc.is_closed
+      );
+      if (monthClosings.some((pc) => pc.kas_id === null || pc.kas_id === undefined)) return true;
+      return (
+        activeKasIds.length > 0 &&
+        activeKasIds.every((kId) => monthClosings.some((pc) => pc.kas_id === kId))
+      );
+    };
 
-    // 1. Months closed
+    // 1. Months closed (global close OR all active kas closed for each month)
     const requiredMonths = [startMonth, startMonth + 1, startMonth + 2, startMonth + 3, startMonth + 4, endMonth];
-    const closedMonths = periodClosings.filter((pc) => pc.tahun === tahun && pc.is_closed).map((pc) => pc.bulan);
-    const missingMonths = requiredMonths.filter((m) => !closedMonths.includes(m));
+    const missingMonths = requiredMonths.filter((m) => !isMonthFullyClosed(m));
     const monthsClosed = missingMonths.length === 0;
 
     // 2. No draft or submitted transactions in that semester
     const semTxs = transactions.filter((t) => {
-      const d = new Date(t.tanggal);
-      const m = d.getMonth() + 1;
-      return d.getFullYear() === tahun && m >= startMonth && m <= endMonth;
+      const y = getYmdYear(t.tanggal);
+      const m = getYmdMonth(t.tanggal);
+      return y === tahun && m >= startMonth && m <= endMonth;
     });
     const pendingTxCount = semTxs.filter((t) => t.status === 'draft' || t.status === 'submitted').length;
     const hasPendingTx = pendingTxCount > 0;
 
     // 3. Storage reconciliations (every active storage account must be reconciled in this semester)
     const semRecs = reconciliations.filter((r) => {
-      const d = new Date(r.tanggal);
-      const m = d.getMonth() + 1;
-      return d.getFullYear() === tahun && m >= startMonth && m <= endMonth;
+      const y = getYmdYear(r.tanggal);
+      const m = getYmdMonth(r.tanggal);
+      return y === tahun && m >= startMonth && m <= endMonth;
     });
     const activeStorages = storageAccounts.filter((s) => s.is_active);
     const missingStorages = activeStorages.filter((sa) => !semRecs.some((r) => r.storage_account_id === sa.id));
@@ -5897,7 +6251,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // 4. Overdue advances reviewed
     const unaddressedAdvancesCount = advances.filter((a) => {
-      const isOverdue = a.status === 'overdue' || (a.status === 'active' && new Date(a.due_date) < new Date());
+      const isOverdue = a.status === 'overdue' || (a.status === 'active' && Boolean(a.due_date) && a.due_date < todayStr);
       const hasSettlement = advanceSettlements.some((s) => s.advance_id === a.id);
       return isOverdue && !hasSettlement;
     }).length;
@@ -6013,20 +6367,44 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     transactions
       .filter((tx) => {
         if (tx.status !== 'approved') return false;
-        const d = new Date(tx.tanggal);
-        const m = d.getMonth() + 1;
-        return d.getFullYear() === report!.tahun && m >= startMonth && m <= endMonth;
+        const y = getYmdYear(tx.tanggal);
+        const m = getYmdMonth(tx.tanggal);
+        return y === report!.tahun && m >= startMonth && m <= endMonth;
       })
       .forEach((tx) => {
         const amt = Number(tx.amount) || 0;
+        if (tx.is_reversal) {
+          if (tx.type === 'expense') totalPenerimaan -= amt;
+          else if (tx.type === 'income') totalPengeluaran -= amt;
+          else if (tx.type === 'transfer_in') totalTransferKeluar -= amt;
+          else if (tx.type === 'transfer_out') totalTransferMasuk -= amt;
+          return;
+        }
         if (tx.type === 'income') totalPenerimaan += amt;
         else if (tx.type === 'expense') totalPengeluaran += amt;
         else if (tx.type === 'transfer_in') totalTransferMasuk += amt;
         else if (tx.type === 'transfer_out') totalTransferKeluar += amt;
       });
 
-    const kasBalances = getKasBalances();
-    const totalKasDanBank = kasBalances.reduce((sum, k) => sum + k.saldo_resmi, 0);
+    const posisiSem = getPosisiKeuangan(report.tahun);
+    const kasBalances = kasList.map((k) => {
+      const opening = getKasOpeningForYear(k.id, report!.tahun);
+      const ending = getKasEndingBalanceAsOfYear(k.id, report!.tahun);
+      return {
+        kas_id: k.id,
+        kode: k.kode,
+        nama: k.nama,
+        warna: k.warna,
+        saldo_awal: opening,
+        total_pemasukan: totalPenerimaan,
+        total_pengeluaran: totalPengeluaran,
+        total_transfer_masuk: 0,
+        total_transfer_keluar: 0,
+        saldo_resmi: ending,
+        saldo_proyeksi: ending,
+      };
+    });
+    const totalKasDanBank = posisiSem.total_kas_dan_bank;
     const storageBalances = getStorageBalances();
     const budgetSummary = getConsolidatedBudgetRealization(report.tahun, endMonth);
 
@@ -6341,26 +6719,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     passed: boolean;
     blockers: string[];
   } => {
+    const todayStr = getTodayYmd();
+    const activeKasIds = kasList.filter((k) => k.is_active).map((k) => k.id);
+    const isMonthFullyClosed = (m: number) => {
+      const monthClosings = periodClosings.filter(
+        (pc) => pc.tahun === tahun && pc.bulan === m && pc.is_closed
+      );
+      if (monthClosings.some((pc) => pc.kas_id === null || pc.kas_id === undefined)) return true;
+      return (
+        activeKasIds.length > 0 &&
+        activeKasIds.every((kId) => monthClosings.some((pc) => pc.kas_id === kId))
+      );
+    };
+
     // 1. All 12 months closed
-    const closedMonths = periodClosings.filter((pc) => pc.tahun === tahun && pc.is_closed).map((pc) => pc.bulan);
-    const missingMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter((m) => !closedMonths.includes(m));
+    const missingMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter((m) => !isMonthFullyClosed(m));
     const allMonthsClosed = missingMonths.length === 0;
 
     // 2. No pending transactions
-    const yearTxs = transactions.filter((t) => new Date(t.tanggal).getFullYear() === tahun);
+    const yearTxs = transactions.filter((t) => getYmdYear(t.tanggal) === tahun);
     const pendingTxCount = yearTxs.filter((t) => t.status === 'draft' || t.status === 'submitted').length;
     const hasPendingTx = pendingTxCount > 0;
 
     // 3. All reconciliations completed
     const activeStorages = storageAccounts.filter((s) => s.is_active);
     const missingStorages = activeStorages.filter(
-      (sa) => !reconciliations.some((r) => r.storage_account_id === sa.id && new Date(r.tanggal).getFullYear() === tahun)
+      (sa) => !reconciliations.some((r) => r.storage_account_id === sa.id && getYmdYear(r.tanggal) === tahun)
     );
     const storagesReconciled = activeStorages.length === 0 || missingStorages.length === 0;
 
     // 4. Overdue advances cleared or reserved
     const unaddressedAdvancesCount = advances.filter((a) => {
-      const isOverdue = a.status === 'overdue' || (a.status === 'active' && new Date(a.due_date) < new Date());
+      const isOverdue = a.status === 'overdue' || (a.status === 'active' && Boolean(a.due_date) && a.due_date < todayStr);
       const hasSettlement = advanceSettlements.some((s) => s.advance_id === a.id);
       return isOverdue && !hasSettlement;
     }).length;
@@ -6471,9 +6861,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let transferKeluar = 0;
 
     transactions
-      .filter((tx) => tx.status === 'approved' && new Date(tx.tanggal).getFullYear() === lpj!.tahun)
+      .filter((tx) => tx.status === 'approved' && getYmdYear(tx.tanggal) === lpj!.tahun)
       .forEach((tx) => {
         const amt = Number(tx.amount) || 0;
+        if (tx.is_reversal) {
+          if (tx.type === 'expense') penerimaanMurni -= amt;
+          else if (tx.type === 'income') pengeluaranMurni -= amt;
+          else if (tx.type === 'transfer_in') transferKeluar -= amt;
+          else if (tx.type === 'transfer_out') transferMasuk -= amt;
+          return;
+        }
         if (tx.type === 'income') penerimaanMurni += amt;
         else if (tx.type === 'expense') pengeluaranMurni += amt;
         else if (tx.type === 'transfer_in') transferMasuk += amt;
@@ -6715,38 +7112,59 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // ===========================================================================
 
   const getPosisiKeuangan = (_year: number): LaporanPosisiKeuanganData => {
-    // 1. Kas dan Setara Kas (total saldo akhir seluruh kas)
-    const kasBalances = getKasBalances();
-    const total_kas_dan_bank = kasBalances.reduce((sum, k) => sum + k.saldo_resmi, 0);
+    // 1. Kas dan Setara Kas per akhir _year (cut-off 31 Des _year)
+    let total_kas_dan_bank = 0;
+    let cashUnrestricted = 0;
+    let cashRestricted = 0;
 
-    const saldo_dana_tidak_terikat = kasBalances
-      .filter((k) => {
-        const kasObj = kasList.find((item) => item.id === k.kas_id);
-        return kasObj?.fund_type !== 'restricted';
-      })
-      .reduce((sum, k) => sum + k.saldo_resmi, 0);
+    kasList.forEach((k) => {
+      const bal = getKasEndingBalanceAsOfYear(k.id, _year);
+      total_kas_dan_bank += bal;
+      if (k.fund_type === 'restricted') {
+        cashRestricted += bal;
+      } else {
+        cashUnrestricted += bal;
+      }
+    });
 
-    const saldo_dana_terikat = kasBalances
-      .filter((k) => {
-        const kasObj = kasList.find((item) => item.id === k.kas_id);
-        return kasObj?.fund_type === 'restricted';
-      })
-      .reduce((sum, k) => sum + k.saldo_resmi, 0);
+    // 2. Piutang dan Panjar (hanya yang timbul s.d. akhir _year)
+    const activeRp = receivablesPayables.filter(
+      (rp) => rp.status !== 'paid' && (!rp.issue_date || getYmdYear(rp.issue_date) <= _year)
+    );
+    const activeAdvancesForYear = advances.filter(
+      (a) => a.status !== 'settled' && (!a.advance_date || getYmdYear(a.advance_date) <= _year)
+    );
 
-    // 2. Piutang dan Panjar
-    const total_piutang_pihak_ketiga = receivablesPayables
-      .filter((rp) => rp.type === 'receivable' && rp.status !== 'paid')
-      .reduce((sum, rp) => sum + rp.remaining_amount, 0);
+    const isRestrictedKas = (kasId: string) =>
+      kasList.find((item) => item.id === kasId)?.fund_type === 'restricted';
 
-    const total_panjar_berjalan = advances
-      .filter((a) => a.status !== 'settled')
-      .reduce((sum, a) => sum + a.amount, 0);
+    let piutangUnrestricted = 0;
+    let piutangRestricted = 0;
+    activeRp
+      .filter((rp) => rp.type === 'receivable')
+      .forEach((rp) => {
+        const rem = Number(rp.remaining_amount) || 0;
+        if (isRestrictedKas(rp.kas_id)) piutangRestricted += rem;
+        else piutangUnrestricted += rem;
+      });
 
+    let panjarUnrestricted = 0;
+    let panjarRestricted = 0;
+    activeAdvancesForYear.forEach((a) => {
+      const amt = Number(a.amount) || 0;
+      if (isRestrictedKas(a.kas_id)) panjarRestricted += amt;
+      else panjarUnrestricted += amt;
+    });
+
+    const total_piutang_pihak_ketiga = piutangUnrestricted + piutangRestricted;
+    const total_panjar_berjalan = panjarUnrestricted + panjarRestricted;
     const total_piutang = total_piutang_pihak_ketiga + total_panjar_berjalan;
 
-    // 3. Aset Tetap
-    const activeAssets = fixedAssets.filter((a) => a.status === 'aktif');
-    const total_aset_tetap_bruto = activeAssets.reduce((sum, a) => sum + a.nilai_perolehan, 0);
+    // 3. Aset Tetap (aktif dan diperoleh s.d. akhir _year)
+    const activeAssets = fixedAssets.filter(
+      (a) => a.status === 'aktif' && (!a.tanggal_perolehan || getYmdYear(a.tanggal_perolehan) <= _year)
+    );
+    const total_aset_tetap_bruto = activeAssets.reduce((sum, a) => sum + Number(a.nilai_perolehan || 0), 0);
     const total_akumulasi_penyusutan = lpjSettings.enable_depreciation
       ? activeAssets.reduce((sum, a) => sum + calculateDepreciation(a, _year).accumulatedDepreciation, 0)
       : 0;
@@ -6757,11 +7175,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const total_aset = total_kas_dan_bank + total_piutang + nilai_buku_aset_tetap;
 
     // 4. Kewajiban (Utang)
-    const total_kewajiban = receivablesPayables
-      .filter((rp) => rp.type === 'payable' && rp.status !== 'paid')
-      .reduce((sum, rp) => sum + rp.remaining_amount, 0);
+    let utangUnrestricted = 0;
+    let utangRestricted = 0;
+    activeRp
+      .filter((rp) => rp.type === 'payable')
+      .forEach((rp) => {
+        const rem = Number(rp.remaining_amount) || 0;
+        if (isRestrictedKas(rp.kas_id)) utangRestricted += rem;
+        else utangUnrestricted += rem;
+      });
+    const total_kewajiban = utangUnrestricted + utangRestricted;
 
-    // 5. Saldo Dana Bersih (Net Assets = Aset - Kewajiban)
+    // Atribusikan aset lancar bersih ke masing-masing klasifikasi dana sehingga rincian saldo dana + Investasi Aset Tetap = Total Saldo Dana Bersih
+    const saldo_dana_tidak_terikat = cashUnrestricted + piutangUnrestricted + panjarUnrestricted - utangUnrestricted;
+    const saldo_dana_terikat = cashRestricted + piutangRestricted + panjarRestricted - utangRestricted;
+
+    // 5. Saldo Dana Bersih (Net Assets = Aset - Kewajiban = Tidak Terikat + Terikat + Investasi Aset Tetap)
     const total_saldo_dana_bersih = total_aset - total_kewajiban;
 
     // Total Kewajiban + Saldo Dana (Selalu Berimbang = total_aset)
@@ -6787,9 +7216,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const getPerubahanSaldoDana = (_year: number): LaporanPerubahanSaldoDanaItem[] => {
     return kasList.map((k) => {
-      const initial = openingBalances
-        .filter((ob) => ob.kas_id === k.id && ob.tahun === _year)
-        .reduce((sum, item) => sum + Number(item.amount), 0);
+      const initial = getKasOpeningForYear(k.id, _year);
 
       let penerimaan_murni = 0;
       let pengeluaran_murni = 0;
@@ -6797,9 +7224,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let transfer_antar_dana_keluar = 0;
 
       transactions
-        .filter((tx) => tx.kas_id === k.id && tx.status === 'approved' && new Date(tx.tanggal).getFullYear() === _year)
+        .filter((tx) => tx.kas_id === k.id && tx.status === 'approved' && getYmdYear(tx.tanggal) === _year)
         .forEach((tx) => {
-          const amt = Number(tx.amount);
+          const amt = Number(tx.amount) || 0;
+          if (tx.is_reversal) {
+            if (tx.type === 'expense') penerimaan_murni -= amt;
+            else if (tx.type === 'income') pengeluaran_murni -= amt;
+            else if (tx.type === 'transfer_in') transfer_antar_dana_keluar -= amt;
+            else if (tx.type === 'transfer_out') transfer_antar_dana_masuk -= amt;
+            return;
+          }
           if (tx.type === 'income') penerimaan_murni += amt;
           if (tx.type === 'expense') pengeluaran_murni += amt;
           if (tx.type === 'transfer_in') transfer_antar_dana_masuk += amt;
@@ -6828,7 +7262,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const getArusKasLangsung = (year: number): LaporanArusKasData => {
     const yearTxs = transactions.filter(
-      (tx) => tx.status === 'approved' && new Date(tx.tanggal).getFullYear() === year
+      (tx) => tx.status === 'approved' && getYmdYear(tx.tanggal) === year
     );
 
     let kas_masuk_operasi = 0;
@@ -6836,26 +7270,54 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let kas_keluar_investasi = 0;
     let kas_masuk_pendanaan = 0;
     let kas_keluar_pendanaan = 0;
+    let netTransferDelta = 0;
 
     yearTxs.forEach((tx) => {
       const cat = categories.find((c) => c.id === tx.category_id);
       const catName = (cat?.nama || '').toLowerCase();
-      const amt = Number(tx.amount);
+      const amt = Number(tx.amount) || 0;
+
+      const isFundingIn = catName.includes('pembangunan') || catName.includes('donasi terikat');
+      const isInvestOut =
+        catName.includes('pengadaan aset') || catName.includes('inventaris') || catName.includes('alat');
+      const isFundingOut = catName.includes('pembangunan');
+
+      if (tx.is_reversal) {
+        // Reversal of income (stored as expense) reduces the corresponding income cash flow
+        if (tx.type === 'expense') {
+          if (isFundingIn) kas_masuk_pendanaan -= amt;
+          else kas_masuk_operasi -= amt;
+        } else if (tx.type === 'income') {
+          // Reversal of expense (stored as income) reduces the corresponding expense cash flow
+          if (isInvestOut) kas_keluar_investasi -= amt;
+          else if (isFundingOut) kas_keluar_pendanaan -= amt;
+          else kas_keluar_operasi -= amt;
+        } else if (tx.type === 'transfer_in') {
+          netTransferDelta += amt;
+        } else if (tx.type === 'transfer_out') {
+          netTransferDelta -= amt;
+        }
+        return;
+      }
 
       if (tx.type === 'income') {
-        if (catName.includes('pembangunan') || catName.includes('donasi terikat')) {
+        if (isFundingIn) {
           kas_masuk_pendanaan += amt;
         } else {
           kas_masuk_operasi += amt;
         }
       } else if (tx.type === 'expense') {
-        if (catName.includes('pengadaan aset') || catName.includes('inventaris') || catName.includes('alat')) {
+        if (isInvestOut) {
           kas_keluar_investasi += amt;
-        } else if (catName.includes('pembangunan')) {
+        } else if (isFundingOut) {
           kas_keluar_pendanaan += amt;
         } else {
           kas_keluar_operasi += amt;
         }
+      } else if (tx.type === 'transfer_in') {
+        netTransferDelta += amt;
+      } else if (tx.type === 'transfer_out') {
+        netTransferDelta -= amt;
       }
     });
 
@@ -6863,9 +7325,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const arus_kas_bersih_investasi = -kas_keluar_investasi;
     const arus_kas_bersih_pendanaan = kas_masuk_pendanaan - kas_keluar_pendanaan;
     const kenaikan_penurunan_kas_bersih =
-      arus_kas_bersih_operasi + arus_kas_bersih_investasi + arus_kas_bersih_pendanaan;
+      arus_kas_bersih_operasi + arus_kas_bersih_investasi + arus_kas_bersih_pendanaan + netTransferDelta;
 
-    const saldo_kas_awal = openingBalances.reduce((sum, ob) => sum + Number(ob.amount), 0);
+    const saldo_kas_awal = kasList.reduce((sum, k) => sum + getKasOpeningForYear(k.id, year), 0);
     const saldo_kas_akhir = saldo_kas_awal + kenaikan_penurunan_kas_bersih;
 
     return {
@@ -7003,6 +7465,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         savePriorYearSummary,
         updateOpeningSetup,
         loading,
+        getBaseOpeningYear,
         getKasBalances,
         getStorageBalances,
         getSentralisasiSummary,

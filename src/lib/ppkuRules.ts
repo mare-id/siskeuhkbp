@@ -144,6 +144,25 @@ export function splitSentralisasiAmount(
   return { bpskAmount, huriaAmount: cleanAmount - bpskAmount };
 }
 
+function isBpskRemittanceCategoryOrTx(tx: Transaction, cat?: Category): boolean {
+  if (cat?.id === 'cat-out-bpsk' || cat?.kode === 'OUT-01') return true;
+  const catName = (cat?.nama || '').toLowerCase();
+  if (catName.includes('bpsk') || catName.includes('sentralisasi ke kas pusat')) return true;
+  if (!cat) {
+    const desc = (tx.description || '').toLowerCase();
+    return (desc.includes('setoran') || desc.includes('transfer')) && desc.includes('bpsk');
+  }
+  return false;
+}
+
+function getBpskPortion(tx: Transaction): number {
+  const amt = Number(tx.amount) || 0;
+  if (tx.sentralisasi_role === 'huria_share') return 0;
+  if (tx.sentralisasi_role === 'bpsk_share') return amt;
+  if (tx.bpsk_amount !== undefined && tx.bpsk_amount !== null) return Number(tx.bpsk_amount);
+  return Math.round(amt * PPKU_BPSK_RATE);
+}
+
 /**
  * Mengevaluasi kepatuhan batas waktu penyetoran 55% Sentralisasi ke Virtual Account BPSK HKBP
  * maksimal 3 hari setelah ibadah jemaat (PPKU HKBP 2023 Pasal 4 ayat 2a & Pasal 10).
@@ -154,10 +173,22 @@ export function evaluateBpskRemittanceCompliance(
   referenceDateStr: string = todayLocalIso()
 ): BpskComplianceEvaluation {
   const approved = transactions.filter((tx) => tx.status === 'approved');
+  const txById = new Map(approved.map((tx) => [tx.id, tx]));
+  const catById = new Map(categories.map((c) => [c.id, c]));
 
+  // Identifikasi ID transaksi asli yang telah dibalik/dikoreksi di periode yang sama
+  const reversedTargetIds = new Set<string>();
+  approved.forEach((tx) => {
+    if (tx.is_reversal && tx.reverses_id && txById.has(tx.reverses_id)) {
+      reversedTargetIds.add(tx.reverses_id);
+    }
+  });
+
+  // Penerimaan objek sentralisasi yang belum dibalik untuk perhitungan antrean FIFO H+3
   const sentralisasiIncomes = approved
     .filter((tx) => {
-      if (tx.type !== 'income') return false;
+      if (tx.type !== 'income' || tx.is_reversal) return false;
+      if (reversedTargetIds.has(tx.id)) return false;
       const isExcluded = tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi';
       return !isExcluded;
     })
@@ -165,33 +196,38 @@ export function evaluateBpskRemittanceCompliance(
 
   let totalBpskObligation = 0;
   sentralisasiIncomes.forEach((tx) => {
-    const amt = Number(tx.amount) || 0;
-    const bpsk =
-      tx.sentralisasi_role === 'huria_share'
-        ? 0
-        : tx.sentralisasi_role === 'bpsk_share'
-        ? amt
-        : tx.bpsk_amount !== undefined
-        ? Number(tx.bpsk_amount)
-        : Math.round(amt * PPKU_BPSK_RATE);
-    totalBpskObligation += bpsk;
+    totalBpskObligation += getBpskPortion(tx);
   });
 
+  // Kurangi kewajiban BPSK apabila terdapat reversal di irisan ini yang transaksi aslinya di luar irisan
+  approved.forEach((tx) => {
+    if (!tx.is_reversal || tx.type !== 'expense') return;
+    if (tx.reverses_id && txById.has(tx.reverses_id)) return; // sudah dikeluarkan via reversedTargetIds
+    const isExcluded = tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi';
+    if (!isExcluded) {
+      totalBpskObligation -= getBpskPortion(tx);
+    }
+  });
+  totalBpskObligation = Math.max(0, totalBpskObligation);
+
   let totalBpskRemitted = 0;
-  approved
-    .filter((tx) => tx.type === 'expense')
-    .forEach((tx) => {
-      const cat = categories.find((c) => c.id === tx.category_id);
-      const isBpskOut =
-        cat?.id === 'cat-out-bpsk' ||
-        cat?.kode === 'OUT-01' ||
-        (cat?.nama || '').toLowerCase().includes('bpsk') ||
-        (cat?.nama || '').toLowerCase().includes('sentralisasi ke kas pusat') ||
-        (tx.description || '').toLowerCase().includes('bpsk');
-      if (isBpskOut) {
+  approved.forEach((tx) => {
+    if (tx.type === 'expense' && !tx.is_reversal) {
+      if (reversedTargetIds.has(tx.id)) return;
+      const cat = tx.category_id ? catById.get(tx.category_id) : undefined;
+      if (isBpskRemittanceCategoryOrTx(tx, cat)) {
         totalBpskRemitted += Number(tx.amount) || 0;
       }
-    });
+    } else if (tx.is_reversal && tx.type === 'income') {
+      // Reversal atas setoran BPSK (jika aslinya di luar irisan, kurangi setoran)
+      if (tx.reverses_id && txById.has(tx.reverses_id)) return;
+      const cat = tx.category_id ? catById.get(tx.category_id) : undefined;
+      if (isBpskRemittanceCategoryOrTx(tx, cat)) {
+        totalBpskRemitted -= Number(tx.amount) || 0;
+      }
+    }
+  });
+  totalBpskRemitted = Math.max(0, totalBpskRemitted);
 
   const outstandingBpsk = Math.max(0, totalBpskObligation - totalBpskRemitted);
   const latestIncomeDate =
@@ -221,15 +257,7 @@ export function evaluateBpskRemittanceCompliance(
   let remainingRemitted = totalBpskRemitted;
   let oldestUnremittedDate = sentralisasiIncomes[0].tanggal;
   for (const tx of sentralisasiIncomes) {
-    const amt = Number(tx.amount) || 0;
-    const bpsk =
-      tx.sentralisasi_role === 'huria_share'
-        ? 0
-        : tx.sentralisasi_role === 'bpsk_share'
-        ? amt
-        : tx.bpsk_amount !== undefined
-        ? Number(tx.bpsk_amount)
-        : Math.round(amt * PPKU_BPSK_RATE);
+    const bpsk = getBpskPortion(tx);
     if (bpsk <= 0) continue;
     if (remainingRemitted >= bpsk) {
       remainingRemitted -= bpsk;

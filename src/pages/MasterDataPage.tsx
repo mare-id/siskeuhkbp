@@ -2134,35 +2134,44 @@ export const MasterDataPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {openingBalances.map((ob) => {
-                    const kas = kasList.find((k) => k.id === ob.kas_id);
-                    const stor = storageAccounts.find((s) => s.id === ob.storage_account_id);
-                    return (
-                      <tr key={ob.id} className="hover:bg-slate-50/50">
-                        <td className="p-3.5 font-bold text-slate-900">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: kas?.warna }} />
-                            <span>{kas?.nama || ob.kas_id}</span>
-                          </div>
-                        </td>
-                        <td className="p-3.5 text-slate-600">{stor?.nama || ob.storage_account_id}</td>
-                        <td className="p-3.5 text-right font-mono font-bold text-slate-900">
-                          {formatRupiah(ob.amount)}
-                        </td>
-                        <td className="p-3.5 text-slate-500">{ob.notes || '-'}</td>
-                        {isAdmin && (
-                          <td className="p-3.5 text-center">
-                            <button
-                              onClick={() => setEditingBalance(ob)}
-                              className="p-1 text-slate-400 hover:text-slate-700"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
+                  {openingBalances
+                    .filter((ob) => Number(ob.tahun) === settings.active_year)
+                    .map((ob) => {
+                      const kas = kasList.find((k) => k.id === ob.kas_id);
+                      const stor = storageAccounts.find((s) => s.id === ob.storage_account_id);
+                      return (
+                        <tr key={ob.id} className="hover:bg-slate-50/50">
+                          <td className="p-3.5 font-bold text-slate-900">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: kas?.warna }} />
+                              <span>{kas?.nama || ob.kas_id}</span>
+                            </div>
                           </td>
-                        )}
-                      </tr>
-                    );
-                  })}
+                          <td className="p-3.5 text-slate-600">{stor?.nama || ob.storage_account_id}</td>
+                          <td className="p-3.5 text-right font-mono font-bold text-slate-900">
+                            {formatRupiah(ob.amount)}
+                          </td>
+                          <td className="p-3.5 text-slate-500">{ob.notes || '-'}</td>
+                          {isAdmin && (
+                            <td className="p-3.5 text-center">
+                              <button
+                                onClick={() => setEditingBalance(ob)}
+                                className="p-1 text-slate-400 hover:text-slate-700"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  {openingBalances.filter((ob) => Number(ob.tahun) === settings.active_year).length === 0 && (
+                    <tr>
+                      <td colSpan={isAdmin ? 5 : 4} className="p-8 text-center text-slate-400">
+                        Belum ada catatan saldo awal untuk Tahun Anggaran {settings.active_year}. Gunakan tombol Atur Saldo Awal atau jalankan Roll-Forward dari tahun sebelumnya.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

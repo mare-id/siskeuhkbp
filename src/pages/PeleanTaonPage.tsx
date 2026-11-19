@@ -103,7 +103,7 @@ export const PeleanTaonPage: React.FC = () => {
         /pelean\s*taon/i.test(tx.description);
       if (!isPeleanTaon) return false;
 
-      const txYear = tx.pelean_taon_year || new Date(tx.tanggal).getFullYear();
+      const txYear = tx.pelean_taon_year || parseInt(String(tx.tanggal || '').slice(0, 4), 10) || 0;
       return txYear === selectedYear;
     });
 

@@ -290,6 +290,12 @@ export const TransactionImportModal: React.FC<Props> = ({ isOpen, onClose }) => 
     setImportProgress({ done: 0, total: targetItems.length });
 
     const createdFamilyIdMap = new Map<string, string>();
+    const batchBalanceDeltas: Record<string, number> = {};
+    const addBatchDelta = (kasId: string, delta: number) => {
+      if (!kasId || !delta) return;
+      batchBalanceDeltas[kasId] = (batchBalanceDeltas[kasId] || 0) + delta;
+    };
+    const sentralisasiKas = kasList.find((k) => k.id === 'kas-9' || k.kode === 'KAS-SENTRAL');
     let successCount = 0;
     const failedItems: Array<{ item: ParsedExcelImportItem; error: string }> = [];
 
@@ -330,35 +336,48 @@ export const TransactionImportModal: React.FC<Props> = ({ isOpen, onClose }) => 
             item.type === 'income' ? item.is_sentralisasi : false
           );
 
-          const res = await addTransaction({
-            tanggal: item.tanggal,
-            tanggal_warta: item.tanggal_warta,
-            kas_id: item.kas_id,
-            storage_account_id: item.storage_account_id,
-            category_id: item.category_id,
-            type: item.type,
-            amount: item.amount,
-            description: item.description,
-            receipt_no: item.receipt_no,
-            attachment_url: item.attachment_url,
-            status: item.status,
-            is_sentralisasi: item.type === 'income' ? item.is_sentralisasi : false,
-            bpsk_rate: item.type === 'income' ? (item.is_sentralisasi ? 0.55 : 0) : undefined,
-            huria_rate: item.type === 'income' ? (item.is_sentralisasi ? 0.45 : 1.0) : undefined,
-            bpsk_amount: item.type === 'income' ? bpskAmount : undefined,
-            huria_amount: item.type === 'income' ? huriaAmount : undefined,
-            sentralisasi_exclusion_type:
-              item.type === 'income' && !item.is_sentralisasi ? item.sentralisasi_exclusion_type : null,
-            pelean_taon_year: item.is_pelean_taon ? item.pelean_taon_year : null,
-            family_id: item.is_pelean_taon ? resolvedFamilyId : null,
-            family_name: item.is_pelean_taon ? item.family_name : null,
-            lingkungan: item.is_pelean_taon ? item.lingkungan : null,
-          });
+          const res = await addTransaction(
+            {
+              tanggal: item.tanggal,
+              tanggal_warta: item.tanggal_warta,
+              kas_id: item.kas_id,
+              storage_account_id: item.storage_account_id,
+              category_id: item.category_id,
+              type: item.type,
+              amount: item.amount,
+              description: item.description,
+              receipt_no: item.receipt_no,
+              attachment_url: item.attachment_url,
+              status: item.status,
+              is_sentralisasi: item.type === 'income' ? item.is_sentralisasi : false,
+              bpsk_rate: item.type === 'income' ? (item.is_sentralisasi ? 0.55 : 0) : undefined,
+              huria_rate: item.type === 'income' ? (item.is_sentralisasi ? 0.45 : 1.0) : undefined,
+              bpsk_amount: item.type === 'income' ? bpskAmount : undefined,
+              huria_amount: item.type === 'income' ? huriaAmount : undefined,
+              sentralisasi_exclusion_type:
+                item.type === 'income' && !item.is_sentralisasi ? item.sentralisasi_exclusion_type : null,
+              pelean_taon_year: item.is_pelean_taon ? item.pelean_taon_year : null,
+              family_id: item.is_pelean_taon ? resolvedFamilyId : null,
+              family_name: item.is_pelean_taon ? item.family_name : null,
+              lingkungan: item.is_pelean_taon ? item.lingkungan : null,
+            },
+            { batchBalanceDeltas }
+          );
 
           if (!res.success) {
             failedItems.push({ item, error: res.error || 'Gagal menyimpan transaksi.' });
           } else {
             successCount += 1;
+            if (item.type === 'income') {
+              if (item.is_sentralisasi && sentralisasiKas && item.kas_id !== sentralisasiKas.id) {
+                addBatchDelta(item.kas_id, huriaAmount);
+                addBatchDelta(sentralisasiKas.id, bpskAmount);
+              } else {
+                addBatchDelta(item.kas_id, item.amount);
+              }
+            } else if (item.type === 'expense') {
+              addBatchDelta(item.kas_id, -item.amount);
+            }
           }
         } else if (item.kind === 'multi_pos') {
           const res = await addCompoundIncomeTransactions({
@@ -383,24 +402,40 @@ export const TransactionImportModal: React.FC<Props> = ({ isOpen, onClose }) => 
             failedItems.push({ item, error: res.error || 'Gagal menyimpan Multi Pos.' });
           } else {
             successCount += 1;
+            item.allocations.forEach((a) => {
+              if (a.is_sentralisasi && sentralisasiKas && a.kas_id !== sentralisasiKas.id) {
+                const { bpskAmount, huriaAmount } = splitSentralisasiAmount(a.amount, true);
+                addBatchDelta(a.kas_id, huriaAmount);
+                addBatchDelta(sentralisasiKas.id, bpskAmount);
+              } else {
+                addBatchDelta(a.kas_id, a.amount);
+              }
+            });
           }
         } else if (item.kind === 'transfer') {
-          const res = await createTransfer({
-            tanggal: item.tanggal,
-            sourceKasId: item.sourceKasId,
-            sourceStorageId: item.sourceStorageId,
-            targetKasId: item.targetKasId,
-            targetStorageId: item.targetStorageId,
-            amount: item.amount,
-            description: item.description,
-            receiptNo: item.receiptNo,
-            attachmentUrl: item.attachmentUrl,
-          });
+          const res = await createTransfer(
+            {
+              tanggal: item.tanggal,
+              sourceKasId: item.sourceKasId,
+              sourceStorageId: item.sourceStorageId,
+              targetKasId: item.targetKasId,
+              targetStorageId: item.targetStorageId,
+              amount: item.amount,
+              description: item.description,
+              receiptNo: item.receiptNo,
+              attachmentUrl: item.attachmentUrl,
+            },
+            { batchBalanceDeltas }
+          );
 
           if (!res.success) {
             failedItems.push({ item, error: res.error || 'Gagal menyimpan transfer.' });
           } else {
             successCount += 1;
+            if (item.sourceKasId !== item.targetKasId) {
+              addBatchDelta(item.sourceKasId, -item.amount);
+              addBatchDelta(item.targetKasId, item.amount);
+            }
           }
         }
       } catch (err) {

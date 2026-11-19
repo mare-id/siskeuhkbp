@@ -61,14 +61,19 @@ create table if not exists public.congregation_families (
 
 -- 4. Tabel Keep Alive (untuk ping otomatis dari GitHub Actions `supabase-keepalive.yml`)
 create table if not exists public.keepalive (
-  id integer primary key,
-  note text default 'keepalive',
-  updated_at timestamptz not null default now()
+  id integer primary key
 );
 
-insert into public.keepalive (id, note)
-values (1, 'GitHub Actions Keep Alive')
-on conflict (id) do nothing;
+do $$
+begin
+  -- Isi 1 baris hanya jika tabel masih kosong (aman jika struktur/tipe kolom berbeda)
+  if not exists (select 1 from public.keepalive limit 1) then
+    begin
+      insert into public.keepalive (id) values (1) on conflict do nothing;
+    exception when others then null;
+    end;
+  end if;
+end $$;
 
 -- 5. Indeks untuk performa query Rekap Pelean Taon & Warta
 create index if not exists idx_transactions_pelean_taon
@@ -99,13 +104,20 @@ create policy "Allow full access for all"
   using (true)
   with check (true);
 
--- Keepalive cukup read-only (SELECT) untuk anon & authenticated
+-- Keepalive cukup read-only (SELECT); pertahankan policy lama jika sudah ada
 grant select on table public.keepalive to anon, authenticated, service_role;
 alter table public.keepalive enable row level security;
-drop policy if exists "Allow public read keepalive" on public.keepalive;
-create policy "Allow public read keepalive"
-  on public.keepalive for select
-  using (true);
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'keepalive'
+  ) then
+    create policy "Allow public read keepalive"
+      on public.keepalive for select
+      using (true);
+  end if;
+end $$;
 
 -- 7. Aktifkan Realtime untuk tabel master baru (aman jika sudah terdaftar)
 do $$

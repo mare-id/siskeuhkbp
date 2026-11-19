@@ -1879,11 +1879,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const isSameKas = sourceKasId === targetKasId;
-    const transferId = `tf-pair-${Date.now()}`;
+    const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const transferId = `tf-pair-${uniqueSuffix}`;
     const initialStatus: TransactionStatus = 'submitted';
 
     const txOut: Transaction = {
-      id: `tx-out-${Date.now()}`,
+      id: `tx-out-${uniqueSuffix}`,
       tanggal,
       kas_id: sourceKasId,
       storage_account_id: sourceStorageId,
@@ -1903,7 +1904,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const txIn: Transaction = {
-      id: `tx-in-${Date.now() + 1}`,
+      id: `tx-in-${uniqueSuffix}`,
       tanggal,
       kas_id: targetKasId,
       storage_account_id: targetStorageId,

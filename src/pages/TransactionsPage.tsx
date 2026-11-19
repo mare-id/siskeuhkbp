@@ -22,6 +22,7 @@ import {
   List,
   SlidersHorizontal,
   ChevronDown,
+  Upload,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -31,6 +32,7 @@ import { formatDateIndo, formatRupiah } from '../lib/formatters';
 import { exportToExcel } from '../lib/exportUtils';
 import { TransactionModal } from '../components/transactions/TransactionModal';
 import { TransferModal } from '../components/transactions/TransferModal';
+import { TransactionImportModal } from '../components/transactions/TransactionImportModal';
 import { AttachmentPreviewModal } from '../components/transactions/AttachmentPreviewModal';
 import { ReversalModal } from '../components/transactions/ReversalModal';
 import { AdminEditTransactionModal } from '../components/transactions/AdminEditTransactionModal';
@@ -119,6 +121,7 @@ export const TransactionsPage: React.FC = () => {
   // Modals state
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [previewAttachmentUrl, setPreviewAttachmentUrl] = useState<string | null>(null);
   const [reversalTargetTx, setReversalTargetTx] = useState<Transaction | null>(null);
   const [editTargetTx, setEditTargetTx] = useState<Transaction | null>(null);
@@ -512,6 +515,17 @@ export const TransactionsPage: React.FC = () => {
             <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
             <span>Ekspor Excel</span>
           </button>
+
+          {(isAdmin || (canRecordTransactions && kasList.some((k) => k.is_active && canInputKas(k.id)))) && (
+            <button
+              type="button"
+              onClick={() => setIsImportModalOpen(true)}
+              className="px-3.5 py-2 min-h-[44px] sm:min-h-[40px] bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap cursor-pointer"
+            >
+              <Upload className="w-4 h-4 text-emerald-700" />
+              <span>Impor Excel</span>
+            </button>
+          )}
 
           {(isAdmin || (canTransfer && kasList.some((k) => k.is_active && canInputKas(k.id)))) && (
             <button
@@ -1244,6 +1258,7 @@ export const TransactionsPage: React.FC = () => {
       {/* Global Modals */}
       <TransactionModal isOpen={isTxModalOpen} onClose={() => setIsTxModalOpen(false)} />
       <TransferModal isOpen={isTransferModalOpen} onClose={() => setIsTransferModalOpen(false)} />
+      <TransactionImportModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} />
       <AttachmentPreviewModal
         isOpen={Boolean(previewAttachmentUrl)}
         imageUrl={previewAttachmentUrl}

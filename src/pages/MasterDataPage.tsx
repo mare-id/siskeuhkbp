@@ -67,7 +67,7 @@ import {
   ChurchLingkungan,
   CongregationFamily,
 } from '../types/database';
-import { formatRupiah } from '../lib/formatters';
+import { formatRupiah, formatNamaKeluarga } from '../lib/formatters';
 import { HKBP_ROLES, HKBP_ROLE_CATEGORIES, TOHONAN_LIST } from '../lib/hkbpRoles';
 
 const PASTEL_PALETTE = ['#7C9CF5', '#A8E6CF', '#FFB4A2', '#FFE8A3', '#CDB4FF', '#B8C0FF', '#FFD166'];
@@ -310,13 +310,14 @@ export const MasterDataPage: React.FC = () => {
 
   const handleSaveFamilyForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingFamily?.nama_keluarga?.trim() || !editingFamily?.lingkungan?.trim()) {
+    const formattedName = formatNamaKeluarga(editingFamily?.nama_keluarga);
+    if (!formattedName || !editingFamily?.lingkungan?.trim()) {
       showToast('Nama keluarga dan lingkungan wajib diisi.', 'error');
       return;
     }
-    const res = await saveFamily(editingFamily);
+    const res = await saveFamily({ ...editingFamily, nama_keluarga: formattedName });
     if (res.success) {
-      showToast(`Data keluarga "${editingFamily.nama_keluarga.trim()}" berhasil disimpan.`);
+      showToast(`Data keluarga "${formattedName}" berhasil disimpan.`);
       setEditingFamily(null);
     } else {
       showToast(res.error || 'Gagal menyimpan data keluarga.', 'error');
@@ -404,7 +405,7 @@ export const MasterDataPage: React.FC = () => {
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer, { type: 'array' });
 
-      const normalizeKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+      const normalizeKey = (s: string) => formatNamaKeluarga(s).toLowerCase().replace(/\s+/g, ' ');
       const existingMap = new Map(families.map((f) => [normalizeKey(f.nama_keluarga), f]));
       const seenInFile = new Set<string>();
       const parsedRows: Array<{
@@ -453,8 +454,10 @@ export const MasterDataPage: React.FC = () => {
 
         for (let r = headerRowIdx + 1; r < matrix.length; r++) {
           const row = matrix[r] || [];
-          const rawName = String(row[nameColIdx] ?? '').replace(/\s+/g, ' ').trim();
-          if (!rawName || /^(jumlah|total|no)$/i.test(rawName)) continue;
+          const rawCellName = String(row[nameColIdx] ?? '').replace(/\s+/g, ' ').trim();
+          if (!rawCellName || /^(jumlah|total|no)$/i.test(rawCellName)) continue;
+          const rawName = formatNamaKeluarga(rawCellName);
+          if (!rawName) continue;
 
           const rawLing = lingColIdx !== -1 ? String(row[lingColIdx] ?? '').trim() : '';
           const finalLing = rawLing ? toCanonicalLingkungan(rawLing) : fallbackLing;
@@ -1540,7 +1543,7 @@ export const MasterDataPage: React.FC = () => {
                         <td className="py-2.5 px-4 text-center font-mono text-slate-500 tabular-nums">
                           {idx + 1}
                         </td>
-                        <td className="py-2.5 px-4 font-semibold text-slate-900">{fam.nama_keluarga}</td>
+                        <td className="py-2.5 px-4 font-semibold text-slate-900">{formatNamaKeluarga(fam.nama_keluarga)}</td>
                         <td className="py-2.5 px-4">
                           <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 font-semibold text-[11px] border border-blue-100">
                             {fam.lingkungan}
@@ -1589,7 +1592,7 @@ export const MasterDataPage: React.FC = () => {
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <span className="text-[11px] font-mono text-slate-400 mr-1.5">#{idx + 1}</span>
-                        <span className="font-bold text-slate-900 text-sm">{fam.nama_keluarga}</span>
+                        <span className="font-bold text-slate-900 text-sm">{formatNamaKeluarga(fam.nama_keluarga)}</span>
                       </div>
                       <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 font-semibold text-[11px] border border-blue-100 shrink-0">
                         {fam.lingkungan}
@@ -3795,10 +3798,21 @@ export const MasterDataPage: React.FC = () => {
                   type="text"
                   value={editingFamily.nama_keluarga || ''}
                   onChange={(e) => setEditingFamily({ ...editingFamily, nama_keluarga: e.target.value })}
-                  placeholder="Contoh: Kel. St. R. Sinaga / Br. Sitepu"
+                  onBlur={() => {
+                    if (editingFamily.nama_keluarga?.trim()) {
+                      setEditingFamily({
+                        ...editingFamily,
+                        nama_keluarga: formatNamaKeluarga(editingFamily.nama_keluarga),
+                      });
+                    }
+                  }}
+                  placeholder="Contoh: St. Saruddin Naibaho, BA (+) / Maria Magdalena Siregar, BA"
                   className="w-full min-h-[44px] sm:min-h-0 p-2.5 rounded-xl border border-slate-200"
                   required
                 />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Otomatis diawali <span className="font-semibold text-slate-700">&quot;Kel. &quot;</span> saat disimpan.
+                </p>
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
-import { formatDateIndo, formatRupiah } from '../lib/formatters';
+import { formatDateIndo, formatRupiah, formatNamaKeluarga } from '../lib/formatters';
 import { PeleanTaonPrefill, TransactionModal } from '../components/transactions/TransactionModal';
 
 interface PaymentGroup {
@@ -55,7 +55,8 @@ interface FamilyRekapRow {
   paymentCount: number;
 }
 
-const normalizeNameKey = (val: string) => val.trim().toLowerCase().replace(/\s+/g, ' ');
+const normalizeNameKey = (val: string) =>
+  formatNamaKeluarga(val).toLowerCase().replace(/\s+/g, ' ');
 
 export const PeleanTaonPage: React.FC = () => {
   const {
@@ -165,7 +166,7 @@ export const PeleanTaonPage: React.FC = () => {
       groups.push({
         groupId,
         familyId: primary.family_id || null,
-        familyName: inferredName || primary.description,
+        familyName: inferredName ? formatNamaKeluarga(inferredName) : primary.description,
         lingkungan: primary.lingkungan || 'Lainnya',
         tanggal: primary.tanggal,
         tanggalWarta: wartaRow?.tanggal_warta || null,
@@ -197,7 +198,7 @@ export const PeleanTaonPage: React.FC = () => {
         rowMap.set(f.id, {
           key: f.id,
           familyId: f.id,
-          namaKeluarga: f.nama_keluarga,
+          namaKeluarga: formatNamaKeluarga(f.nama_keluarga),
           lingkungan: f.lingkungan,
           kepalaKeluarga: f.kepala_keluarga,
           isManualOnly: false,

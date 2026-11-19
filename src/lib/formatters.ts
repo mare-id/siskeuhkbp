@@ -73,3 +73,11 @@ export function formatDateTimeIndo(dateInput: string | Date | null | undefined):
 export function getIndoMonthName(monthIndex1to12: number): string {
   return MONTH_NAMES_INDO[Math.max(0, Math.min(11, monthIndex1to12 - 1))] || '';
 }
+
+export function formatNamaKeluarga(raw: string | null | undefined): string {
+  const cleaned = (raw || '').replace(/\s+/g, ' ').trim();
+  if (!cleaned) return '';
+  const withoutPrefix = cleaned.replace(/^(?:keluarga|kel)(?:\s*[.,:]\s*|\s+)/i, '').trim();
+  if (!withoutPrefix) return '';
+  return `Kel. ${withoutPrefix}`;
+}

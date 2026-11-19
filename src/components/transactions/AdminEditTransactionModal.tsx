@@ -22,7 +22,7 @@ import {
   TransactionStatus,
   TransactionType,
 } from '../../types/database';
-import { formatDateIndo, formatRupiah } from '../../lib/formatters';
+import { formatDateIndo, formatRupiah, formatNamaKeluarga } from '../../lib/formatters';
 import { splitSentralisasiAmount } from '../../lib/ppkuRules';
 import { ConfirmActionModal, ConfirmSummaryRow } from '../common/ConfirmActionModal';
 
@@ -179,11 +179,12 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
       rows.push({ label: 'Tanggal Warta', newValue: formatDateIndo(tanggalWarta) });
     }
 
-    if ((familyName.trim() || '') !== (transaction.family_name || '') || (lingkungan.trim() || '') !== (transaction.lingkungan || '')) {
+    const formattedFamilyInput = familyName.trim() ? formatNamaKeluarga(familyName) : '';
+    if (formattedFamilyInput !== (transaction.family_name || '') || (lingkungan.trim() || '') !== (transaction.lingkungan || '')) {
       rows.push({
         label: 'Keluarga / Lingkungan',
         oldValue: `${transaction.family_name || '-'} (${transaction.lingkungan || '-'})`,
-        newValue: `${familyName.trim() || '-'} (${lingkungan.trim() || '-'})`,
+        newValue: `${formattedFamilyInput || '-'} (${lingkungan.trim() || '-'})`,
         highlight: true,
       });
     }
@@ -396,7 +397,7 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
       pelean_taon_year:
         type === 'income' && peleanTaonYear ? Number(peleanTaonYear) : null,
       lingkungan: type === 'income' ? lingkungan.trim() || null : null,
-      family_name: type === 'income' ? familyName.trim() || null : null,
+      family_name: type === 'income' && familyName.trim() ? formatNamaKeluarga(familyName) : null,
     };
 
     const res = await updateTransaction(transaction.id, updates, finalReason);
@@ -679,7 +680,12 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
                       type="text"
                       value={familyName}
                       onChange={(e) => setFamilyName(e.target.value)}
-                      placeholder="Contoh: Kel. St. R. Sinaga / Br. Sitepu"
+                      onBlur={() => {
+                        if (familyName.trim()) {
+                          setFamilyName(formatNamaKeluarga(familyName));
+                        }
+                      }}
+                      placeholder="Contoh: St. Saruddin Naibaho, BA (+) / Maria Magdalena Siregar, BA"
                       className="w-full min-h-[44px] sm:min-h-0 text-xs p-2 rounded-lg border border-slate-200 bg-white"
                     />
                   </div>

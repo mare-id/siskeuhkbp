@@ -124,6 +124,7 @@ import {
   syncDelete,
   syncResetZeroDataInSupabase,
 } from '../lib/supabaseSync';
+import { formatNamaKeluarga } from '../lib/formatters';
 import { useAuth } from './AuthContext';
 
 interface DataContextType {
@@ -2773,7 +2774,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const saveFamily = async (
     data: Partial<CongregationFamily>
   ): Promise<{ success: boolean; id?: string; error?: string }> => {
-    const nama_keluarga = (data.nama_keluarga || '').trim();
+    const nama_keluarga = formatNamaKeluarga(data.nama_keluarga);
     const lingkungan = (data.lingkungan || '').trim();
     if (!nama_keluarga) return { success: false, error: 'Nama Keluarga wajib diisi.' };
     if (!lingkungan) return { success: false, error: 'Lingkungan wajib dipilih.' };
@@ -2849,7 +2850,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newLingToCreate: ChurchLingkungan[] = [];
     let nextUrutan = lingkunganList.length + 1;
 
-    const normalizeKey = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ');
+    const normalizeKey = (name: string) =>
+      formatNamaKeluarga(name).toLowerCase().replace(/\s+/g, ' ');
     const existingFamilyMap = new Map(families.map((f) => [normalizeKey(f.nama_keluarga), f]));
 
     const toUpsert: CongregationFamily[] = [];
@@ -2859,7 +2861,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const seenInBatch = new Set<string>();
 
     rows.forEach((row, idx) => {
-      const cleanName = (row.nama_keluarga || '').trim().replace(/\s+/g, ' ');
+      const cleanName = formatNamaKeluarga(row.nama_keluarga);
       const cleanLing = (row.lingkungan || '').trim().replace(/\s+/g, ' ');
       if (!cleanName || !cleanLing) {
         skipped++;

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Camera,
   Upload,
@@ -24,7 +24,7 @@ import {
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { uploadReceiptFile } from '../../lib/supabase';
-import { formatRupiah } from '../../lib/formatters';
+import { formatRupiah, formatNamaKeluarga } from '../../lib/formatters';
 import { getPpkuProcurementRule, splitSentralisasiAmount } from '../../lib/ppkuRules';
 import { SentralisasiExclusionType } from '../../types/database';
 
@@ -105,6 +105,7 @@ export const TransactionModal: React.FC<Props> = ({
   const [uploading, setUploading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const formBodyRef = useRef<HTMLDivElement>(null);
 
   // Per-transaction Sentralisasi status (decided during transaction recording)
   const [isSentralisasi, setIsSentralisasi] = useState<boolean>(true);
@@ -204,6 +205,9 @@ export const TransactionModal: React.FC<Props> = ({
 
   useEffect(() => {
     if (isOpen) {
+      if (formBodyRef.current) {
+        formBodyRef.current.scrollTop = 0;
+      }
       const todayStr = new Date().toISOString().split('T')[0];
       setError('');
       setAmountInput('');
@@ -249,10 +253,11 @@ export const TransactionModal: React.FC<Props> = ({
         setKasId(targetHuria);
         setIsSentralisasi(true);
         setExclusionType('lainnya');
-        const famLabel =
+        const rawFamLabel =
           defaultPeleanTaon.familyName ||
           families.find((f) => f.id === defaultPeleanTaon.familyId)?.nama_keluarga ||
           '';
+        const famLabel = rawFamLabel ? formatNamaKeluarga(rawFamLabel) : '';
         setDescription(
           famLabel
             ? `Pelean Taon ${yr} - ${famLabel}${ling ? ` (Lingkungan ${ling})` : ''}`
@@ -337,8 +342,8 @@ export const TransactionModal: React.FC<Props> = ({
     if (!isPeleanCategorySelected || !isPeleanTaonMode || descriptionManuallyEdited) return;
     const selectedFamObj = families.find((f) => f.id === peleanFamilyId);
     const resolvedFam = peleanUseManualFamily
-      ? peleanManualFamilyName.trim()
-      : selectedFamObj?.nama_keluarga || '';
+      ? formatNamaKeluarga(peleanManualFamilyName)
+      : formatNamaKeluarga(selectedFamObj?.nama_keluarga);
     const resolvedLing = peleanLingkungan || selectedFamObj?.lingkungan || '';
     if (resolvedFam) {
       setDescription(
@@ -589,11 +594,12 @@ export const TransactionModal: React.FC<Props> = ({
       resolvedLingkungan = peleanLingkungan.trim();
 
       if (peleanUseManualFamily) {
-        if (!peleanManualFamilyName.trim()) {
+        const formattedManual = formatNamaKeluarga(peleanManualFamilyName);
+        if (!formattedManual) {
           setError('Masukkan Nama Keluarga secara manual.');
           return;
         }
-        resolvedFamilyName = peleanManualFamilyName.trim();
+        resolvedFamilyName = formattedManual;
       } else {
         const famObj = families.find((f) => f.id === peleanFamilyId);
         if (!famObj) {
@@ -601,7 +607,7 @@ export const TransactionModal: React.FC<Props> = ({
           return;
         }
         resolvedFamilyId = famObj.id;
-        resolvedFamilyName = famObj.nama_keluarga;
+        resolvedFamilyName = formatNamaKeluarga(famObj.nama_keluarga);
         if (!resolvedLingkungan) resolvedLingkungan = famObj.lingkungan;
       }
 
@@ -686,40 +692,41 @@ export const TransactionModal: React.FC<Props> = ({
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/60 backdrop-blur-xs">
       <div
         className={`bg-white sm:rounded-2xl rounded-t-3xl w-full max-h-[92dvh] flex flex-col overflow-hidden shadow-2xl border border-slate-200 mobile-sheet-enter ${
-          type === 'income' && incomeMode === 'multi' ? 'sm:max-w-2xl' : 'sm:max-w-lg'
+          type === 'income' && incomeMode === 'multi' ? 'sm:max-w-2xl' : 'sm:max-w-xl'
         }`}
       >
         {/* Mobile Drag Handle */}
-        <div className="sm:hidden flex justify-center pt-2.5 pb-1 shrink-0">
+        <div className="sm:hidden flex justify-center pt-2.5 pb-1 shrink-0 bg-white">
           <div className="w-10 h-1 rounded-full bg-slate-300" />
         </div>
+
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-3.5 border-b border-slate-100 shrink-0">
-          <h3 className="font-bold text-sm sm:text-base text-slate-900">Catat Transaksi</h3>
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-slate-100 shrink-0 bg-white">
+          <div>
+            <h3 className="font-bold text-base text-slate-900">Catat Transaksi</h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              {type === 'income'
+                ? 'Pencatatan penerimaan kas jemaat & sentralisasi'
+                : 'Pencatatan pengeluaran operasional kas'}
+            </p>
+          </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 sm:p-1.5 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+            className="p-2 sm:p-1.5 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
             aria-label="Tutup"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Form Body */}
-        <div className="p-4 sm:p-5 space-y-3.5 overflow-y-auto flex-1">
-          {error && (
-            <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Type Toggle */}
-          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl">
+        {/* Pinned Mode & Type Switcher (tidak ikut ter-scroll / terpotong) */}
+        <div className="px-4 sm:px-6 py-3 bg-slate-50/70 border-b border-slate-100 space-y-2 shrink-0">
+          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-200/70 rounded-xl">
             <button
               type="button"
               onClick={() => setType('income')}
-              className={`h-9 text-xs font-semibold rounded-lg transition-all ${
+              className={`min-h-[40px] sm:min-h-0 sm:h-9 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                 type === 'income'
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -730,7 +737,7 @@ export const TransactionModal: React.FC<Props> = ({
             <button
               type="button"
               onClick={() => setType('expense')}
-              className={`h-9 text-xs font-semibold rounded-lg transition-all ${
+              className={`min-h-[40px] sm:min-h-0 sm:h-9 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                 type === 'expense'
                   ? 'bg-rose-600 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -740,13 +747,12 @@ export const TransactionModal: React.FC<Props> = ({
             </button>
           </div>
 
-          {/* Income Mode Switch */}
           {type === 'income' && (
-            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100/80 rounded-xl">
+            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-200/50 rounded-xl">
               <button
                 type="button"
                 onClick={() => setIncomeMode('single')}
-                className={`h-9 px-2 rounded-lg text-xs font-semibold transition-all ${
+                className={`min-h-[38px] sm:min-h-0 sm:h-8 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   incomeMode === 'single'
                     ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -757,26 +763,36 @@ export const TransactionModal: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={() => setIncomeMode('multi')}
-                className={`h-9 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                className={`min-h-[38px] sm:min-h-0 sm:h-8 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   incomeMode === 'multi'
                     ? 'bg-white text-emerald-800 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <Layers className="w-3.5 h-3.5" />
-                <span>Multi Pos / Ucapan Syukur</span>
+                <Layers className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Multi Pos / Ucapan Syukur</span>
               </button>
+            </div>
+          )}
+        </div>
+
+        {/* Form Body */}
+        <div ref={formBodyRef} className="px-4 sm:px-6 py-4 space-y-4 overflow-y-auto flex-1 min-h-0">
+          {error && (
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
             </div>
           )}
 
           {/* Nominal (Single mode) */}
           {(type === 'expense' || incomeMode === 'single') && (
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                 Nominal (Rp) <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
                   Rp
                 </span>
                 <input
@@ -785,37 +801,44 @@ export const TransactionModal: React.FC<Props> = ({
                   value={amountInput ? Number(amountInput.replace(/[^0-9]/g, '')).toLocaleString('id-ID') : ''}
                   onChange={(e) => setAmountInput(e.target.value)}
                   placeholder="0"
-                  className="w-full h-11 pl-10 pr-3.5 text-base font-bold text-slate-900 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 font-mono tabular-nums"
-                  autoFocus
+                  className="w-full h-12 pl-10 pr-4 text-lg font-bold text-slate-900 rounded-xl border border-slate-200 bg-slate-50/40 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 font-mono tabular-nums transition-colors"
                 />
               </div>
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Baris Tanggal: 2 Kolom Simetris dengan Tinggi Label Seragam */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 items-end">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {isPeleanCategorySelected && isPeleanTaonMode ? 'Tanggal Penerimaan' : 'Tanggal Transaksi'}{' '}
-                <span className="text-rose-500">*</span>
-              </label>
+              <div className="min-h-[24px] flex items-center mb-1.5">
+                <label className="text-xs font-semibold text-slate-700">
+                  {isPeleanCategorySelected && isPeleanTaonMode ? 'Tanggal Penerimaan' : 'Tanggal Transaksi'}{' '}
+                  <span className="text-rose-500">*</span>
+                </label>
+              </div>
               <input
                 type="date"
                 value={tanggal}
                 onChange={(e) => setTanggal(e.target.value)}
-                className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 required
               />
             </div>
 
             <div>
-              <div className="flex items-center justify-between gap-1 mb-1">
-                <label className="block text-xs font-semibold text-slate-700">
-                  Tanggal Warta {isPeleanCategorySelected && isPeleanTaonMode ? <span className="text-rose-500">*</span> : '(Opsional)'}
+              <div className="min-h-[24px] flex items-center justify-between gap-2 mb-1.5">
+                <label className="text-xs font-semibold text-slate-700 whitespace-nowrap">
+                  Tanggal Warta{' '}
+                  {isPeleanCategorySelected && isPeleanTaonMode ? (
+                    <span className="text-rose-500">*</span>
+                  ) : (
+                    <span className="text-slate-400 font-normal">(Opsional)</span>
+                  )}
                 </label>
                 <button
                   type="button"
                   onClick={() => setTanggalWarta(getNextSunday(tanggal))}
-                  className="text-[10px] font-semibold text-blue-700 hover:underline"
+                  className="text-[10px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md whitespace-nowrap shrink-0 transition-colors cursor-pointer"
                   title="Isi otomatis hari Minggu terdekat"
                 >
                   Minggu Berikutnya
@@ -825,102 +848,163 @@ export const TransactionModal: React.FC<Props> = ({
                 type="date"
                 value={tanggalWarta}
                 onChange={(e) => setTanggalWarta(e.target.value)}
-                className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                No. Bukti (Opsional)
-              </label>
-              <input
-                type="text"
-                value={receiptNo}
-                onChange={(e) => setReceiptNo(e.target.value)}
-                placeholder="BKM-01 / KW-10"
-                className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
               />
             </div>
           </div>
 
-          {/* Kas Tujuan (Single mode - locked to Kas Huria if Pelean Taon mode) */}
-          {(type === 'expense' || incomeMode === 'single') && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {type === 'income' ? 'Kas Tujuan' : 'Kas Sumber'} <span className="text-rose-500">*</span>
-              </label>
-              {isPeleanCategorySelected && isPeleanTaonMode ? (
-                <div className="h-11 sm:h-10 px-3 rounded-xl border border-blue-200 bg-blue-50/70 flex items-center justify-between text-xs text-blue-950 font-semibold">
-                  <span className="flex items-center gap-1.5">
-                    <Landmark className="w-3.5 h-3.5 text-blue-700" />
-                    {kasUmumHuria?.nama || 'Kas Umum Huria'} ({kasUmumHuria?.kode || 'KAS-UMUM'})
-                  </span>
-                  <span className="text-[10px] font-bold text-blue-700 bg-white px-2 py-0.5 rounded-md border border-blue-200">
-                    Otomatis Pelean Taon
-                  </span>
-                </div>
-              ) : (
-                <select
-                  value={kasId}
-                  onChange={(e) => handleKasChange(e.target.value)}
-                  className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
-                  required
-                >
-                  {selectableKas.length === 0 ? (
-                    <option value="">Tidak ada akses kas</option>
+          {/* Baris Kas, Tempat Simpan, Kategori, & No. Bukti */}
+          {type === 'expense' || incomeMode === 'single' ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    {type === 'income' ? 'Kas Tujuan' : 'Kas Sumber'} <span className="text-rose-500">*</span>
+                  </label>
+                  {isPeleanCategorySelected && isPeleanTaonMode ? (
+                    <div className="h-11 sm:h-10 px-3 rounded-xl border border-blue-200 bg-blue-50/70 flex items-center justify-between gap-2 text-xs text-blue-950 font-semibold">
+                      <span className="flex items-center gap-1.5 min-w-0 truncate">
+                        <Landmark className="w-3.5 h-3.5 text-blue-700 shrink-0" />
+                        <span className="truncate">{kasUmumHuria?.nama || 'Kas Umum Huria'}</span>
+                      </span>
+                      <span className="text-[10px] font-bold text-blue-700 bg-white px-1.5 py-0.5 rounded-md border border-blue-200 shrink-0">
+                        Otomatis
+                      </span>
+                    </div>
                   ) : (
-                    selectableKas.map((k) => (
-                      <option key={k.id} value={k.id}>
-                        {k.nama} ({k.kode})
-                      </option>
-                    ))
+                    <select
+                      value={kasId}
+                      onChange={(e) => handleKasChange(e.target.value)}
+                      className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                      required
+                    >
+                      {selectableKas.length === 0 ? (
+                        <option value="">Tidak ada akses kas</option>
+                      ) : (
+                        selectableKas.map((k) => (
+                          <option key={k.id} value={k.id}>
+                            {k.nama} ({k.kode})
+                          </option>
+                        ))
+                      )}
+                    </select>
                   )}
-                </select>
-              )}
-            </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Tempat Simpan <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={storageAccountId}
+                    onChange={(e) => setStorageAccountId(e.target.value)}
+                    className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                    required
+                  >
+                    {storageAccounts
+                      .filter((s) => s.is_active)
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.nama} ({s.tipe === 'cash' ? 'Tunai' : 'Bank'})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Kategori <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={categoryId}
+                    onChange={(e) => handleCategoryChange(e.target.value)}
+                    className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                    required
+                  >
+                    {categories
+                      .filter((c) => c.tipe === type && c.is_active)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nama}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    No. Bukti <span className="text-slate-400 font-normal">(Opsional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={receiptNo}
+                    onChange={(e) => setReceiptNo(e.target.value)}
+                    placeholder="Contoh: BKM-01 / KW-10"
+                    className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Tempat Simpan <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={storageAccountId}
+                    onChange={(e) => setStorageAccountId(e.target.value)}
+                    className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                    required
+                  >
+                    {storageAccounts
+                      .filter((s) => s.is_active)
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.nama} ({s.tipe === 'cash' ? 'Tunai' : 'Bank'})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Kategori <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={categoryId}
+                    onChange={(e) => handleCategoryChange(e.target.value)}
+                    className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                    required
+                  >
+                    {categories
+                      .filter((c) => c.tipe === type && c.is_active)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nama}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  No. Bukti <span className="text-slate-400 font-normal">(Opsional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={receiptNo}
+                  onChange={(e) => setReceiptNo(e.target.value)}
+                  placeholder="Contoh: BKM-01 / KW-10"
+                  className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                />
+              </div>
+            </>
           )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Tempat Simpan <span className="text-rose-500">*</span>
-              </label>
-              <select
-                value={storageAccountId}
-                onChange={(e) => setStorageAccountId(e.target.value)}
-                className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
-                required
-              >
-                {storageAccounts
-                  .filter((s) => s.is_active)
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.nama} ({s.tipe === 'cash' ? 'Tunai' : 'Bank'})
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Kategori <span className="text-rose-500">*</span>
-              </label>
-              <select
-                value={categoryId}
-                onChange={(e) => handleCategoryChange(e.target.value)}
-                className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
-                required
-              >
-                {categories
-                  .filter((c) => c.tipe === type && c.is_active)
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nama}
-                    </option>
-                  ))}
-              </select>
-            </div>
-          </div>
 
           {/* FITUR KHUSUS PELEAN TAON (PERSEMBAHAN TAHUNAN KELUARGA) */}
           {isPeleanCategorySelected && (
@@ -1052,7 +1136,7 @@ export const TransactionModal: React.FC<Props> = ({
                           </option>
                           {filteredFamiliesForDropdown.map((f) => (
                             <option key={f.id} value={f.id}>
-                              {f.nama_keluarga} {!peleanLingkungan ? `(${f.lingkungan})` : ''}
+                              {formatNamaKeluarga(f.nama_keluarga)} {!peleanLingkungan ? `(${f.lingkungan})` : ''}
                             </option>
                           ))}
                         </select>
@@ -1078,9 +1162,17 @@ export const TransactionModal: React.FC<Props> = ({
                           type="text"
                           value={peleanManualFamilyName}
                           onChange={(e) => setPeleanManualFamilyName(e.target.value)}
-                          placeholder="Contoh: Kel. St. R. Sinaga / br Sitepu"
+                          onBlur={() => {
+                            if (peleanManualFamilyName.trim()) {
+                              setPeleanManualFamilyName(formatNamaKeluarga(peleanManualFamilyName));
+                            }
+                          }}
+                          placeholder="Contoh: St. Saruddin Naibaho, BA (+) / Maria Magdalena Siregar, BA"
                           className="w-full h-11 sm:h-10 px-3 rounded-xl border border-blue-200 bg-white text-xs font-medium text-slate-900"
                         />
+                        <p className="text-[11px] text-slate-500">
+                          Otomatis diawali <span className="font-semibold text-slate-700">&quot;Kel. &quot;</span> saat disimpan.
+                        </p>
                         <label className="inline-flex items-center gap-2 text-[11px] text-slate-700 cursor-pointer">
                           <input
                             type="checkbox"
@@ -1115,23 +1207,33 @@ export const TransactionModal: React.FC<Props> = ({
 
           {/* SENTRALISASI DETERMINATION AT TRANSACTION ENTRY (SINGLE INCOME - hidden when Pelean Taon enforces 55/45) */}
           {type === 'income' && incomeMode === 'single' && !(isPeleanCategorySelected && isPeleanTaonMode) && (
-            <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/80 space-y-2.5 text-xs">
-              <div className="flex items-center justify-between">
+            <div className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/80 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold text-slate-700">Status Sentralisasi Transaksi</span>
+                <span className="text-[10px] font-medium text-slate-500">Aturan PPKU HKBP</span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <button
                   type="button"
                   onClick={() => setIsSentralisasi(true)}
-                  className={`py-2 px-3 rounded-lg border text-left transition-all ${
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start justify-between gap-2 ${
                     isSentralisasi
-                      ? 'bg-white border-blue-600 text-blue-950 ring-1 ring-blue-600/30 font-semibold'
-                      : 'bg-white/60 border-slate-200 text-slate-600 hover:bg-white'
+                      ? 'bg-white border-blue-600 text-blue-950 ring-2 ring-blue-600/15 shadow-2xs'
+                      : 'bg-white/70 border-slate-200 text-slate-600 hover:bg-white'
                   }`}
                 >
-                  <div className="text-xs font-bold">Sentralisasi (45/55)</div>
-                  <div className="text-[10px] text-slate-500">45% Kas · 55% BPSK</div>
+                  <div>
+                    <div className="text-xs font-bold">Sentralisasi (45/55)</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">45% Kas · 55% BPSK</div>
+                  </div>
+                  <span
+                    className={`w-4 h-4 rounded-full border shrink-0 mt-0.5 flex items-center justify-center ${
+                      isSentralisasi ? 'border-blue-600 bg-blue-600' : 'border-slate-300 bg-white'
+                    }`}
+                  >
+                    {isSentralisasi && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -1139,32 +1241,44 @@ export const TransactionModal: React.FC<Props> = ({
                     setIsSentralisasi(false);
                     setExclusionType(inferExclusionForKas(kasId));
                   }}
-                  className={`py-2 px-3 rounded-lg border text-left transition-all ${
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start justify-between gap-2 ${
                     !isSentralisasi
-                      ? 'bg-white border-emerald-600 text-emerald-950 ring-1 ring-emerald-600/30 font-semibold'
-                      : 'bg-white/60 border-slate-200 text-slate-600 hover:bg-white'
+                      ? 'bg-white border-emerald-600 text-emerald-950 ring-2 ring-emerald-600/15 shadow-2xs'
+                      : 'bg-white/70 border-slate-200 text-slate-600 hover:bg-white'
                   }`}
                 >
-                  <div className="text-xs font-bold">Non-Sentralisasi (100%)</div>
-                  <div className="text-[10px] text-slate-500">100% ke {selectedKas?.nama || 'Kas'}</div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold">Non-Sentralisasi (100%)</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+                      100% ke {selectedKas?.nama || 'Kas'}
+                    </div>
+                  </div>
+                  <span
+                    className={`w-4 h-4 rounded-full border shrink-0 mt-0.5 flex items-center justify-center ${
+                      !isSentralisasi ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 bg-white'
+                    }`}
+                  >
+                    {!isSentralisasi && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </span>
                 </button>
               </div>
 
               {isSentralisasi ? (
-                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-white border border-slate-200 text-[11px] tabular-nums">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-[11px] tabular-nums">
                   <span className="text-slate-600">
-                    {selectedKas?.nama || 'Kas'} (45%): <strong className="text-slate-900 font-mono">{formatRupiah(singleSplit.huriaAmount)}</strong>
+                    {selectedKas?.nama || 'Kas'} (45%):{' '}
+                    <strong className="text-slate-900 font-mono">{formatRupiah(singleSplit.huriaAmount)}</strong>
                   </span>
                   <span className="text-blue-700">
                     Sentralisasi (55%): <strong className="font-mono">{formatRupiah(singleSplit.bpskAmount)}</strong>
                   </span>
                 </div>
               ) : (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-0.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-0.5">
                   <select
                     value={exclusionType}
                     onChange={(e) => setExclusionType(e.target.value as SentralisasiExclusionType)}
-                    className="flex-1 h-9 px-2.5 rounded-lg border border-slate-200 bg-white text-[11px]"
+                    className="flex-1 h-10 sm:h-9 px-3 rounded-xl border border-slate-200 bg-white text-xs"
                   >
                     <option value="pembangunan_lokal">Pembangunan Lokal</option>
                     <option value="sosial_duka">Diakonia Sosial / Duka</option>
@@ -1172,7 +1286,7 @@ export const TransactionModal: React.FC<Props> = ({
                     <option value="beasiswa">Beasiswa</option>
                     <option value="lainnya">Non-Sentralisasi Lainnya</option>
                   </select>
-                  <span className="font-mono font-bold text-emerald-700 text-xs tabular-nums shrink-0">
+                  <span className="font-mono font-bold text-emerald-700 text-xs tabular-nums shrink-0 px-1">
                     100%: {formatRupiah(rawAmount)}
                   </span>
                 </div>
@@ -1385,7 +1499,7 @@ export const TransactionModal: React.FC<Props> = ({
 
           {/* Uraian */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
               {type === 'income' && incomeMode === 'multi' ? 'Uraian Utama (mis. Ucapan Syukur Kel. ...)' : 'Uraian'}{' '}
               <span className="text-rose-500">*</span>
             </label>
@@ -1401,39 +1515,41 @@ export const TransactionModal: React.FC<Props> = ({
                   ? 'Ucapan Syukur dari Kel. ...'
                   : 'Contoh: Pelean Ibadah IA / Pembayaran listrik gereja'
               }
-              className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+              className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
               required
             />
           </div>
 
           {/* Upload Nota */}
-          <div className="p-2.5 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 flex items-center justify-between gap-2 flex-wrap">
+          <div className="p-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2 text-xs text-slate-700">
               <Camera className="w-4 h-4 text-slate-400 shrink-0" />
-              <span className="font-medium">Foto Nota</span>
+              <span className="font-medium">Foto Nota / Bukti</span>
               {isReceiptMandatory && (
-                <span className="text-[10px] text-rose-700 font-semibold">(Wajib)</span>
+                <span className="text-[10px] text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded font-semibold">
+                  Wajib
+                </span>
               )}
             </div>
 
             {attachmentUrl ? (
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-emerald-700 font-medium flex items-center gap-1">
+              <div className="flex items-center gap-2.5">
+                <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
                   <CheckCircle className="w-3.5 h-3.5" />
                   Terlampir
                 </span>
                 <button
                   type="button"
                   onClick={() => setAttachmentUrl(null)}
-                  className="text-[11px] text-rose-600 hover:underline font-medium"
+                  className="text-[11px] text-rose-600 hover:underline font-semibold cursor-pointer"
                 >
                   Hapus
                 </button>
               </div>
             ) : (
-              <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 text-xs font-medium rounded-lg hover:bg-slate-50">
+              <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 shadow-2xs transition-colors">
                 <Upload className="w-3.5 h-3.5 text-slate-500" />
-                <span>{uploading ? 'Mengunggah...' : 'Unggah'}</span>
+                <span>{uploading ? 'Mengunggah...' : 'Unggah Foto'}</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -1448,11 +1564,11 @@ export const TransactionModal: React.FC<Props> = ({
         </div>
 
         {/* Sticky Footer */}
-        <div className="px-4 sm:px-5 pt-3.5 pb-[calc(0.875rem+env(safe-area-inset-bottom,0px))] sm:pb-3.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-2 shrink-0">
+        <div className="px-4 sm:px-6 pt-3.5 pb-[calc(0.875rem+env(safe-area-inset-bottom,0px))] sm:pb-3.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-2 shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] sm:min-h-0 sm:h-10 px-3.5 text-xs font-semibold text-slate-600 hover:bg-slate-200/60 rounded-xl transition-colors"
+            className="min-h-[44px] sm:min-h-0 sm:h-10 px-4 text-xs font-semibold text-slate-600 hover:bg-slate-200/70 rounded-xl transition-colors cursor-pointer"
           >
             Batal
           </button>
@@ -1461,7 +1577,7 @@ export const TransactionModal: React.FC<Props> = ({
               type="button"
               disabled={isSubmitting}
               onClick={() => handleSave(false)}
-              className="min-h-[44px] sm:min-h-0 sm:h-10 px-3.5 text-xs font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 rounded-xl transition-colors"
+              className="min-h-[44px] sm:min-h-0 sm:h-10 px-4 text-xs font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 disabled:opacity-60 rounded-xl transition-colors cursor-pointer"
             >
               Simpan Draft
             </button>
@@ -1469,9 +1585,9 @@ export const TransactionModal: React.FC<Props> = ({
               type="button"
               disabled={isSubmitting}
               onClick={() => handleSave(true)}
-              className="min-h-[44px] sm:min-h-0 sm:h-10 px-4 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors"
+              className="min-h-[44px] sm:min-h-0 sm:h-10 px-5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 rounded-xl shadow-xs transition-colors cursor-pointer"
             >
-              Ajukan
+              {isSubmitting ? 'Menyimpan...' : 'Ajukan'}
             </button>
           </div>
         </div>

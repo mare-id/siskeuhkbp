@@ -410,9 +410,12 @@ export const TransactionsPage: React.FC = () => {
       return {
         No: idx + 1,
         Tanggal: tx.tanggal,
+        'Tanggal Warta': tx.tanggal_warta || '-',
         'No. Bukti': tx.receipt_no || '-',
         'Nama Kas': kas?.nama || '-',
         'Tempat Penyimpanan': storage?.nama || '-',
+        Lingkungan: tx.lingkungan || '-',
+        'Nama Keluarga': tx.family_name || '-',
         Jenis: tx.type,
         Uraian: tx.description,
         'Nominal (Rp)': Number(tx.amount),
@@ -914,6 +917,11 @@ export const TransactionsPage: React.FC = () => {
                           <div className="font-mono text-slate-900 font-medium tabular-nums">
                             {formatDateIndo(tx.tanggal)}
                           </div>
+                          {tx.tanggal_warta && (
+                            <div className="text-[11px] text-blue-700 font-mono">
+                              Warta: {formatDateIndo(tx.tanggal_warta)}
+                            </div>
+                          )}
                           {tx.receipt_no && (
                             <div className="text-[11px] text-slate-400 font-mono">{tx.receipt_no}</div>
                           )}
@@ -1068,12 +1076,13 @@ export const TransactionsPage: React.FC = () => {
                       onClick={() => setDetailTargetTx(tx)}
                       className="w-full text-left space-y-2 active:opacity-80"
                     >
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="font-mono text-slate-500 tabular-nums">
+                      <div className="flex items-center justify-between gap-2 text-[11px]">
+                        <span className="font-mono text-slate-500 tabular-nums truncate">
                           {formatDateIndo(tx.tanggal)}
+                          {tx.tanggal_warta ? ` · Warta ${formatDateIndo(tx.tanggal_warta)}` : ''}
                           {tx.receipt_no ? ` · ${tx.receipt_no}` : ''}
                         </span>
-                        <span className={`font-semibold ${statusInfo.cls}`}>{statusInfo.label}</span>
+                        <span className={`font-semibold shrink-0 ${statusInfo.cls}`}>{statusInfo.label}</span>
                       </div>
 
                       <div className="font-semibold text-slate-900 text-sm leading-snug">

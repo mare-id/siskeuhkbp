@@ -25,6 +25,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { UserGuidePage } from './pages/UserGuidePage';
 import { LoginPage } from './pages/LoginPage';
 import { AdminTransactionsPage } from './pages/AdminTransactionsPage';
+import { PeleanTaonPage } from './pages/PeleanTaonPage';
 
 type PermissionKey =
   | 'canManageBudget'
@@ -84,6 +85,7 @@ export default function App() {
               <Route path="/" element={<RequireAuth><AppLayout /></RequireAuth>}>
                 <Route index element={<DashboardPage />} />
                 <Route path="transactions" element={<TransactionsPage />} />
+                <Route path="pelean-taon" element={<PeleanTaonPage />} />
                 <Route path="budget" element={<RoleGuard allow="canManageBudget"><BudgetPage /></RoleGuard>} />
                 <Route path="opening-balance" element={<RoleGuard allow="canManageOpeningBook"><OpeningBalancePage /></RoleGuard>} />
                 <Route path="approvals" element={<RoleGuard allow="canApprove"><ApprovalQueuePage /></RoleGuard>} />

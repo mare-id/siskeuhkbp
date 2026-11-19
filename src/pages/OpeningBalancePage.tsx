@@ -36,6 +36,8 @@ import {
 import * as XLSX from 'xlsx';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { ConfirmActionModal } from '../components/common/ConfirmActionModal';
 import {
   Kas,
   StorageAccount,
@@ -49,6 +51,7 @@ import { formatRupiah, formatDateIndo } from '../lib/formatters';
 import { generateBeritaAcaraPembukaanPDF } from '../lib/exportUtils';
 
 export default function OpeningBalancePage() {
+  const { toast } = useToast();
   const { currentUser, userKasAccess, canInputKas, canApproveKas, isAdmin, isBendaharaUmum, isLeader, canRecordTransactions } = useAuth();
   const {
     kasList,
@@ -116,6 +119,17 @@ export default function OpeningBalancePage() {
     validRows: { kas: Kas; storage: StorageAccount; amount: number; explanation?: string }[];
     errorRows: { rawRow: any; error: string }[];
   } | null>(null);
+
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'lock_all' | 'approve_kas' | 'lock_kas';
+    kasId?: string;
+    kasName?: string;
+  } | null>(null);
+  const [priorYearEditTarget, setPriorYearEditTarget] = useState<{
+    categoryId: string;
+    categoryName: string;
+  } | null>(null);
+  const [priorYearAmountInput, setPriorYearAmountInput] = useState<string>('0');
 
   const isSeksiUser = !isLeader && !isAdmin && currentUser?.role === 'pengurus_kas';
   const myAssignedKasIds = useMemo(() => userKasAccess.map((a) => a.kas_id), [userKasAccess]);
@@ -197,7 +211,7 @@ export default function OpeningBalancePage() {
       if (phys) {
         const diff = phys.physical - phys.book;
         if (diff !== 0 && (!phys.explanation || phys.explanation.trim() === '')) {
-          alert(
+          toast.error(
             `Terdapat selisih pada ${sa.nama} (${formatRupiah(diff)}). Penjelasan alasan selisih wajib diisi.`
           );
           return;
@@ -222,13 +236,13 @@ export default function OpeningBalancePage() {
     try {
       const res = await submitOpeningBook(wizardKasId);
       if (!res.success) {
-        alert(res.error || 'Gagal mengajukan pembukaan buku.');
+        toast.error(res.error || 'Gagal mengajukan pembukaan buku.');
         return;
       }
-      alert(`Saldo awal ${selectedWizardKas?.nama} berhasil diajukan ke Ketua Kas untuk diverifikasi.`);
+      toast.success(`Saldo awal ${selectedWizardKas?.nama} berhasil diajukan ke Ketua Kas untuk diverifikasi.`);
       setWizardKasId(null);
     } catch (err: any) {
-      alert(err.message || 'Gagal mengajukan pembukaan buku.');
+      toast.error(err.message || 'Gagal mengajukan pembukaan buku.');
     }
   };
 
@@ -343,7 +357,7 @@ export default function OpeningBalancePage() {
 
         setExcelPreviewData({ validRows: valid, errorRows });
       } catch (err: any) {
-        alert('Gagal membaca file Excel. Pastikan format file sesuai template.');
+        toast.error('Gagal membaca file Excel. Pastikan format file sesuai template.');
       }
     };
     reader.readAsBinaryString(file);
@@ -362,7 +376,7 @@ export default function OpeningBalancePage() {
         explanation: item.explanation || 'Diimpor dari file Excel saldo awal',
       });
     }
-    alert(`Berhasil menyimpan ${excelPreviewData.validRows.length} entri saldo awal dari Excel.`);
+    toast.success(`Berhasil menyimpan ${excelPreviewData.validRows.length} entri saldo awal dari Excel.`);
     setExcelPreviewData(null);
   };
 
@@ -395,10 +409,10 @@ export default function OpeningBalancePage() {
         </div>
 
         {/* Global Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
           <button
             onClick={handleExportPDF}
-            className="inline-flex items-center gap-2 px-3.5 py-2 min-h-[40px] rounded-xl text-xs font-semibold border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-3.5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-[40px] rounded-xl text-xs font-semibold border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-colors"
           >
             <Download className="w-4 h-4 text-slate-500" />
             Berita Acara (PDF)
@@ -406,17 +420,8 @@ export default function OpeningBalancePage() {
 
           {(isAdmin || isBendaharaUmum) && (
             <button
-              onClick={async () => {
-                if (
-                  window.confirm(
-                    'Kunci Pembukaan Buku untuk semua kas yang telah disetujui? Setelah dikunci, saldo awal menjadi resmi dan kas langsung dapat menerima transaksi.'
-                  )
-                ) {
-                  const res = await lockOpeningBook();
-                  alert(`Berhasil mengunci ${res.count || 0} entri saldo awal.`);
-                }
-              }}
-              className="inline-flex items-center gap-2 px-3.5 py-2 min-h-[40px] rounded-xl text-xs font-semibold bg-emerald-700 text-white hover:bg-emerald-800 transition-colors"
+              onClick={() => setConfirmAction({ type: 'lock_all' })}
+              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-3.5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-[40px] rounded-xl text-xs font-semibold bg-emerald-700 text-white hover:bg-emerald-800 transition-colors"
             >
               <Lock className="w-4 h-4" />
               Kunci Semua Kas
@@ -452,10 +457,10 @@ export default function OpeningBalancePage() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex items-center p-1 bg-gray-100/80 rounded-xl border border-gray-200 overflow-x-auto">
+      <div className="flex items-center p-1 bg-gray-100/80 rounded-xl border border-gray-200 overflow-x-auto scrollbar-none gap-1">
         <button
           onClick={() => setActiveTab('status')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-0 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
             activeTab === 'status' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
           }`}
         >
@@ -465,7 +470,7 @@ export default function OpeningBalancePage() {
         {canRecordTransactions && (
           <button
             onClick={() => setActiveTab('excel')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+            className={`flex items-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-0 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
               activeTab === 'excel' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
             }`}
           >
@@ -475,7 +480,7 @@ export default function OpeningBalancePage() {
         )}
         <button
           onClick={() => setActiveTab('adjustments')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-0 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
             activeTab === 'adjustments' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
           }`}
         >
@@ -484,7 +489,7 @@ export default function OpeningBalancePage() {
         </button>
         <button
           onClick={() => setActiveTab('prior_year')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-0 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
             activeTab === 'prior_year' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
           }`}
         >
@@ -509,7 +514,74 @@ export default function OpeningBalancePage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile Cards */}
+            <div className="md:hidden divide-y divide-gray-100">
+              {visibleKasList.map((k) => {
+                const status = getOpeningStatusForKas(k.id);
+                const isLocked = status === 'locked';
+                const entries = openingEntries.filter((e) => e.kas_id === k.id);
+                const totalSaldo = entries.reduce((sum, e) => sum + e.amount, 0);
+                const hasDiscrepancy = entries.some((e) => e.difference !== 0);
+                const canInput = canInputKas(k.id) || isAdmin;
+                const canApprove = canApproveKas(k.id) || isAdmin;
+                return (
+                  <div key={k.id} className="p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: k.warna }} />
+                        <div className="min-w-0">
+                          <strong className="block text-sm text-gray-900 truncate">{k.nama}</strong>
+                          <span className="text-[11px] font-mono text-gray-400">{k.kode}</span>
+                        </div>
+                      </div>
+                      <div className="shrink-0">{renderStatusBadge(status)}</div>
+                    </div>
+                    <div className="flex items-center justify-between bg-slate-50/80 rounded-xl p-3 border border-slate-100">
+                      <div>
+                        <span className="text-[10px] uppercase text-slate-400 font-semibold block">Saldo Pindahan</span>
+                        <span className="text-base font-bold font-mono text-slate-900 tabular-nums">{formatRupiah(totalSaldo)}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase text-slate-400 font-semibold block mb-0.5">Fisik vs Buku</span>
+                        {hasDiscrepancy ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600"><AlertTriangle className="w-3.5 h-3.5" /> Ada Selisih</span>
+                        ) : entries.length > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600"><CheckCircle2 className="w-3.5 h-3.5" /> Fisik Cocok</span>
+                        ) : (
+                          <span className="text-xs text-gray-400">-</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {!isLocked && canInput && (
+                        <button onClick={() => handleOpenWizard(k)} className="flex-1 min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600">
+                          {status === 'not_started' ? 'Mulai Wizard' : 'Lanjutkan Wizard'}
+                        </button>
+                      )}
+                      {status === 'submitted' && canApprove && (
+                        <>
+                          <button onClick={() => setConfirmAction({ type: 'approve_kas', kasId: k.id, kasName: k.nama })} className="flex-1 min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            Setujui
+                          </button>
+                          <button onClick={() => setReturnModalKasId(k.id)} className="flex-1 min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 border border-rose-200 hover:bg-rose-50">
+                            Kembalikan
+                          </button>
+                        </>
+                      )}
+                      {status === 'approved' && (isAdmin || isBendaharaUmum) && (
+                        <button onClick={() => setConfirmAction({ type: 'lock_kas', kasId: k.id, kasName: k.nama })} className="flex-1 min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700">
+                          Kunci Kas
+                        </button>
+                      )}
+                      {isLocked && (
+                        <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1.5 py-1"><Lock className="w-3.5 h-3.5" /> Siap Transaksi</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-gray-50/75 text-gray-600 text-xs font-semibold uppercase tracking-wider border-b border-gray-100">
                   <tr>
@@ -563,7 +635,6 @@ export default function OpeningBalancePage() {
                         </td>
                         <td className="py-3.5 px-4 text-center">
                           <div className="inline-flex items-center gap-2">
-                            {/* Wizard button for bendahara */}
                             {!isLocked && canInput && (
                               <button
                                 onClick={() => handleOpenWizard(k)}
@@ -572,17 +643,10 @@ export default function OpeningBalancePage() {
                                 {status === 'not_started' ? 'Mulai Wizard' : 'Lanjutkan Wizard'}
                               </button>
                             )}
-
-                            {/* Ketua approval button */}
                             {status === 'submitted' && canApprove && (
                               <>
                                 <button
-                                  onClick={async () => {
-                                    if (confirm(`Setujui saldo awal ${k.nama}?`)) {
-                                      const res = await approveOpeningBook(k.id, true);
-                                      if (!res.success) alert(res.error);
-                                    }
-                                  }}
+                                  onClick={() => setConfirmAction({ type: 'approve_kas', kasId: k.id, kasName: k.nama })}
                                   className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
                                 >
                                   Setujui
@@ -595,22 +659,14 @@ export default function OpeningBalancePage() {
                                 </button>
                               </>
                             )}
-
-                            {/* Bendum lock button */}
                             {status === 'approved' && (isAdmin || isBendaharaUmum) && (
                               <button
-                                onClick={async () => {
-                                  if (confirm(`Kunci resmi saldo awal ${k.nama}? Kas ini akan langsung aktif menerima transaksi.`)) {
-                                    const res = await lockOpeningBook(k.id);
-                                    if (!res.success) alert(res.error);
-                                  }
-                                }}
+                                onClick={() => setConfirmAction({ type: 'lock_kas', kasId: k.id, kasName: k.nama })}
                                 className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs"
                               >
                                 Kunci Kas
                               </button>
                             )}
-
                             {isLocked && (
                               <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
                                 <Lock className="w-3.5 h-3.5" />
@@ -642,16 +698,16 @@ export default function OpeningBalancePage() {
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 pt-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
               <button
                 onClick={handleDownloadExcelTemplate}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm transition-colors"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm transition-colors"
               >
                 <Download className="w-4 h-4" />
                 Unduh Template Excel (.xlsx)
               </button>
 
-              <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors">
+              <label className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors">
                 <Upload className="w-4 h-4 text-gray-500" />
                 <span>Pilih File Excel untuk Diimpor</span>
                 <input type="file" accept=".xlsx, .xls" onChange={handleExcelUpload} className="hidden" />
@@ -659,10 +715,9 @@ export default function OpeningBalancePage() {
             </div>
           </div>
 
-          {/* Excel Preview Table */}
           {excelPreviewData && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden space-y-4 p-6">
-              <div className="flex items-center justify-between">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden space-y-4 p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h4 className="text-sm font-bold text-gray-900">Hasil Pemeriksaan File Excel</h4>
                   <p className="text-xs text-gray-500">
@@ -673,14 +728,13 @@ export default function OpeningBalancePage() {
                 {excelPreviewData.validRows.length > 0 && (
                   <button
                     onClick={handleCommitExcelImport}
-                    className="px-5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+                    className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
                   >
                     Simpan Baris Valid ke Saldo Awal
                   </button>
                 )}
               </div>
 
-              {/* Error Rows Banner if any */}
               {excelPreviewData.errorRows.length > 0 && (
                 <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 space-y-2">
                   <strong className="block font-bold">Baris yang Ditolak / Tidak Valid:</strong>
@@ -694,8 +748,24 @@ export default function OpeningBalancePage() {
                 </div>
               )}
 
-              {/* Valid Rows Table */}
-              <div className="overflow-x-auto border border-gray-100 rounded-xl">
+              <div className="md:hidden divide-y divide-gray-100 border border-gray-100 rounded-xl">
+                {excelPreviewData.validRows.map((row, idx) => (
+                  <div key={idx} className="p-3.5 space-y-1 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="font-bold text-gray-900 block">{row.kas.nama}</span>
+                        <span className="text-[11px] text-gray-500">{row.storage.nama}</span>
+                      </div>
+                      <span className="font-bold font-mono text-gray-900 tabular-nums shrink-0">
+                        {formatRupiah(row.amount)}
+                      </span>
+                    </div>
+                    {row.explanation && <p className="text-[11px] text-gray-500">{row.explanation}</p>}
+                  </div>
+                ))}
+              </div>
+
+              <div className="hidden md:block overflow-x-auto border border-gray-100 rounded-xl">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-gray-50 text-gray-600 font-semibold uppercase">
                     <tr>
@@ -743,7 +813,7 @@ export default function OpeningBalancePage() {
           </div>
 
           {/* Action Bar */}
-          <div className="flex items-center justify-between bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-gray-100 shadow-sm">
             <div>
               <h4 className="text-sm font-bold text-gray-900">Riwayat Pengajuan Penyesuaian Saldo Awal</h4>
               <p className="text-xs text-gray-500">Koreksi audit saldo awal tahun {openingSetup.first_year}</p>
@@ -759,7 +829,7 @@ export default function OpeningBalancePage() {
                   setAdjDocName('');
                   setShowAdjModal(true);
                 }}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm transition-colors"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 Ajukan Penyesuaian
@@ -767,9 +837,55 @@ export default function OpeningBalancePage() {
             )}
           </div>
 
-          {/* Adjustments Table */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+            {/* Mobile Cards */}
+            <div className="md:hidden divide-y divide-gray-100">
+              {openingAdjustments.length === 0 ? (
+                <div className="py-8 px-4 text-center text-xs text-gray-400">
+                  Belum ada pengajuan penyesuaian saldo awal.
+                </div>
+              ) : (
+                openingAdjustments.map((adj) => {
+                  const kas = kasList.find((k) => k.id === adj.kas_id);
+                  const stor = storageAccounts.find((s) => s.id === adj.storage_account_id);
+                  return (
+                    <div key={adj.id} className="p-4 space-y-2.5 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <span className="font-bold text-sm text-gray-900 block">{kas?.nama || '-'}</span>
+                          <span className="text-[11px] text-gray-500">{stor?.nama || '-'}</span>
+                        </div>
+                        <span className={`font-bold font-mono text-sm tabular-nums ${adj.amount >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          {adj.amount >= 0 ? `+${formatRupiah(adj.amount)}` : formatRupiah(adj.amount)}
+                        </span>
+                      </div>
+                      <p className="text-gray-700">{adj.reason}</p>
+                      {adj.document_url && <span className="text-[11px] text-gray-400 block">Lampiran: {adj.document_url}</span>}
+                      <div className="flex items-center justify-between gap-2 pt-1">
+                        <div>
+                          {adj.status === 'submitted' && <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">Menunggu Ketua Kas</span>}
+                          {adj.status === 'approved_ketua' && <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">Menunggu Bendahara Umum</span>}
+                          {adj.status === 'approved_bendum' && <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Tuntas (Diterapkan)</span>}
+                          {adj.status === 'rejected' && <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">Ditolak</span>}
+                        </div>
+                        {adj.status === 'submitted' && (canApproveKas(adj.kas_id) || isAdmin) && (
+                          <button onClick={() => approveOpeningAdjustment(adj.id, true)} className="min-h-[44px] px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100">
+                            Setujui Ketua
+                          </button>
+                        )}
+                        {adj.status === 'approved_ketua' && (isAdmin || isBendaharaUmum) && (
+                          <button onClick={() => approveOpeningAdjustment(adj.id, true)} className="min-h-[44px] px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700">
+                            Sahkan & Terapkan
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-gray-50/75 text-gray-600 text-xs font-semibold uppercase tracking-wider border-b border-gray-100">
                   <tr>
@@ -792,62 +908,31 @@ export default function OpeningBalancePage() {
                     openingAdjustments.map((adj) => {
                       const kas = kasList.find((k) => k.id === adj.kas_id);
                       const stor = storageAccounts.find((s) => s.id === adj.storage_account_id);
-
                       return (
                         <tr key={adj.id} className="hover:bg-gray-50/50 transition-colors">
                           <td className="py-3 px-4 font-semibold text-gray-900">{kas?.nama || '-'}</td>
                           <td className="py-3 px-4 text-xs text-gray-600">{stor?.nama || '-'}</td>
-                          <td
-                            className={`py-3 px-4 text-right font-bold tabular-nums ${
-                              adj.amount >= 0 ? 'text-emerald-700' : 'text-rose-700'
-                            }`}
-                          >
+                          <td className={`py-3 px-4 text-right font-bold tabular-nums ${adj.amount >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                             {adj.amount >= 0 ? `+${formatRupiah(adj.amount)}` : formatRupiah(adj.amount)}
                           </td>
                           <td className="py-3 px-4 text-xs max-w-xs text-gray-700">
                             <div>{adj.reason}</div>
-                            {adj.document_url && (
-                              <span className="text-[10px] text-gray-400 mt-0.5 block">
-                                Lampiran: {adj.document_url}
-                              </span>
-                            )}
+                            {adj.document_url && <span className="text-[10px] text-gray-400 mt-0.5 block">Lampiran: {adj.document_url}</span>}
                           </td>
                           <td className="py-3 px-4 text-center">
-                            {adj.status === 'submitted' && (
-                              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                                Menunggu Ketua Kas
-                              </span>
-                            )}
-                            {adj.status === 'approved_ketua' && (
-                              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                                Menunggu Bendahara Umum
-                              </span>
-                            )}
-                            {adj.status === 'approved_bendum' && (
-                              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                Tuntas (Diterapkan)
-                              </span>
-                            )}
-                            {adj.status === 'rejected' && (
-                              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-                                Ditolak
-                              </span>
-                            )}
+                            {adj.status === 'submitted' && <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">Menunggu Ketua Kas</span>}
+                            {adj.status === 'approved_ketua' && <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">Menunggu Bendahara Umum</span>}
+                            {adj.status === 'approved_bendum' && <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Tuntas (Diterapkan)</span>}
+                            {adj.status === 'rejected' && <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">Ditolak</span>}
                           </td>
                           <td className="py-3 px-4 text-center">
                             {adj.status === 'submitted' && (canApproveKas(adj.kas_id) || isAdmin) && (
-                              <button
-                                onClick={() => approveOpeningAdjustment(adj.id, true)}
-                                className="px-3 py-1 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100"
-                              >
+                              <button onClick={() => approveOpeningAdjustment(adj.id, true)} className="px-3 py-1 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100">
                                 Setujui Ketua
                               </button>
                             )}
                             {adj.status === 'approved_ketua' && (isAdmin || isBendaharaUmum) && (
-                              <button
-                                onClick={() => approveOpeningAdjustment(adj.id, true)}
-                                className="px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700"
-                              >
+                              <button onClick={() => approveOpeningAdjustment(adj.id, true)} className="px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700">
                                 Sahkan & Terapkan
                               </button>
                             )}
@@ -863,12 +948,10 @@ export default function OpeningBalancePage() {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* TAB 4: RINGKASAN TAHUN LALU (MANUAL)                                      */}
-      {/* ========================================================================= */}
+      {/* TAB 4: RINGKASAN TAHUN LALU (MANUAL) */}
       {activeTab === 'prior_year' && (
         <div className="space-y-6">
-          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+          <div className="bg-white p-4 sm:p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h3 className="text-base font-bold text-gray-900">
@@ -880,12 +963,12 @@ export default function OpeningBalancePage() {
                 </p>
               </div>
 
-              <div>
+              <div className="w-full sm:w-auto">
                 <label className="block text-xs font-semibold text-gray-500 mb-1">Pilih Kas</label>
                 <select
                   value={priorYearKasId}
                   onChange={(e) => setPriorYearKasId(e.target.value)}
-                  className="px-3.5 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm font-semibold text-gray-800"
+                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm font-semibold text-gray-800"
                 >
                   {visibleKasList.map((k) => (
                     <option key={k.id} value={k.id}>
@@ -896,8 +979,42 @@ export default function OpeningBalancePage() {
               </div>
             </div>
 
-            {/* Categories Input Table */}
-            <div className="overflow-x-auto border border-gray-100 rounded-xl mt-4">
+            <div className="md:hidden divide-y divide-gray-100 border border-gray-100 rounded-xl mt-4">
+              {categories.map((cat) => {
+                const match = priorYearSummaries.find((p) => p.kas_id === priorYearKasId && p.category_id === cat.id);
+                const val = match ? match.jumlah : 0;
+                return (
+                  <div key={cat.id} className="p-3.5 space-y-2 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="font-semibold text-gray-900 block">
+                          {cat.nama} {cat.kode ? `(${cat.kode})` : ''}
+                        </span>
+                        <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[11px] font-bold ${cat.tipe === 'income' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                          {cat.tipe === 'income' ? 'Pemasukan' : 'Pengeluaran'}
+                        </span>
+                      </div>
+                      <span className="font-bold font-mono text-sm text-gray-900 tabular-nums shrink-0">{formatRupiah(val)}</span>
+                    </div>
+                    {(isAdmin || isBendaharaUmum) && (
+                      <div className="flex justify-end">
+                        <button
+                          onClick={() => {
+                            setPriorYearEditTarget({ categoryId: cat.id, categoryName: cat.nama });
+                            setPriorYearAmountInput(String(val));
+                          }}
+                          className="min-h-[40px] px-3 py-1.5 text-xs font-semibold text-[#5A7BE0] bg-indigo-50 hover:bg-indigo-100 rounded-lg"
+                        >
+                          Ubah Angka Realisasi
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto border border-gray-100 rounded-xl mt-4">
               <table className="w-full text-left text-sm">
                 <thead className="bg-gray-50 text-gray-600 text-xs font-semibold uppercase">
                   <tr>
@@ -910,47 +1027,26 @@ export default function OpeningBalancePage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-gray-700">
                   {categories.map((cat) => {
-                    const match = priorYearSummaries.find(
-                      (p) => p.kas_id === priorYearKasId && p.category_id === cat.id
-                    );
+                    const match = priorYearSummaries.find((p) => p.kas_id === priorYearKasId && p.category_id === cat.id);
                     const val = match ? match.jumlah : 0;
-
                     return (
                       <tr key={cat.id} className="hover:bg-gray-50/50">
                         <td className="py-2.5 px-4 font-semibold text-gray-900">
                           {cat.nama} {cat.kode ? `(${cat.kode})` : ''}
                         </td>
                         <td className="py-2.5 px-4">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                              cat.tipe === 'income'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-rose-100 text-rose-800'
-                            }`}
-                          >
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${cat.tipe === 'income' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
                             {cat.tipe === 'income' ? 'Pemasukan' : 'Pengeluaran'}
                           </span>
                         </td>
-                        <td className="py-2.5 px-4 text-right font-bold tabular-nums">
-                          {formatRupiah(val)}
-                        </td>
+                        <td className="py-2.5 px-4 text-right font-bold tabular-nums">{formatRupiah(val)}</td>
                         <td className="py-2.5 px-4 text-center text-xs text-gray-400">Pencatatan Manual</td>
                         <td className="py-2.5 px-4 text-center">
                           {(isAdmin || isBendaharaUmum) && (
                             <button
                               onClick={() => {
-                                const input = prompt(`Masukkan total realisasi tahun lalu untuk ${cat.nama}:`, String(val));
-                                if (input !== null) {
-                                  const num = parseFloat(input);
-                                  if (!isNaN(num) && num >= 0) {
-                                    savePriorYearSummary({
-                                      kas_id: priorYearKasId,
-                                      category_id: cat.id,
-                                      tahun: openingSetup.first_year - 1,
-                                      jumlah: num,
-                                    });
-                                  }
-                                }
+                                setPriorYearEditTarget({ categoryId: cat.id, categoryName: cat.nama });
+                                setPriorYearAmountInput(String(val));
                               }}
                               className="px-2.5 py-1 text-xs font-semibold text-[#7C9CF5] hover:bg-indigo-50 rounded"
                             >
@@ -972,28 +1068,32 @@ export default function OpeningBalancePage() {
       {/* WIZARD MODAL (4 LANGKAH LENGKAP)                                          */}
       {/* ========================================================================= */}
       {wizardKasId && selectedWizardKas && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-gray-100 space-y-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-xs">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-2xl w-full px-4 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:p-6 shadow-2xl border border-gray-100 space-y-5 sm:space-y-6 max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto mobile-sheet-enter">
+            {/* Mobile Sheet Handle */}
+            <div className="sm:hidden w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-0.5 mb-1" />
+
             {/* Wizard Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-gray-100">
-              <div>
+            <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-gray-100 gap-2">
+              <div className="min-w-0">
                 <span className="text-xs font-bold text-[#7C9CF5] uppercase tracking-wider">
                   Wizard Pembukaan Buku
                 </span>
-                <h3 className="text-lg font-bold text-gray-900 mt-0.5">
+                <h3 className="text-base sm:text-lg font-bold text-gray-900 mt-0.5 truncate">
                   Saldo Awal: {selectedWizardKas.nama}
                 </h3>
               </div>
               <button
                 onClick={() => setWizardKasId(null)}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700"
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 p-2 sm:p-1.5 flex items-center justify-center rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 shrink-0"
+                aria-label="Tutup"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Stepper Progress */}
-            <div className="grid grid-cols-4 gap-2 text-center text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
               <div
                 className={`p-2 rounded-xl border ${
                   wizardStep === 1
@@ -1049,14 +1149,14 @@ export default function OpeningBalancePage() {
                 <div className="space-y-3">
                   {storageAccounts.map((sa) => (
                     <div key={sa.id} className="p-3.5 rounded-2xl bg-gray-50 border border-gray-200/80">
-                      <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5">
                         <strong className="text-xs text-gray-800">{sa.nama}</strong>
                         <span className="text-[11px] text-gray-400">
                           {sa.tipe === 'cash' ? 'Uang Tunai Fisik' : `Rekening: ${sa.nomor_rekening}`}
                         </span>
                       </div>
                       <div className="relative">
-                        <span className="absolute left-3 top-2.5 text-xs font-bold text-gray-400">Rp</span>
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">Rp</span>
                         <input
                           type="number"
                           min="0"
@@ -1076,7 +1176,7 @@ export default function OpeningBalancePage() {
                             }));
                           }}
                           placeholder="0"
-                          className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-sm font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                          className="w-full min-h-[44px] sm:min-h-0 pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-sm font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-[#7C9CF5] bg-white"
                         />
                       </div>
                       {wizardAmounts[sa.id] > 0 && (
@@ -1088,9 +1188,9 @@ export default function OpeningBalancePage() {
                   ))}
                 </div>
 
-                <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-between text-xs font-bold text-indigo-900">
+                <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-between gap-2 text-xs font-bold text-indigo-900">
                   <span>Total Saldo Pindahan:</span>
-                  <span className="text-sm tabular-nums">
+                  <span className="text-sm tabular-nums shrink-0">
                     {formatRupiah(Object.values(wizardAmounts).reduce((a, b) => a + b, 0))}
                   </span>
                 </div>
@@ -1098,7 +1198,7 @@ export default function OpeningBalancePage() {
                 <div className="flex justify-end pt-2">
                   <button
                     onClick={handleWizardSaveStep1}
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm"
+                    className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm"
                   >
                     <span>Lanjut ke Pencocokan Fisik</span>
                     <ArrowRight className="w-4 h-4" />
@@ -1122,7 +1222,7 @@ export default function OpeningBalancePage() {
 
                     return (
                       <div key={sa.id} className="p-4 rounded-2xl bg-gray-50 border border-gray-200 space-y-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center justify-between gap-1">
                           <strong className="text-xs text-gray-800">{sa.nama}</strong>
                           <span
                             className={`text-xs font-bold tabular-nums ${
@@ -1133,14 +1233,14 @@ export default function OpeningBalancePage() {
                           </span>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                           <div>
                             <label className="block text-gray-500 mb-1">Saldo Buku Manual</label>
                             <input
                               type="number"
                               disabled
                               value={phys.book}
-                              className="w-full px-3 py-1.5 rounded-lg bg-gray-200/60 font-bold tabular-nums text-gray-700"
+                              className="w-full min-h-[44px] sm:min-h-0 px-3 py-1.5 rounded-lg bg-gray-200/60 font-bold tabular-nums text-gray-700"
                             />
                           </div>
 
@@ -1157,7 +1257,7 @@ export default function OpeningBalancePage() {
                                   [sa.id]: { ...prev[sa.id], physical: val },
                                 }));
                               }}
-                              className="w-full px-3 py-1.5 rounded-lg border border-gray-200 font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                              className="w-full min-h-[44px] sm:min-h-0 px-3 py-1.5 rounded-lg border border-gray-200 bg-white font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
                             />
                           </div>
                         </div>
@@ -1178,12 +1278,12 @@ export default function OpeningBalancePage() {
                                   [sa.id]: { ...prev[sa.id], explanation: val },
                                 }));
                               }}
-                              className="w-full px-3 py-1.5 rounded-lg border border-rose-300 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
+                              className="w-full min-h-[44px] sm:min-h-0 px-3 py-1.5 rounded-lg border border-rose-300 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
                             />
                           </div>
                         )}
 
-                        <div className="flex items-center justify-between pt-1 text-[11px] text-gray-500">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pt-1 text-[11px] text-gray-500">
                           <span>Unggah foto hitung fisik / lembar manual:</span>
                           <input
                             type="text"
@@ -1196,7 +1296,7 @@ export default function OpeningBalancePage() {
                                 [sa.id]: { ...prev[sa.id], docName: val },
                               }));
                             }}
-                            className="px-2 py-1 rounded border border-gray-200 text-xs w-48"
+                            className="w-full sm:w-48 min-h-[44px] sm:min-h-0 px-2.5 py-1.5 sm:py-1 rounded-lg sm:rounded border border-gray-200 bg-white text-xs"
                           />
                         </div>
                       </div>
@@ -1204,17 +1304,17 @@ export default function OpeningBalancePage() {
                   })}
                 </div>
 
-                <div className="flex justify-between pt-2">
+                <div className="flex flex-col-reverse sm:flex-row justify-between gap-2 pt-2">
                   <button
                     onClick={() => setWizardStep(1)}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50"
+                    className="min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50"
                   >
                     <ArrowLeft className="w-4 h-4" />
                     Kembali
                   </button>
                   <button
                     onClick={handleWizardSaveStep2}
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm"
+                    className="min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm"
                   >
                     <span>Lanjut ke Posisi Lain</span>
                     <ArrowRight className="w-4 h-4" />
@@ -1226,7 +1326,7 @@ export default function OpeningBalancePage() {
             {/* STEP 3: Posisi Lain (Inventaris, Panjar, Utang) */}
             {wizardStep === 3 && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <p className="text-xs text-gray-500">
                     Posisi aset tetap awal, panjar belum selesai, piutang, dan utang per 1 Januari (opsional,
                     bisa dilewati).
@@ -1236,7 +1336,7 @@ export default function OpeningBalancePage() {
                       setOtherPosKasId(wizardKasId);
                       setShowOtherPosModal(true);
                     }}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                    className="min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 shrink-0"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Tambah Posisi Lain
@@ -1253,8 +1353,8 @@ export default function OpeningBalancePage() {
                     openingOtherPositions
                       .filter((p) => p.kas_id === wizardKasId)
                       .map((pos) => (
-                        <div key={pos.id} className="p-3 flex items-center justify-between hover:bg-gray-50">
-                          <div>
+                        <div key={pos.id} className="p-3 flex items-center justify-between gap-2 hover:bg-gray-50">
+                          <div className="min-w-0">
                             <strong className="block text-gray-900">{pos.name}</strong>
                             <span className="text-[11px] text-gray-500">
                               {pos.type} · Nilai: {formatRupiah(pos.amount)} · Pengelola: {pos.section_manager}
@@ -1262,26 +1362,27 @@ export default function OpeningBalancePage() {
                           </div>
                           <button
                             onClick={() => deleteOpeningOtherPosition(pos.id)}
-                            className="p-1 rounded text-gray-400 hover:text-rose-600"
+                            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 rounded-lg text-gray-400 hover:text-rose-600 shrink-0"
+                            aria-label="Hapus posisi"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                           </button>
                         </div>
                       ))
                   )}
                 </div>
 
-                <div className="flex justify-between pt-2">
+                <div className="flex flex-col-reverse sm:flex-row justify-between gap-2 pt-2">
                   <button
                     onClick={() => setWizardStep(2)}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50"
+                    className="min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50"
                   >
                     <ArrowLeft className="w-4 h-4" />
                     Kembali
                   </button>
                   <button
                     onClick={() => setWizardStep(4)}
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm"
+                    className="min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm"
                   >
                     <span>Lanjut ke Ringkasan & Ajukan</span>
                     <ArrowRight className="w-4 h-4" />
@@ -1300,9 +1401,9 @@ export default function OpeningBalancePage() {
                 <div className="p-4 rounded-2xl bg-gray-50 border border-gray-200 space-y-2 text-xs">
                   <h4 className="font-bold text-gray-900 mb-2">Rincian Saldo Kas {selectedWizardKas.nama}:</h4>
                   {storageAccounts.map((sa) => (
-                    <div key={sa.id} className="flex items-center justify-between py-1 border-b border-gray-200/60">
+                    <div key={sa.id} className="flex items-center justify-between gap-2 py-1 border-b border-gray-200/60">
                       <span className="text-gray-600">{sa.nama}:</span>
-                      <strong className="text-gray-900 tabular-nums">
+                      <strong className="text-gray-900 tabular-nums shrink-0">
                         {formatRupiah(wizardAmounts[sa.id] || 0)}
                       </strong>
                     </div>
@@ -1323,17 +1424,17 @@ export default function OpeningBalancePage() {
                   </span>
                 </div>
 
-                <div className="flex justify-between pt-2">
+                <div className="flex flex-col-reverse sm:flex-row justify-between gap-2 pt-2">
                   <button
                     onClick={() => setWizardStep(3)}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50"
+                    className="min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50"
                   >
                     <ArrowLeft className="w-4 h-4" />
                     Kembali
                   </button>
                   <button
                     onClick={handleWizardSubmitToKetua}
-                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+                    className="min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
                   >
                     <Send className="w-4 h-4" />
                     Ajukan ke Ketua Kas
@@ -1349,13 +1450,15 @@ export default function OpeningBalancePage() {
       {/* MODAL: TAMBAH POSISI LAIN (ASET / PANJAR / UTANG)                          */}
       {/* ========================================================================= */}
       {showOtherPosModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-100 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-xs">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full px-4 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:p-6 shadow-xl border border-gray-100 space-y-4 max-h-[92dvh] overflow-y-auto mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-0.5 mb-1" />
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 gap-2">
               <h3 className="text-base font-bold text-gray-900">Tambah Posisi Lain</h3>
               <button
                 onClick={() => setShowOtherPosModal(false)}
-                className="p-1 rounded-lg text-gray-400 hover:text-gray-700"
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                aria-label="Tutup"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1367,7 +1470,7 @@ export default function OpeningBalancePage() {
                 <select
                   value={otherPosType}
                   onChange={(e) => setOtherPosType(e.target.value as any)}
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200"
+                  className="w-full min-h-[44px] sm:min-h-0 px-3 py-2 rounded-xl border border-gray-200 text-sm sm:text-xs bg-white"
                 >
                   <option value="asset">Inventaris / Aset Tetap Awal</option>
                   <option value="advance">Panjar Belum Selesai</option>
@@ -1384,7 +1487,7 @@ export default function OpeningBalancePage() {
                   placeholder="Contoh: Sound System Yamaha Pastori, Panjar Semen"
                   value={otherPosName}
                   onChange={(e) => setOtherPosName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200"
+                  className="w-full min-h-[44px] sm:min-h-0 px-3 py-2 rounded-xl border border-gray-200 text-sm sm:text-xs"
                 />
               </div>
 
@@ -1397,7 +1500,7 @@ export default function OpeningBalancePage() {
                   value={otherPosAmount || ''}
                   onChange={(e) => setOtherPosAmount(Number(e.target.value))}
                   placeholder="0"
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200 font-bold tabular-nums"
+                  className="w-full min-h-[44px] sm:min-h-0 px-3 py-2 rounded-xl border border-gray-200 text-sm sm:text-xs font-bold tabular-nums"
                 />
               </div>
 
@@ -1408,7 +1511,7 @@ export default function OpeningBalancePage() {
                   placeholder="Contoh: Seksi Musik, Seksi Pembangunan"
                   value={otherPosManager}
                   onChange={(e) => setOtherPosManager(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200"
+                  className="w-full min-h-[44px] sm:min-h-0 px-3 py-2 rounded-xl border border-gray-200 text-sm sm:text-xs"
                 />
               </div>
 
@@ -1419,22 +1522,22 @@ export default function OpeningBalancePage() {
                   placeholder="Spesifikasi atau catatan kondisi"
                   value={otherPosNotes}
                   onChange={(e) => setOtherPosNotes(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200"
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm sm:text-xs"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-3 border-t border-gray-100">
               <button
                 onClick={() => setShowOtherPosModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600"
+                className="min-h-[44px] sm:min-h-0 px-4 py-2 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600"
               >
                 Batal
               </button>
               <button
                 onClick={async () => {
                   if (!otherPosName.trim()) {
-                    alert('Nama posisi wajib diisi.');
+                    toast.error('Nama posisi wajib diisi.');
                     return;
                   }
                   await saveOpeningOtherPosition({
@@ -1445,12 +1548,13 @@ export default function OpeningBalancePage() {
                     section_manager: otherPosManager,
                     notes: otherPosNotes,
                   });
+                  toast.success('Posisi awal berhasil ditambahkan.');
                   setShowOtherPosModal(false);
                   setOtherPosName('');
                   setOtherPosAmount(0);
                   setOtherPosNotes('');
                 }}
-                className="px-5 py-2 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600"
+                className="min-h-[44px] sm:min-h-0 px-5 py-2 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600"
               >
                 Simpan Posisi
               </button>
@@ -1463,13 +1567,15 @@ export default function OpeningBalancePage() {
       {/* MODAL: AJUKAN PENYESUAIAN SALDO AWAL (SETELAH DIKUNCI)                    */}
       {/* ========================================================================= */}
       {showAdjModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-100 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-xs">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full px-4 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:p-6 shadow-xl border border-gray-100 space-y-4 max-h-[92dvh] overflow-y-auto mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-0.5 mb-1" />
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 gap-2">
               <h3 className="text-base font-bold text-gray-900">Ajukan Penyesuaian Saldo Awal</h3>
               <button
                 onClick={() => setShowAdjModal(false)}
-                className="p-1 rounded-lg text-gray-400 hover:text-gray-700"
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                aria-label="Tutup"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1481,7 +1587,7 @@ export default function OpeningBalancePage() {
                 <select
                   value={adjKasId}
                   onChange={(e) => setAdjKasId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200"
+                  className="w-full min-h-[44px] sm:min-h-0 px-3 py-2 rounded-xl border border-gray-200 text-sm sm:text-xs bg-white"
                 >
                   {(editableKasList.length > 0 ? editableKasList : visibleKasList).map((k) => (
                     <option key={k.id} value={k.id}>
@@ -1496,7 +1602,7 @@ export default function OpeningBalancePage() {
                 <select
                   value={adjStorageId}
                   onChange={(e) => setAdjStorageId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200"
+                  className="w-full min-h-[44px] sm:min-h-0 px-3 py-2 rounded-xl border border-gray-200 text-sm sm:text-xs bg-white"
                 >
                   {storageAccounts.map((s) => (
                     <option key={s.id} value={s.id}>
@@ -1516,7 +1622,7 @@ export default function OpeningBalancePage() {
                   value={adjAmount || ''}
                   onChange={(e) => setAdjAmount(Number(e.target.value))}
                   placeholder="Misal: 250000 atau -100000"
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200 font-bold tabular-nums"
+                  className="w-full min-h-[44px] sm:min-h-0 px-3 py-2 rounded-xl border border-gray-200 text-sm sm:text-xs font-bold tabular-nums"
                 />
               </div>
 
@@ -1527,7 +1633,7 @@ export default function OpeningBalancePage() {
                   placeholder="Contoh: Koreksi jasa giro bank bulan Desember yang belum tercatat di buku kas manual"
                   value={adjReason}
                   onChange={(e) => setAdjReason(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200"
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm sm:text-xs"
                 />
               </div>
 
@@ -1538,15 +1644,15 @@ export default function OpeningBalancePage() {
                   placeholder="Contoh: Rekening_Koran_Desember.pdf"
                   value={adjDocName}
                   onChange={(e) => setAdjDocName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200"
+                  className="w-full min-h-[44px] sm:min-h-0 px-3 py-2 rounded-xl border border-gray-200 text-sm sm:text-xs"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-3 border-t border-gray-100">
               <button
                 onClick={() => setShowAdjModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600"
+                className="min-h-[44px] sm:min-h-0 px-4 py-2 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600"
               >
                 Batal
               </button>
@@ -1560,13 +1666,13 @@ export default function OpeningBalancePage() {
                     document_url: adjDocName,
                   });
                   if (!res.success) {
-                    alert(res.error);
+                    toast.error(res.error || 'Gagal mengajukan penyesuaian saldo awal.');
                     return;
                   }
-                  alert('Pengajuan penyesuaian saldo awal berhasil diajukan.');
+                  toast.success('Pengajuan penyesuaian saldo awal berhasil diajukan.');
                   setShowAdjModal(false);
                 }}
-                className="px-5 py-2 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600"
+                className="min-h-[44px] sm:min-h-0 px-5 py-2 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600"
               >
                 Kirim Pengajuan
               </button>
@@ -1579,9 +1685,19 @@ export default function OpeningBalancePage() {
       {/* MODAL: KEMBALIKAN SALDO AWAL (CATATAN REJECT KETUA)                       */}
       {/* ========================================================================= */}
       {returnModalKasId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-100 space-y-4">
-            <h3 className="text-base font-bold text-gray-900">Kembalikan Saldo Awal ke Bendahara</h3>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-xs">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full px-4 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:p-6 shadow-xl border border-gray-100 space-y-4 max-h-[92dvh] overflow-y-auto mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-0.5 mb-1" />
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100 gap-2">
+              <h3 className="text-base font-bold text-gray-900">Kembalikan Saldo Awal ke Bendahara</h3>
+              <button
+                onClick={() => setReturnModalKasId(null)}
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                aria-label="Tutup"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
             <p className="text-xs text-gray-500">
               Tuliskan alasan pengembalian dan bagian saldo atau bukti fisik yang perlu diperbaiki.
             </p>
@@ -1591,32 +1707,32 @@ export default function OpeningBalancePage() {
               placeholder="Contoh: Nominal kas fisik tunai belum cocok dengan lembar hitung fisik, silakan hitung ulang."
               value={returnNoteInput}
               onChange={(e) => setReturnNoteInput(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-rose-500"
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm sm:text-xs focus:ring-2 focus:ring-rose-500"
             />
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2 border-t border-gray-100">
               <button
                 onClick={() => setReturnModalKasId(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600"
+                className="min-h-[44px] sm:min-h-0 px-4 py-2 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600"
               >
                 Batal
               </button>
               <button
                 onClick={async () => {
                   if (!returnNoteInput.trim()) {
-                    alert('Catatan pengembalian wajib diisi.');
+                    toast.error('Catatan pengembalian wajib diisi.');
                     return;
                   }
                   const res = await approveOpeningBook(returnModalKasId, false, returnNoteInput);
                   if (!res.success) {
-                    alert(res.error);
+                    toast.error(res.error || 'Gagal mengembalikan pengajuan.');
                     return;
                   }
                   setReturnModalKasId(null);
                   setReturnNoteInput('');
-                  alert('Pengajuan telah dikembalikan ke bendahara.');
+                  toast.success('Pengajuan telah dikembalikan ke bendahara.');
                 }}
-                className="px-5 py-2 rounded-xl text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700"
+                className="min-h-[44px] sm:min-h-0 px-5 py-2 rounded-xl text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700"
               >
                 Kembalikan Draf
               </button>
@@ -1624,6 +1740,132 @@ export default function OpeningBalancePage() {
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: UBAH ANGKA REALISASI TAHUN LALU                                    */}
+      {/* ========================================================================= */}
+      {priorYearEditTarget && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-xs">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full px-4 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:p-6 shadow-xl border border-gray-100 space-y-4 mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-0.5 mb-1" />
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 gap-2">
+              <div className="min-w-0">
+                <h3 className="text-base font-bold text-gray-900">Realisasi Tahun {openingSetup.first_year - 1}</h3>
+                <p className="text-xs text-gray-500 truncate">{priorYearEditTarget.categoryName}</p>
+              </div>
+              <button
+                onClick={() => setPriorYearEditTarget(null)}
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                aria-label="Tutup"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <label className="block font-semibold text-gray-600">Nominal Realisasi (Rp)</label>
+              <input
+                type="number"
+                min="0"
+                step="10000"
+                value={priorYearAmountInput}
+                onChange={(e) => setPriorYearAmountInput(e.target.value)}
+                className="w-full min-h-[44px] sm:min-h-0 px-3 py-2 rounded-xl border border-gray-200 text-sm font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                autoFocus
+              />
+              {Number(priorYearAmountInput) > 0 && (
+                <p className="text-[11px] text-gray-500">
+                  Terbilang: {formatRupiah(Number(priorYearAmountInput))}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-gray-100">
+              <button
+                onClick={() => setPriorYearEditTarget(null)}
+                className="min-h-[44px] sm:min-h-0 px-4 py-2 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600"
+              >
+                Batal
+              </button>
+              <button
+                onClick={async () => {
+                  const parsed = Number(priorYearAmountInput);
+                  if (isNaN(parsed) || parsed < 0) {
+                    toast.error('Nominal harus berupa angka positif atau 0.');
+                    return;
+                  }
+                  const res = await savePriorYearSummary({
+                    tahun: openingSetup.first_year - 1,
+                    kas_id: priorYearKasId,
+                    category_id: priorYearEditTarget.categoryId,
+                    jumlah: parsed,
+                  });
+                  if (!res.success) {
+                    toast.error(res.error || 'Gagal menyimpan realisasi tahun lalu.');
+                    return;
+                  }
+                  toast.success(`Realisasi ${priorYearEditTarget.categoryName} berhasil diperbarui.`);
+                  setPriorYearEditTarget(null);
+                }}
+                className="min-h-[44px] sm:min-h-0 px-5 py-2 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600"
+              >
+                Simpan Angka
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmActionModal
+        isOpen={Boolean(confirmAction)}
+        onClose={() => setConfirmAction(null)}
+        title={
+          confirmAction?.type === 'lock_all'
+            ? 'Kunci Semua Kas Permanen'
+            : confirmAction?.type === 'approve_kas'
+            ? `Setujui Saldo Awal ${confirmAction?.kasName || ''}`
+            : `Kunci Saldo Awal ${confirmAction?.kasName || ''}`
+        }
+        message={
+          confirmAction?.type === 'lock_all'
+            ? 'Apakah Anda yakin ingin mengunci saldo awal seluruh kas yang telah disetujui secara permanen?'
+            : confirmAction?.type === 'approve_kas'
+            ? `Konfirmasi persetujuan saldo awal untuk ${confirmAction?.kasName || 'kas terpilih'}?`
+            : `Kunci permanen saldo awal untuk ${confirmAction?.kasName || 'kas terpilih'}? Setelah dikunci, kas siap digunakan untuk transaksi.`
+        }
+        variant={confirmAction?.type === 'lock_all' ? 'warning' : 'primary'}
+        confirmLabel={
+          confirmAction?.type === 'approve_kas'
+            ? 'Ya, Setujui'
+            : 'Ya, Kunci Permanen'
+        }
+        onConfirm={async () => {
+          if (!confirmAction) return;
+          if (confirmAction.type === 'lock_all') {
+            const res = await lockOpeningBook();
+            if (!res.success) {
+              toast.error(res.error || 'Gagal mengunci semua kas.');
+            } else {
+              toast.success(`${res.count || 0} kas berhasil dikunci.`);
+            }
+          } else if (confirmAction.type === 'approve_kas' && confirmAction.kasId) {
+            const res = await approveOpeningBook(confirmAction.kasId, true);
+            if (!res.success) {
+              toast.error(res.error || 'Gagal menyetujui saldo awal.');
+            } else {
+              toast.success(`Saldo awal ${confirmAction.kasName || ''} disetujui.`);
+            }
+          } else if (confirmAction.type === 'lock_kas' && confirmAction.kasId) {
+            const res = await lockOpeningBook(confirmAction.kasId);
+            if (!res.success) {
+              toast.error(res.error || 'Gagal mengunci saldo awal.');
+            } else {
+              toast.success(`Saldo awal ${confirmAction.kasName || ''} resmi dikunci.`);
+            }
+          }
+          setConfirmAction(null);
+        }}
+      />
     </div>
   );
 }

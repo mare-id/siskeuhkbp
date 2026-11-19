@@ -39,6 +39,8 @@ import {
   LpjException,
   AuditPeriodVerification,
   FiscalYear,
+  ChurchLingkungan,
+  CongregationFamily,
 } from '../types/database';
 import { DEFAULT_INITIAL_PASSWORD, hashUserPassword } from './passwordUtils';
 
@@ -1196,4 +1198,20 @@ export const DEMO_FISCAL_YEARS: FiscalYear[] = [
   },
 ];
 
+export const DEMO_LINGKUNGAN: ChurchLingkungan[] = [
+  { id: 'ling-efesus', nama: 'Efesus', kode: 'EFS', urutan: 1, is_active: true },
+  { id: 'ling-letare', nama: 'Letare', kode: 'LTR', urutan: 2, is_active: true },
+  { id: 'ling-exaudi', nama: 'Exaudi', kode: 'EXD', urutan: 3, is_active: true },
+  { id: 'ling-judika', nama: 'Judika', kode: 'JDK', urutan: 4, is_active: true },
+  { id: 'ling-galatia', nama: 'Galatia', kode: 'GLT', urutan: 5, is_active: true },
+  { id: 'ling-jeremia', nama: 'Jeremia', kode: 'JRM', urutan: 6, is_active: true },
+];
 
+export const DEMO_FAMILIES: CongregationFamily[] = [
+  { id: 'fam-demo-1', nama_keluarga: 'Kel. St. R. Sinaga / br Sitepu', lingkungan: 'Efesus', is_active: true },
+  { id: 'fam-demo-2', nama_keluarga: 'Kel. Pirngadi Siahaan / br Tamba', lingkungan: 'Efesus', is_active: true },
+  { id: 'fam-demo-3', nama_keluarga: 'Kel. Am. Berlian Hutagalung / br Manullang', lingkungan: 'Efesus', is_active: true },
+  { id: 'fam-demo-4', nama_keluarga: 'Kel. Ama Immanuel Sitio / br Sihombing', lingkungan: 'Efesus', is_active: true },
+  { id: 'fam-demo-5', nama_keluarga: 'Kel. Ama Frans Pasaribu / br Purba', lingkungan: 'Letare', is_active: true },
+  { id: 'fam-demo-6', nama_keluarga: 'Kel. Op. Efraim Siburian / br Siregar', lingkungan: 'Exaudi', is_active: true },
+];

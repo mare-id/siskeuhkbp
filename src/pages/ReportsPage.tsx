@@ -704,7 +704,7 @@ export const ReportsPage: React.FC = () => {
         </div>
 
         {/* Global Year Selector */}
-        <div className="flex items-center gap-2.5 bg-slate-900/90 px-4 py-2.5 rounded-xl border border-slate-700/80 shadow-xs shrink-0 w-fit">
+        <div className="flex items-center gap-2.5 bg-slate-900/90 px-4 py-2.5 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-700/80 shadow-xs shrink-0 w-fit">
           <Calendar className="w-4 h-4 text-amber-400" />
           <span className="text-xs font-semibold text-slate-300">Tahun Buku:</span>
           <select
@@ -733,7 +733,7 @@ export const ReportsPage: React.FC = () => {
         {canViewWarta && (
           <button
             onClick={() => setActiveTab('warta')}
-            className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+            className={`px-3.5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
               activeTab === 'warta'
                 ? 'bg-[#0B132B] text-white shadow-2xs border border-slate-800 font-bold'
                 : 'text-slate-700 hover:text-slate-900 hover:bg-white/70'
@@ -748,7 +748,7 @@ export const ReportsPage: React.FC = () => {
           <>
             <button
               onClick={() => setActiveTab('semester')}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+              className={`px-3.5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
                 activeTab === 'semester'
                   ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
                   : 'text-slate-600 hover:text-slate-900'
@@ -760,7 +760,7 @@ export const ReportsPage: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('lpj')}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+              className={`px-3.5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
                 activeTab === 'lpj'
                   ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
                   : 'text-slate-600 hover:text-slate-900'
@@ -772,7 +772,7 @@ export const ReportsPage: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('pelaporan')}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+              className={`px-3.5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
                 activeTab === 'pelaporan'
                   ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
                   : 'text-slate-600 hover:text-slate-900'
@@ -786,7 +786,7 @@ export const ReportsPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('buku_kas')}
-          className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+          className={`px-3.5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
             activeTab === 'buku_kas'
               ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
               : 'text-slate-600 hover:text-slate-900'
@@ -800,7 +800,7 @@ export const ReportsPage: React.FC = () => {
           <>
             <button
               onClick={() => setActiveTab('gabungan')}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+              className={`px-3.5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
                 activeTab === 'gabungan'
                   ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
                   : 'text-slate-600 hover:text-slate-900'
@@ -812,7 +812,7 @@ export const ReportsPage: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('rekonsiliasi')}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+              className={`px-3.5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
                 activeTab === 'rekonsiliasi'
                   ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
                   : 'text-slate-600 hover:text-slate-900'
@@ -827,7 +827,7 @@ export const ReportsPage: React.FC = () => {
         {canViewBpsk && (
           <button
             onClick={() => setActiveTab('bpsk')}
-            className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+            className={`px-3.5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
               activeTab === 'bpsk'
                 ? 'bg-blue-900 text-white shadow-2xs border border-blue-800 font-bold'
                 : 'text-blue-900 hover:bg-blue-50 font-bold'
@@ -868,7 +868,7 @@ export const ReportsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setWartaRefDate(addDaysYMD(wartaRange.weekStartStr, -7))}
-                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors"
+                  className="px-3 py-2 min-h-[44px] sm:min-h-0 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors"
                   title="Minggu sebelumnya"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
@@ -881,13 +881,13 @@ export const ReportsPage: React.FC = () => {
                   onChange={(e) => {
                     if (e.target.value) setWartaRefDate(e.target.value);
                   }}
-                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                  className="px-3 py-1.5 min-h-[44px] sm:min-h-0 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
                 />
 
                 <button
                   type="button"
                   onClick={() => setWartaRefDate(addDaysYMD(wartaRange.weekStartStr, 7))}
-                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors"
+                  className="px-3 py-2 min-h-[44px] sm:min-h-0 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors"
                   title="Minggu berikutnya"
                 >
                   <span>Minggu Depan</span>
@@ -897,7 +897,7 @@ export const ReportsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setWartaRefDate(formatLocalYMD(new Date()))}
-                  className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-xl text-xs font-semibold transition-colors"
+                  className="px-3 py-2 min-h-[44px] sm:min-h-0 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-xl text-xs font-semibold transition-colors"
                 >
                   Minggu Ini
                 </button>
@@ -905,12 +905,12 @@ export const ReportsPage: React.FC = () => {
             </div>
 
             <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
                 <span className="text-xs font-semibold text-slate-600">Tampilkan Rincian Kas:</span>
                 <select
                   value={wartaKasFilter}
                   onChange={(e) => setWartaKasFilter(e.target.value)}
-                  className="text-xs font-semibold border border-slate-200 rounded-xl px-3 py-1.5 bg-slate-50"
+                  className="text-xs font-semibold border border-slate-200 rounded-xl px-3 py-1.5 min-h-[44px] sm:min-h-0 bg-slate-50"
                 >
                   <option value="all">Semua Kas ({weeklyWartaData.reports.length} Kas)</option>
                   {weeklyWartaData.reports.map((r) => (
@@ -925,7 +925,7 @@ export const ReportsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleCopyWeeklyWartaText}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                  className="px-3.5 py-2 min-h-[44px] sm:min-h-0 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
                 >
                   <Copy className="w-3.5 h-3.5" />
                   <span>{copiedWartaWeekly ? 'Tersalin!' : 'Salin Teks Warta'}</span>
@@ -1021,7 +1021,7 @@ export const ReportsPage: React.FC = () => {
                       `Warta_Keuangan_Mingguan_${wartaRange.weekStartStr}_sd_${wartaRange.weekEndStr}`
                     );
                   }}
-                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
+                  className="px-3.5 py-2 min-h-[44px] sm:min-h-0 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5" />
                   <span>Ekspor Excel</span>
@@ -1044,7 +1044,7 @@ export const ReportsPage: React.FC = () => {
                       totals: weeklyWartaData.totals,
                     });
                   }}
-                  className="px-4 py-2 bg-[#0B132B] hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
+                  className="px-4 py-2 min-h-[44px] sm:min-h-0 bg-[#0B132B] hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
                 >
                   <Download className="w-3.5 h-3.5 text-amber-300" />
                   <span>Unduh Warta Mingguan (PDF)</span>
@@ -1134,7 +1134,64 @@ export const ReportsPage: React.FC = () => {
               </span>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile Cards: Saldo Akhir Mingguan per Kas */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {weeklyWartaData.reports.map((item) => {
+                const netTf = item.totalTransferIn - item.totalTransferOut;
+                return (
+                  <div key={item.kas.id} className="p-4 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.kas.warna }} />
+                        <span className="font-bold text-sm text-slate-900 truncate">{item.kas.nama}</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400 shrink-0">({item.kas.kode})</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
+                      <div>
+                        <span className="text-slate-400 block">Saldo Awal (Minggu)</span>
+                        <span className="font-mono font-semibold text-slate-700">{formatRupiah(item.saldoAwalMinggu)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block">Saldo Akhir (Sabtu)</span>
+                        <span className="font-mono font-bold text-[#0B132B]">{formatRupiah(item.saldoAkhirMinggu)}</span>
+                      </div>
+                      <div>
+                        <span className="text-emerald-700 block">Penerimaan</span>
+                        <span className="font-mono font-semibold text-emerald-700">{formatRupiah(item.totalPenerimaan)}</span>
+                      </div>
+                      <div>
+                        <span className="text-rose-700 block">Pengeluaran</span>
+                        <span className="font-mono font-semibold text-rose-700">{formatRupiah(item.totalPengeluaran)}</span>
+                      </div>
+                    </div>
+                    {netTf !== 0 && (
+                      <div className="text-[11px] flex justify-between text-blue-700">
+                        <span>Net Transfer Antar Kas</span>
+                        <span className="font-mono font-semibold">{formatRupiah(netTf)}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              <div className="p-4 bg-slate-100/90 space-y-1.5 text-xs font-bold text-slate-900">
+                <div className="text-[11px] uppercase tracking-wider text-slate-500">Total Konsolidasi Seluruh Kas</div>
+                <div className="flex justify-between">
+                  <span className="text-emerald-800">Total Penerimaan</span>
+                  <span className="font-mono text-emerald-800">{formatRupiah(weeklyWartaData.totals.penerimaan)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-rose-800">Total Pengeluaran</span>
+                  <span className="font-mono text-rose-800">{formatRupiah(weeklyWartaData.totals.pengeluaran)}</span>
+                </div>
+                <div className="flex justify-between pt-1 border-t border-slate-200 text-sm">
+                  <span>Saldo Akhir (Sabtu)</span>
+                  <span className="font-mono text-[#0B132B]">{formatRupiah(weeklyWartaData.totals.saldoAkhir)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-700">
                 <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
                   <tr>
@@ -1284,8 +1341,62 @@ export const ReportsPage: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Mobile Cards: Kronologis Buku Kas Mingguan */}
+                    <div className="md:hidden divide-y divide-slate-100">
+                      <div className="p-3.5 bg-slate-50/90 flex items-center justify-between gap-2 text-xs">
+                        <div>
+                          <div className="font-mono text-[10px] text-slate-400">SALDO-AWAL • {formatDateIndo(wartaRange.weekStartStr)}</div>
+                          <div className="font-semibold text-slate-700">Saldo Awal Minggu</div>
+                        </div>
+                        <span className="font-mono font-bold text-slate-900">{formatRupiah(item.saldoAwalMinggu)}</span>
+                      </div>
+                      {allTx.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-slate-500 italic">
+                          Tidak ada transaksi pada minggu ini (Nihil mutasi)
+                        </div>
+                      ) : (
+                        (() => {
+                          let mobSaldo = item.saldoAwalMinggu;
+                          return allTx.map((tx) => {
+                            const isMasuk = tx.type === 'income' || tx.type === 'transfer_in';
+                            const masuk = isMasuk ? Number(tx.amount || 0) : 0;
+                            const keluar = !isMasuk ? Number(tx.amount || 0) : 0;
+                            mobSaldo = mobSaldo + masuk - keluar;
+                            const cat = categories.find((c) => c.id === tx.category_id);
+                            return (
+                              <div key={tx.id} className="p-3.5 space-y-1.5">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="font-mono text-[11px] text-slate-500">
+                                      {formatDateIndo(tx.tanggal)} • {tx.receipt_no || '-'}
+                                    </div>
+                                    <div className="font-semibold text-xs text-slate-900 mt-0.5">{tx.description}</div>
+                                    <div className="text-[10px] text-slate-500">
+                                      {tx.type === 'transfer_in'
+                                        ? 'Transfer Masuk'
+                                        : tx.type === 'transfer_out'
+                                        ? 'Transfer Keluar'
+                                        : cat?.nama || (isMasuk ? 'Penerimaan' : 'Pengeluaran')}
+                                    </div>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <div className={`font-mono font-bold text-xs ${isMasuk ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                      {isMasuk ? `+${formatRupiah(masuk)}` : `-${formatRupiah(keluar)}`}
+                                    </div>
+                                    <div className="font-mono text-[10px] text-slate-500 mt-0.5">
+                                      Saldo: {formatRupiah(mobSaldo)}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()
+                      )}
+                    </div>
+
                     {/* Unified Chronological Buku Kas Table */}
-                    <div className="overflow-x-auto">
+                    <div className="hidden md:block overflow-x-auto">
                       <table className="w-full text-left text-xs text-slate-700">
                         <thead className="bg-slate-800 text-slate-100 text-[11px] font-semibold">
                           <tr>
@@ -2284,8 +2395,39 @@ export const ReportsPage: React.FC = () => {
 
           {/* 12-Section Sub-Navigation */}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Left Sub-Navigation Menu */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm space-y-1 h-fit">
+            {/* Mobile Dropdown Navigation for 12 LPJ Sections */}
+            <div className="lg:hidden bg-white rounded-2xl border border-gray-200 p-3.5 shadow-sm space-y-1.5">
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                Daftar Isi LPJ ISAK 35 (Pilih Bagian)
+              </label>
+              <select
+                value={activeLpjSection}
+                onChange={(e) => setActiveLpjSection(Number(e.target.value))}
+                className="w-full min-h-[44px] px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold text-[#2B4C9B]"
+              >
+                {[
+                  { id: 1, title: '1. Cover & Pernyataan Tanggung Jawab' },
+                  { id: 2, title: '2. Ikhtisar Eksekutif (Executive Summary)' },
+                  { id: 3, title: '3. Laporan Posisi Keuangan (Lampiran 18 PPKU)' },
+                  { id: 4, title: '4. Laporan Penghasilan Komprehensif / Aktivitas' },
+                  { id: 5, title: '5. Laporan Perubahan Aset Neto (Saldo Dana)' },
+                  { id: 6, title: '6. Laporan Arus Kas Metode Langsung' },
+                  { id: 7, title: '7. Realisasi APBG Tahunan' },
+                  { id: 8, title: '8. Laporan Kas per Seksi / Sektor' },
+                  { id: 9, title: '9. Inventaris Aset Tetap & Panjar (Pasal 20)' },
+                  { id: 10, title: '10. Berita Acara Rekonsiliasi Bank & Kas' },
+                  { id: 11, title: '11. Catatan atas Laporan Keuangan (CaLK)' },
+                  { id: 12, title: '12. Berita Acara Hasil Audit & Rapat Huria' },
+                ].map((sec) => (
+                  <option key={sec.id} value={sec.id}>
+                    {sec.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Left Sub-Navigation Menu (Desktop) */}
+            <div className="hidden lg:block bg-white rounded-2xl border border-gray-200 p-4 shadow-sm space-y-1 h-fit">
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block px-3 py-1">
                 Daftar Isi LPJ ISAK 35
               </span>
@@ -2496,7 +2638,45 @@ export const ReportsPage: React.FC = () => {
                     <p className="text-xs text-gray-500">Rekapitulasi mutasi dana per kas dan per jenis dana terikat/tidak terikat.</p>
                   </div>
 
-                  <div className="overflow-x-auto">
+                  {/* Mobile Cards: Perubahan Saldo Dana */}
+                  <div className="md:hidden divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
+                    {perubahanSaldoDanaData.map((k) => (
+                      <div key={k.kas_id} className="p-3.5 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-xs text-gray-900">{k.nama_kas}</span>
+                          <span
+                            className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              k.fund_type === 'restricted'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}
+                          >
+                            {k.fund_type === 'restricted' ? 'Terikat' : 'Tidak Terikat'}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5 text-[11px] bg-gray-50 p-2 rounded-lg">
+                          <div>
+                            <span className="text-gray-400 block">Saldo Awal</span>
+                            <span className="font-mono text-gray-700">{formatRupiah(k.saldo_awal)}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400 block">Saldo Akhir</span>
+                            <span className="font-mono font-bold text-gray-900">{formatRupiah(k.saldo_akhir)}</span>
+                          </div>
+                          <div>
+                            <span className="text-emerald-700 block">Penerimaan</span>
+                            <span className="font-mono text-emerald-700">{formatRupiah(k.penerimaan_murni)}</span>
+                          </div>
+                          <div>
+                            <span className="text-rose-700 block">Belanja</span>
+                            <span className="font-mono text-rose-700">{formatRupiah(k.pengeluaran_murni)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-left text-xs text-gray-700">
                       <thead>
                         <tr className="bg-gray-50 text-gray-500 font-semibold border-b border-gray-200">
@@ -2697,14 +2877,14 @@ export const ReportsPage: React.FC = () => {
       {activeTab === 'buku_kas' && (
         <div className="space-y-6">
           {/* Filters Bar */}
-          <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-3">
+          <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col sm:flex-row sm:flex-wrap sm:items-end justify-between gap-4">
+            <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-center gap-3 w-full sm:w-auto">
               <div>
                 <label className="block text-[11px] font-semibold text-gray-500 mb-1">Pilih Kas / Seksi</label>
                 <select
                   value={selectedKasId}
                   onChange={(e) => setSelectedKasId(e.target.value)}
-                  className="text-xs font-semibold border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/50"
+                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 text-xs font-semibold border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/50"
                 >
                   {viewableKas.map((k) => (
                     <option key={k.id} value={k.id}>
@@ -2719,7 +2899,7 @@ export const ReportsPage: React.FC = () => {
                 <select
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(parseInt(e.target.value) || 1)}
-                  className="text-xs font-semibold border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/50"
+                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 text-xs font-semibold border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/50"
                 >
                   {MONTH_NAMES_INDO.map((name, idx) => (
                     <option key={idx} value={idx + 1}>
@@ -2730,7 +2910,7 @@ export const ReportsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
               <button
                 onClick={() => {
                   let running = initialBalance;
@@ -2751,7 +2931,7 @@ export const ReportsPage: React.FC = () => {
                   });
                   exportToExcel(rows, `Buku_Kas_${currentKas?.kode}_${getIndoMonthName(selectedMonth)}_${selectedYear}`);
                 }}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
+                className="flex-1 sm:flex-none min-h-[44px] sm:min-h-0 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-colors"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5" />
                 Ekspor Excel
@@ -2770,7 +2950,7 @@ export const ReportsPage: React.FC = () => {
                     namaKetua,
                   });
                 }}
-                className="px-3.5 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
+                className="flex-1 sm:flex-none min-h-[44px] sm:min-h-0 px-3.5 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-colors"
               >
                 <Download className="w-3.5 h-3.5" />
                 Unduh PDF
@@ -2780,47 +2960,75 @@ export const ReportsPage: React.FC = () => {
 
           {/* Table */}
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-            <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+            <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 bg-gray-50/50">
               <span className="font-bold text-gray-900 text-sm">
                 Buku Kas: {currentKas?.nama} ({getIndoMonthName(selectedMonth)} {selectedYear})
               </span>
               <span className="text-xs font-semibold text-gray-600">Saldo Awal Bulan: {formatRupiah(initialBalance)}</span>
             </div>
 
-            <table className="w-full text-left text-xs text-gray-700">
-              <thead className="bg-gray-50 text-gray-500 font-semibold border-b border-gray-200">
-                <tr>
-                  <th className="py-2.5 px-3">Tanggal</th>
-                  <th className="py-2.5 px-3">No. Bukti</th>
-                  <th className="py-2.5 px-3">Uraian</th>
-                  <th className="py-2.5 px-3 text-right">Penerimaan</th>
-                  <th className="py-2.5 px-3 text-right">Pengeluaran</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {kasTransactions.length === 0 ? (
+            {/* Mobile Cards: Buku Kas Seksi */}
+            <div className="md:hidden divide-y divide-gray-100">
+              {kasTransactions.length === 0 ? (
+                <div className="p-8 text-center text-xs text-gray-400">Tidak ada transaksi pada bulan ini.</div>
+              ) : (
+                kasTransactions.map((tx) => {
+                  const isIn = tx.type === 'income' || tx.type === 'transfer_in';
+                  return (
+                    <div key={tx.id} className="p-4 space-y-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="font-mono text-[11px] text-gray-500">
+                            {formatDateIndo(tx.tanggal)} • {tx.receipt_no || '-'}
+                          </div>
+                          <div className="font-medium text-xs text-gray-900 mt-0.5">{tx.description}</div>
+                        </div>
+                        <span className={`shrink-0 font-mono font-bold text-xs ${isIn ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          {isIn ? `+${formatRupiah(tx.amount)}` : `-${formatRupiah(tx.amount)}`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs text-gray-700">
+                <thead className="bg-gray-50 text-gray-500 font-semibold border-b border-gray-200">
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-gray-400">
-                      Tidak ada transaksi pada bulan ini.
-                    </td>
+                    <th className="py-2.5 px-3">Tanggal</th>
+                    <th className="py-2.5 px-3">No. Bukti</th>
+                    <th className="py-2.5 px-3">Uraian</th>
+                    <th className="py-2.5 px-3 text-right">Penerimaan</th>
+                    <th className="py-2.5 px-3 text-right">Pengeluaran</th>
                   </tr>
-                ) : (
-                  kasTransactions.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-gray-50/60">
-                      <td className="py-2.5 px-3 font-mono">{formatDateIndo(tx.tanggal)}</td>
-                      <td className="py-2.5 px-3 text-gray-500">{tx.receipt_no || '-'}</td>
-                      <td className="py-2.5 px-3 font-medium text-gray-900">{tx.description}</td>
-                      <td className="py-2.5 px-3 text-right font-mono text-emerald-700">
-                        {tx.type === 'income' || tx.type === 'transfer_in' ? formatRupiah(tx.amount) : '-'}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-rose-700">
-                        {tx.type === 'expense' || tx.type === 'transfer_out' ? formatRupiah(tx.amount) : '-'}
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {kasTransactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-gray-400">
+                        Tidak ada transaksi pada bulan ini.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    kasTransactions.map((tx) => (
+                      <tr key={tx.id} className="hover:bg-gray-50/60">
+                        <td className="py-2.5 px-3 font-mono">{formatDateIndo(tx.tanggal)}</td>
+                        <td className="py-2.5 px-3 text-gray-500">{tx.receipt_no || '-'}</td>
+                        <td className="py-2.5 px-3 font-medium text-gray-900">{tx.description}</td>
+                        <td className="py-2.5 px-3 text-right font-mono text-emerald-700">
+                          {tx.type === 'income' || tx.type === 'transfer_in' ? formatRupiah(tx.amount) : '-'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-rose-700">
+                          {tx.type === 'expense' || tx.type === 'transfer_out' ? formatRupiah(tx.amount) : '-'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -2830,8 +3038,8 @@ export const ReportsPage: React.FC = () => {
       {/* ========================================================================= */}
       {activeTab === 'gabungan' && (
         <div className="space-y-6">
-          <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
               <div>
                 <h3 className="font-bold text-gray-900 text-base">Laporan Konsolidasi Seluruh Kas Huria</h3>
                 <p className="text-xs text-gray-500">Rekapitulasi mutasi seluruh {kasList.length} kas persekutuan, pembangunan, &amp; unit huria.</p>
@@ -2845,14 +3053,41 @@ export const ReportsPage: React.FC = () => {
                     settings,
                   });
                 }}
-                className="px-3.5 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
+                className="min-h-[44px] sm:min-h-0 px-3.5 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-colors self-start sm:self-auto"
               >
                 <Download className="w-3.5 h-3.5" />
                 Unduh Laporan Konsolidasi (PDF)
               </button>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile Cards: Konsolidasi Kas */}
+            <div className="md:hidden divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
+              {combinedSummaries.map((s) => (
+                <div key={s.kode} className="p-3.5 space-y-2">
+                  <div className="font-bold text-xs text-gray-900">{s.nama}</div>
+                  <div className="grid grid-cols-2 gap-1.5 text-[11px] bg-gray-50 p-2 rounded-lg">
+                    <div>
+                      <span className="text-gray-400 block">Saldo Awal</span>
+                      <span className="font-mono text-gray-700">{formatRupiah(s.saldoAwal)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block">Saldo Akhir</span>
+                      <span className="font-mono font-bold text-gray-900">{formatRupiah(s.saldoAkhir)}</span>
+                    </div>
+                    <div>
+                      <span className="text-emerald-700 block">Pemasukan</span>
+                      <span className="font-mono text-emerald-700">{formatRupiah(s.pemasukan)}</span>
+                    </div>
+                    <div>
+                      <span className="text-rose-700 block">Pengeluaran</span>
+                      <span className="font-mono text-rose-700">{formatRupiah(s.pengeluaran)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs text-gray-700">
                 <thead className="bg-gray-50 text-gray-500 font-semibold border-b border-gray-200">
                   <tr>
@@ -3089,7 +3324,46 @@ export const ReportsPage: React.FC = () => {
             <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
               <h3 className="font-bold text-gray-900 text-sm">Riwayat Berita Acara Rekonsiliasi</h3>
 
-              <div className="overflow-x-auto">
+              {/* Mobile Cards: Riwayat Rekonsiliasi */}
+              <div className="md:hidden divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
+                {reconciliations.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-gray-400">Belum ada catatan rekonsiliasi.</div>
+                ) : (
+                  reconciliations.map((r) => {
+                    const stor = storageAccounts.find((s) => s.id === r.storage_account_id);
+                    return (
+                      <div key={r.id} className="p-3.5 space-y-2 text-xs">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="font-mono text-[11px] text-gray-500">{formatDateIndo(r.tanggal)}</div>
+                            <div className="font-bold text-gray-900">{stor?.nama}</div>
+                          </div>
+                          <span
+                            className={`font-mono font-bold px-2 py-0.5 rounded-md text-[11px] ${
+                              r.discrepancy === 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                            }`}
+                          >
+                            Selisih: {formatRupiah(r.discrepancy)}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 bg-gray-50 p-2 rounded-lg text-[11px]">
+                          <div>
+                            <span className="text-gray-400 block">Saldo Sistem</span>
+                            <span className="font-mono text-gray-800">{formatRupiah(r.system_balance)}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400 block">Saldo Fisik</span>
+                            <span className="font-mono font-semibold text-gray-900">{formatRupiah(r.physical_balance)}</span>
+                          </div>
+                        </div>
+                        {r.notes && <p className="text-[11px] text-gray-500">{r.notes}</p>}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left text-xs text-gray-700">
                   <thead className="bg-gray-50 text-gray-500 font-semibold border-b border-gray-100">
                     <tr>
@@ -3266,7 +3540,46 @@ export const ReportsPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
+              {/* Mobile Cards: Rekap BPSK Per Kategori */}
+              <div className="md:hidden divide-y divide-slate-100">
+                {catList.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-slate-400">Belum ada pos kategori untuk kelompok ini.</div>
+                ) : (
+                  catList.map((cat) => {
+                    const { total, bpsk, huria } = getCatStats(cat.id, isExcludedGroup);
+                    return (
+                      <div key={cat.id} className="p-3.5 space-y-2 text-xs">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="font-mono text-[10px] font-semibold text-slate-500">{cat.kode || '-'}</span>
+                            <div className="font-semibold text-slate-900">{cat.nama}</div>
+                          </div>
+                          <span className="shrink-0 font-mono font-bold text-slate-900">{formatRupiah(total)}</span>
+                        </div>
+                        {!isExcludedGroup ? (
+                          <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-50 p-2 rounded-lg">
+                            <div>
+                              <span className="text-blue-700 block">55% BPSK</span>
+                              <span className="font-mono font-bold text-blue-700">{formatRupiah(bpsk)}</span>
+                            </div>
+                            <div>
+                              <span className="text-indigo-700 block">45% Huria</span>
+                              <span className="font-mono font-bold text-indigo-700">{formatRupiah(huria)}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-[11px] bg-emerald-50/50 p-2 rounded-lg flex justify-between">
+                            <span className="text-emerald-700">100% Kas Tujuan</span>
+                            <span className="font-mono font-bold text-emerald-700">{formatRupiah(huria)}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left text-xs text-slate-700">
                   <thead className="bg-slate-50/40 text-slate-500 font-semibold border-b border-slate-100">
                     <tr>
@@ -3372,7 +3685,7 @@ export const ReportsPage: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs">
+                <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200 text-xs">
                   <Calendar className="w-4 h-4 text-slate-400" />
                   <span className="text-slate-500 font-medium">Tahun Buku:</span>
                   <select
@@ -3392,7 +3705,7 @@ export const ReportsPage: React.FC = () => {
                   href={PPKU_DOCUMENT_URL}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 text-xs font-bold rounded-xl shadow-2xs transition-colors flex items-center gap-1.5"
+                  className="px-3.5 py-2 min-h-[44px] sm:min-h-0 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 text-xs font-bold rounded-xl shadow-2xs transition-colors flex items-center gap-1.5"
                 >
                   <FileText className="w-4 h-4 text-blue-700" />
                   <span>Pedoman PPKU 2023 (PDF)</span>
@@ -3401,7 +3714,7 @@ export const ReportsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                  className="px-4 py-2 min-h-[44px] sm:min-h-0 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
                 >
                   <Printer className="w-4 h-4" />
                   <span>Cetak Rekap</span>
@@ -3531,9 +3844,9 @@ export const ReportsPage: React.FC = () => {
 
             {/* Riwayat Mutasi Penyetoran ke BPSK Kantor Pusat */}
             <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xs overflow-hidden space-y-3 p-5">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
-                  <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                  <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0">
                     <Send className="w-4 h-4" />
                   </div>
                   <div>
@@ -3548,7 +3861,39 @@ export const ReportsPage: React.FC = () => {
                 </span>
               </div>
 
-              <div className="overflow-x-auto">
+              {/* Mobile Cards: Riwayat Setoran BPSK */}
+              <div className="md:hidden divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden">
+                {yearBpskRemittances.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-slate-400">
+                    Belum ada transaksi penyetoran ke BPSK HKBP yang dicatat di Tahun {selectedYear}.
+                  </div>
+                ) : (
+                  yearBpskRemittances.map((tx) => {
+                    const stor = storageAccounts.find((s) => s.id === tx.storage_account_id);
+                    return (
+                      <div key={tx.id} className="p-3.5 space-y-1.5 text-xs">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="font-mono text-[11px] text-slate-500">
+                              {formatDateIndo(tx.tanggal)} • {tx.receipt_no || '-'}
+                            </div>
+                            <div className="font-semibold text-slate-900 mt-0.5">{tx.description}</div>
+                            <div className="text-[11px] text-slate-500">{stor?.nama}</div>
+                          </div>
+                          <div className="text-right shrink-0 space-y-1">
+                            <div className="font-mono font-bold text-blue-900">{formatRupiah(tx.amount)}</div>
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                              Disetujui
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left text-xs text-slate-700">
                   <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-100">
                     <tr>
@@ -3632,8 +3977,9 @@ export const ReportsPage: React.FC = () => {
 
       {/* Modal Konfirmasi Pengesahan LPJ di Rapat Huria */}
       {showApproveLpjModal && currentLpjReport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-xs p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 shadow-2xl border border-slate-200 space-y-4 mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
@@ -3647,7 +3993,7 @@ export const ReportsPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowApproveLpjModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-slate-400 hover:text-slate-600 p-1 rounded-lg"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -3659,11 +4005,11 @@ export const ReportsPage: React.FC = () => {
               atau dihapus lagi setelah disahkan.
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setShowApproveLpjModal(false)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50"
               >
                 Batal
               </button>
@@ -3684,7 +4030,7 @@ export const ReportsPage: React.FC = () => {
                     showToast(res.error || 'Gagal mengesahkan LPJ.', 'error');
                   }
                 }}
-                className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-sm"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-sm"
               >
                 Ya, Sahkan LPJ
               </button>

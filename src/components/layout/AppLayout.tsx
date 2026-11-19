@@ -30,6 +30,7 @@ import {
   Landmark,
   FileText,
   FileEdit,
+  HeartHandshake,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -103,6 +104,12 @@ export const AppLayout: React.FC = () => {
       label: isAuditor ? 'Uji Bukti Transaksi' : 'Transaksi Kas',
       icon: ReceiptText,
       allowed: true,
+    },
+    {
+      to: '/pelean-taon',
+      label: 'Rekap Pelean Taon',
+      icon: HeartHandshake,
+      allowed: isAdmin || isBendaharaUmum || isPengurusKas || isPendeta || isSekretaris || isMajelis || isAuditor,
     },
     {
       to: '/budget',

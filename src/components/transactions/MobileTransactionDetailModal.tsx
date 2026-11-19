@@ -141,12 +141,35 @@ export const MobileTransactionDetailModal: React.FC<Props> = ({
             <div className="px-4 py-3 flex items-center justify-between gap-3">
               <span className="text-slate-500 inline-flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                Tanggal
+                Tanggal Transaksi
               </span>
               <span className="font-mono font-semibold text-slate-900 tabular-nums text-right">
                 {formatDateIndo(transaction.tanggal)}
               </span>
             </div>
+
+            {transaction.tanggal_warta && (
+              <div className="px-4 py-3 flex items-center justify-between gap-3">
+                <span className="text-slate-500 inline-flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-blue-500" />
+                  Tanggal Warta
+                </span>
+                <span className="font-mono font-semibold text-blue-800 tabular-nums text-right">
+                  {formatDateIndo(transaction.tanggal_warta)}
+                </span>
+              </div>
+            )}
+
+            {(transaction.family_name || transaction.lingkungan) && (
+              <div className="px-4 py-3 flex items-center justify-between gap-3">
+                <span className="text-slate-500">Keluarga / Lingkungan</span>
+                <span className="font-semibold text-emerald-800 text-right">
+                  {transaction.family_name || '-'}
+                  {transaction.lingkungan ? ` (${transaction.lingkungan})` : ''}
+                  {transaction.pelean_taon_year ? ` · T.A. ${transaction.pelean_taon_year}` : ''}
+                </span>
+              </div>
+            )}
 
             {transaction.receipt_no && (
               <div className="px-4 py-3 flex items-center justify-between gap-3">

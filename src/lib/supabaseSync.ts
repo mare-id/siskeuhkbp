@@ -42,6 +42,8 @@ import {
   LpjReport,
   LpjException,
   AuditPeriodVerification,
+  ChurchLingkungan,
+  CongregationFamily,
 } from '../types/database';
 
 export interface SupabaseDataset {
@@ -81,6 +83,8 @@ export interface SupabaseDataset {
   semesterReports?: SemesterReport[];
   lpjReports?: LpjReport[];
   lpjExceptions?: LpjException[];
+  lingkunganList?: ChurchLingkungan[];
+  families?: CongregationFamily[];
 }
 
 // Frontend-only joined fields that do NOT exist as PostgreSQL columns
@@ -114,6 +118,7 @@ const JOINED_FIELDS_TO_STRIP = new Set([
   'transfer_target_storage',
   'member',
   'transaction',
+  'family',
   'password',
   'confirmPassword',
 ]);
@@ -172,6 +177,8 @@ const DOMAIN_LOCAL_STORAGE_KEYS = [
   'siku_semester_reports',
   'siku_lpj_reports',
   'siku_lpj_exceptions',
+  'siku_lingkungan',
+  'siku_families',
 ];
 
 export function purgeDomainLocalStorage() {
@@ -226,6 +233,8 @@ export async function fetchAllDataFromSupabase(): Promise<{ success: boolean; da
       lpjRes,
       exceptionsRes,
       settingsRes,
+      lingkunganRes,
+      familiesRes,
     ] = await Promise.all([
       supabase.from('kas').select('*').order('kode'),
       supabase.from('storage_accounts').select('*').order('nama'),
@@ -264,6 +273,8 @@ export async function fetchAllDataFromSupabase(): Promise<{ success: boolean; da
       supabase.from('lpj_reports').select('*').order('tahun', { ascending: false }),
       supabase.from('lpj_exceptions').select('*'),
       supabase.from('app_settings').select('*').limit(1),
+      supabase.from('church_lingkungan').select('*').order('urutan'),
+      supabase.from('congregation_families').select('*').order('lingkungan').order('nama_keluarga'),
     ]);
 
     const result: SupabaseDataset = {};
@@ -318,12 +329,48 @@ export async function fetchAllDataFromSupabase(): Promise<{ success: boolean; da
     if (lpjRes.data) result.lpjReports = lpjRes.data as LpjReport[];
     if (exceptionsRes.data) result.lpjExceptions = exceptionsRes.data as LpjException[];
     if (settingsRes.data && settingsRes.data.length > 0) result.settings = settingsRes.data[0] as AppSettings;
+    if (!lingkunganRes.error && lingkunganRes.data) result.lingkunganList = lingkunganRes.data as ChurchLingkungan[];
+    if (!familiesRes.error && familiesRes.data) result.families = familiesRes.data as CongregationFamily[];
 
     return { success: true, data: result };
   } catch (err: any) {
     console.error('Failed to load dataset from Supabase:', err);
     return { success: false, error: err.message || 'Gagal mengambil data dari Supabase' };
   }
+}
+
+const OPTIONAL_TX_COLUMNS = new Set([
+  'tanggal_warta',
+  'pelean_taon_year',
+  'family_id',
+  'family_name',
+  'lingkungan',
+]);
+
+function stripOptionalTxColumns(payload: any): any {
+  if (Array.isArray(payload)) {
+    return payload.map((item) => stripOptionalTxColumns(item));
+  }
+  if (payload && typeof payload === 'object') {
+    const next: Record<string, any> = {};
+    for (const [k, v] of Object.entries(payload)) {
+      if (!OPTIONAL_TX_COLUMNS.has(k)) next[k] = v;
+    }
+    return next;
+  }
+  return payload;
+}
+
+function isMissingColumnError(msg?: string): boolean {
+  if (!msg) return false;
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes('tanggal_warta') ||
+    lower.includes('pelean_taon_year') ||
+    lower.includes('family_id') ||
+    lower.includes('family_name') ||
+    lower.includes('lingkungan')
+  ) && (lower.includes('column') || lower.includes('schema cache'));
 }
 
 /**
@@ -335,6 +382,10 @@ export async function syncUpsert(table: string, payload: any): Promise<{ success
     const cleanPayload = sanitizePayload(payload);
     const { error } = await supabase.from(table).upsert(cleanPayload);
     if (error) {
+      if (table === 'transactions' && isMissingColumnError(error.message)) {
+        const retry = await supabase.from(table).upsert(stripOptionalTxColumns(cleanPayload));
+        if (!retry.error) return { success: true };
+      }
       console.error(`Supabase syncUpsert error [${table}]:`, error);
       return { success: false, error: error.message };
     }
@@ -354,6 +405,10 @@ export async function syncInsert(table: string, payload: any): Promise<{ success
     const cleanPayload = sanitizePayload(payload);
     const { error } = await supabase.from(table).insert(cleanPayload);
     if (error) {
+      if (table === 'transactions' && isMissingColumnError(error.message)) {
+        const retry = await supabase.from(table).insert(stripOptionalTxColumns(cleanPayload));
+        if (!retry.error) return { success: true };
+      }
       console.error(`Supabase syncInsert error [${table}]:`, error);
       return { success: false, error: error.message };
     }
@@ -378,6 +433,13 @@ export async function syncUpdate(
     const cleanPayload = sanitizePayload(payload);
     const { error } = await supabase.from(table).update(cleanPayload).eq(matchCol, matchVal);
     if (error) {
+      if (table === 'transactions' && isMissingColumnError(error.message)) {
+        const retryPayload = stripOptionalTxColumns(cleanPayload);
+        if (Object.keys(retryPayload).length > 0) {
+          const retry = await supabase.from(table).update(retryPayload).eq(matchCol, matchVal);
+          if (!retry.error) return { success: true };
+        }
+      }
       console.error(`Supabase syncUpdate error [${table}]:`, error);
       return { success: false, error: error.message };
     }

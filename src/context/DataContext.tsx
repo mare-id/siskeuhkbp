@@ -70,6 +70,8 @@ import {
   AuditFindingSeverity,
   FiscalYear,
   FiscalYearStatus,
+  ChurchLingkungan,
+  CongregationFamily,
 } from '../types/database';
 import {
   DEMO_AUDIT_LOGS,
@@ -107,6 +109,8 @@ import {
   DEMO_LPJ_EXCEPTIONS,
   DEMO_AUDIT_PERIOD_VERIFICATIONS,
   DEMO_FISCAL_YEARS,
+  DEMO_LINGKUNGAN,
+  DEMO_FAMILIES,
   generateMonthlyDistribution,
 } from '../lib/demoData';
 import { hashUserPassword } from '../lib/passwordUtils';
@@ -158,6 +162,7 @@ interface DataContextType {
   addTransaction: (tx: Omit<Transaction, 'id' | 'created_at' | 'updated_at' | 'is_reversal'>) => Promise<{ success: boolean; error?: string }>;
   addCompoundIncomeTransactions: (params: {
     tanggal: string;
+    tanggal_warta?: string | null;
     storage_account_id: string;
     category_id?: string | null;
     description: string;
@@ -272,6 +277,18 @@ interface DataContextType {
   saveProfile: (profileData: Partial<Profile> & { password?: string }) => Promise<{ success: boolean; id?: string; error?: string }>;
   deleteProfile: (id: string) => Promise<{ success: boolean; error?: string }>;
   toggleProfileActive: (id: string) => Promise<{ success: boolean; error?: string }>;
+
+  // Master Data Lingkungan & Keluarga Jemaat (Pelean Taon)
+  lingkunganList: ChurchLingkungan[];
+  families: CongregationFamily[];
+  saveLingkungan: (data: Partial<ChurchLingkungan>) => Promise<{ success: boolean; id?: string; error?: string }>;
+  deleteLingkungan: (id: string) => Promise<{ success: boolean; error?: string }>;
+  saveFamily: (data: Partial<CongregationFamily>) => Promise<{ success: boolean; id?: string; error?: string }>;
+  bulkImportFamilies: (
+    rows: Array<{ nama_keluarga: string; lingkungan: string; kepala_keluarga?: string | null; notes?: string | null }>,
+    options?: { updateExistingLingkungan?: boolean }
+  ) => Promise<{ success: boolean; added: number; updated: number; skipped: number; createdLingkungan: number; error?: string }>;
+  deleteFamily: (id: string) => Promise<{ success: boolean; error?: string }>;
 
   // LPJ Supporting Data (ISAK 35 - Modified Cash Basis)
   fixedAssets: FixedAsset[];
@@ -596,6 +613,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     readLocalOrDefault('siku_lpj_exceptions', isSupabaseConfigured ? [] : DEMO_LPJ_EXCEPTIONS)
   );
 
+  // Master Lingkungan & Keluarga Jemaat (Pelean Taon)
+  const [lingkunganList, setLingkunganList] = useState<ChurchLingkungan[]>(() =>
+    readLocalOrDefault('siku_lingkungan', DEMO_LINGKUNGAN)
+  );
+
+  const [families, setFamilies] = useState<CongregationFamily[]>(() =>
+    readLocalOrDefault('siku_families', isSupabaseConfigured ? [] : DEMO_FAMILIES)
+  );
+
   const [loading, setLoading] = useState<boolean>(isSupabaseConfigured);
 
   // Sync to local storage
@@ -765,6 +791,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('siku_budget_reallocations', JSON.stringify(budgetReallocations));
   }, [budgetReallocations]);
 
+  useEffect(() => {
+    if (isSupabaseConfigured) return;
+    localStorage.setItem('siku_lingkungan', JSON.stringify(lingkunganList));
+  }, [lingkunganList]);
+
+  useEffect(() => {
+    if (isSupabaseConfigured) return;
+    localStorage.setItem('siku_families', JSON.stringify(families));
+  }, [families]);
+
   // Supabase PostgreSQL Direct Sync & Realtime Subscription
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return;
@@ -809,6 +845,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.lpjReports) setLpjReports(data.lpjReports);
       if (data.lpjExceptions) setLpjExceptions(data.lpjExceptions);
       if (data.settings) setSettings(data.settings);
+      if (data.lingkunganList && data.lingkunganList.length > 0) setLingkunganList(data.lingkunganList);
+      if (data.families) setFamilies(data.families);
     };
 
     const loadDataFromSupabase = async () => {
@@ -1298,6 +1336,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Record compound multi-kas income (e.g., Ucapan Syukur divided into Huria 55/45, Pembangunan 100%, Sosial 100%, Transitoris 100%)
   const addCompoundIncomeTransactions = async (params: {
     tanggal: string;
+    tanggal_warta?: string | null;
     storage_account_id: string;
     category_id?: string | null;
     description: string;
@@ -1306,7 +1345,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     status: TransactionStatus;
     allocations: CompoundIncomeAllocationItem[];
   }): Promise<{ success: boolean; error?: string; createdCount?: number }> => {
-    const { tanggal, storage_account_id, category_id, description, receipt_no, attachment_url, status, allocations } = params;
+    const { tanggal, tanggal_warta, storage_account_id, category_id, description, receipt_no, attachment_url, status, allocations } = params;
 
     if (!allocations || allocations.length === 0) {
       return { success: false, error: 'Tambahkan minimal 1 baris alokasi kas tujuan.' };
@@ -1382,6 +1421,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdTxs.push({
             id: `tx-${Date.now()}-${idx}h-${Math.random().toString(36).substring(2, 6)}`,
             tanggal,
+            tanggal_warta: tanggal_warta || null,
             kas_id: item.kas_id,
             storage_account_id,
             category_id: category_id || null,
@@ -1410,6 +1450,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdTxs.push({
             id: `tx-${Date.now()}-${idx}s-${Math.random().toString(36).substring(2, 6)}`,
             tanggal,
+            tanggal_warta: tanggal_warta || null,
             kas_id: sentralisasiKas.id,
             storage_account_id,
             category_id: category_id || null,
@@ -1444,6 +1485,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdTxs.push({
           id: `tx-${Date.now()}-${idx}d-${Math.random().toString(36).substring(2, 6)}`,
           tanggal,
+          tanggal_warta: tanggal_warta || null,
           kas_id: item.kas_id,
           storage_account_id,
           category_id: category_id || null,
@@ -2655,6 +2697,302 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (isSupabaseConfigured) {
       await syncUpsert('app_settings', { ...updated, id: 'main' });
     }
+  };
+
+  // ---------------------------------------------------------------------------
+  // LINGKUNGAN & DATA KELUARGA JEMAAT (PELEAN TAON)
+  // ---------------------------------------------------------------------------
+
+  const saveLingkungan = async (
+    data: Partial<ChurchLingkungan>
+  ): Promise<{ success: boolean; id?: string; error?: string }> => {
+    const nama = (data.nama || '').trim();
+    if (!nama) return { success: false, error: 'Nama Lingkungan wajib diisi.' };
+
+    const duplicate = lingkunganList.find(
+      (l) => l.nama.toLowerCase() === nama.toLowerCase() && l.id !== data.id
+    );
+    if (duplicate) {
+      return { success: false, error: `Lingkungan "${nama}" sudah terdaftar.` };
+    }
+
+    const nowIso = new Date().toISOString();
+    if (data.id) {
+      const existing = lingkunganList.find((l) => l.id === data.id);
+      const updated: ChurchLingkungan = {
+        ...(existing || { id: data.id, urutan: lingkunganList.length + 1, is_active: true }),
+        ...data,
+        nama,
+        updated_at: nowIso,
+      };
+      setLingkunganList((prev) => prev.map((l) => (l.id === data.id ? updated : l)));
+      if (isSupabaseConfigured) {
+        await syncUpsert('church_lingkungan', updated);
+      }
+      addAuditLog('church_lingkungan', updated.id, 'UPDATE', existing || null, updated, `Lingkungan "${updated.nama}" diperbarui`);
+      return { success: true, id: updated.id };
+    } else {
+      const newItem: ChurchLingkungan = {
+        id: `ling-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        nama,
+        kode: data.kode?.trim().toUpperCase() || nama.slice(0, 3).toUpperCase(),
+        urutan: data.urutan ?? lingkunganList.length + 1,
+        is_active: data.is_active !== false,
+        created_at: nowIso,
+        updated_at: nowIso,
+      };
+      setLingkunganList((prev) => [...prev, newItem]);
+      if (isSupabaseConfigured) {
+        await syncUpsert('church_lingkungan', newItem);
+      }
+      addAuditLog('church_lingkungan', newItem.id, 'INSERT', null, newItem, `Lingkungan "${newItem.nama}" ditambahkan`);
+      return { success: true, id: newItem.id };
+    }
+  };
+
+  const deleteLingkungan = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    const target = lingkunganList.find((l) => l.id === id);
+    if (!target) return { success: false, error: 'Lingkungan tidak ditemukan.' };
+    const linkedFamilies = families.filter(
+      (f) => f.lingkungan.trim().toLowerCase() === target.nama.trim().toLowerCase()
+    ).length;
+    if (linkedFamilies > 0) {
+      return {
+        success: false,
+        error: `Lingkungan "${target.nama}" masih memiliki ${linkedFamilies} keluarga terdaftar. Pindahkan atau hapus data keluarga terlebih dahulu.`,
+      };
+    }
+    setLingkunganList((prev) => prev.filter((l) => l.id !== id));
+    if (isSupabaseConfigured) {
+      await syncDelete('church_lingkungan', 'id', id);
+    }
+    addAuditLog('church_lingkungan', id, 'DELETE', target, null, `Lingkungan "${target.nama}" dihapus`);
+    return { success: true };
+  };
+
+  const saveFamily = async (
+    data: Partial<CongregationFamily>
+  ): Promise<{ success: boolean; id?: string; error?: string }> => {
+    const nama_keluarga = (data.nama_keluarga || '').trim();
+    const lingkungan = (data.lingkungan || '').trim();
+    if (!nama_keluarga) return { success: false, error: 'Nama Keluarga wajib diisi.' };
+    if (!lingkungan) return { success: false, error: 'Lingkungan wajib dipilih.' };
+
+    const nowIso = new Date().toISOString();
+    // Auto-create Lingkungan if not listed yet
+    const hasLing = lingkunganList.some((l) => l.nama.toLowerCase() === lingkungan.toLowerCase());
+    if (!hasLing) {
+      const newLing: ChurchLingkungan = {
+        id: `ling-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+        nama: lingkungan,
+        kode: lingkungan.slice(0, 3).toUpperCase(),
+        urutan: lingkunganList.length + 1,
+        is_active: true,
+        created_at: nowIso,
+        updated_at: nowIso,
+      };
+      setLingkunganList((prev) => [...prev, newLing]);
+      if (isSupabaseConfigured) {
+        await syncUpsert('church_lingkungan', newLing);
+      }
+    }
+
+    if (data.id) {
+      const existing = families.find((f) => f.id === data.id);
+      const updated: CongregationFamily = {
+        ...(existing || { id: data.id, is_active: true }),
+        ...data,
+        nama_keluarga,
+        lingkungan,
+        updated_at: nowIso,
+      };
+      setFamilies((prev) => prev.map((f) => (f.id === data.id ? updated : f)));
+      if (isSupabaseConfigured) {
+        const res = await syncUpsert('congregation_families', updated);
+        if (!res.success) return { success: false, error: res.error };
+      }
+      addAuditLog('congregation_families', updated.id, 'UPDATE', existing || null, updated, `Data keluarga "${updated.nama_keluarga}" diperbarui`);
+      return { success: true, id: updated.id };
+    } else {
+      const newFam: CongregationFamily = {
+        id: `fam-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        nama_keluarga,
+        lingkungan,
+        kepala_keluarga: data.kepala_keluarga?.trim() || null,
+        notes: data.notes?.trim() || null,
+        is_active: data.is_active !== false,
+        created_at: nowIso,
+        updated_at: nowIso,
+      };
+      setFamilies((prev) => [...prev, newFam]);
+      if (isSupabaseConfigured) {
+        const res = await syncUpsert('congregation_families', newFam);
+        if (!res.success) return { success: false, error: res.error };
+      }
+      addAuditLog('congregation_families', newFam.id, 'INSERT', null, newFam, `Keluarga "${newFam.nama_keluarga}" (${newFam.lingkungan}) ditambahkan`);
+      return { success: true, id: newFam.id };
+    }
+  };
+
+  const bulkImportFamilies = async (
+    rows: Array<{ nama_keluarga: string; lingkungan: string; kepala_keluarga?: string | null; notes?: string | null }>,
+    options?: { updateExistingLingkungan?: boolean }
+  ): Promise<{ success: boolean; added: number; updated: number; skipped: number; createdLingkungan: number; error?: string }> => {
+    if (!rows || rows.length === 0) {
+      return { success: false, added: 0, updated: 0, skipped: 0, createdLingkungan: 0, error: 'Tidak ada baris data yang valid untuk diimpor.' };
+    }
+
+    const nowIso = new Date().toISOString();
+    const updateExisting = options?.updateExistingLingkungan ?? false;
+
+    const existingLingMap = new Map(lingkunganList.map((l) => [l.nama.trim().toLowerCase(), l]));
+    const newLingToCreate: ChurchLingkungan[] = [];
+    let nextUrutan = lingkunganList.length + 1;
+
+    const normalizeKey = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ');
+    const existingFamilyMap = new Map(families.map((f) => [normalizeKey(f.nama_keluarga), f]));
+
+    const toUpsert: CongregationFamily[] = [];
+    let added = 0;
+    let updated = 0;
+    let skipped = 0;
+    const seenInBatch = new Set<string>();
+
+    rows.forEach((row, idx) => {
+      const cleanName = (row.nama_keluarga || '').trim().replace(/\s+/g, ' ');
+      const cleanLing = (row.lingkungan || '').trim().replace(/\s+/g, ' ');
+      if (!cleanName || !cleanLing) {
+        skipped++;
+        return;
+      }
+
+      const lingKey = cleanLing.toLowerCase();
+      if (!existingLingMap.has(lingKey)) {
+        const newLing: ChurchLingkungan = {
+          id: `ling-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 5)}`,
+          nama: cleanLing,
+          kode: cleanLing.slice(0, 3).toUpperCase(),
+          urutan: nextUrutan++,
+          is_active: true,
+          created_at: nowIso,
+          updated_at: nowIso,
+        };
+        existingLingMap.set(lingKey, newLing);
+        newLingToCreate.push(newLing);
+      }
+
+      const famKey = normalizeKey(cleanName);
+      if (seenInBatch.has(famKey)) {
+        skipped++;
+        return;
+      }
+      seenInBatch.add(famKey);
+
+      const canonicalLingName = existingLingMap.get(lingKey)!.nama;
+      const existingFam = existingFamilyMap.get(famKey);
+
+      if (existingFam) {
+        if (updateExisting && existingFam.lingkungan !== canonicalLingName) {
+          const updatedFam: CongregationFamily = {
+            ...existingFam,
+            lingkungan: canonicalLingName,
+            kepala_keluarga: row.kepala_keluarga?.trim() || existingFam.kepala_keluarga || null,
+            notes: row.notes?.trim() || existingFam.notes || null,
+            updated_at: nowIso,
+          };
+          toUpsert.push(updatedFam);
+          existingFamilyMap.set(famKey, updatedFam);
+          updated++;
+        } else {
+          skipped++;
+        }
+      } else {
+        const newFam: CongregationFamily = {
+          id: `fam-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+          nama_keluarga: cleanName,
+          lingkungan: canonicalLingName,
+          kepala_keluarga: row.kepala_keluarga?.trim() || null,
+          notes: row.notes?.trim() || null,
+          is_active: true,
+          created_at: nowIso,
+          updated_at: nowIso,
+        };
+        toUpsert.push(newFam);
+        existingFamilyMap.set(famKey, newFam);
+        added++;
+      }
+    });
+
+    if (isSupabaseConfigured) {
+      if (newLingToCreate.length > 0) {
+        const lingRes = await syncUpsert('church_lingkungan', newLingToCreate);
+        if (!lingRes.success) {
+          return {
+            success: false,
+            added: 0,
+            updated: 0,
+            skipped,
+            createdLingkungan: 0,
+            error: `Gagal menyimpan Lingkungan ke Supabase: ${lingRes.error}. Pastikan SQL schema_full.sql terbaru sudah dijalankan.`,
+          };
+        }
+      }
+      if (toUpsert.length > 0) {
+        const famRes = await syncUpsert('congregation_families', toUpsert);
+        if (!famRes.success) {
+          return {
+            success: false,
+            added: 0,
+            updated: 0,
+            skipped,
+            createdLingkungan: 0,
+            error: `Gagal mengimpor Data Keluarga ke Supabase: ${famRes.error}. Pastikan SQL schema_full.sql terbaru sudah dijalankan.`,
+          };
+        }
+      }
+    }
+
+    if (newLingToCreate.length > 0) {
+      setLingkunganList((prev) => [...prev, ...newLingToCreate]);
+    }
+    if (toUpsert.length > 0) {
+      const upsertMap = new Map(toUpsert.map((item) => [item.id, item]));
+      setFamilies((prev) => {
+        const merged = prev.map((f) => upsertMap.get(f.id) || f);
+        const existingIds = new Set(prev.map((f) => f.id));
+        const newlyAdded = toUpsert.filter((item) => !existingIds.has(item.id));
+        return [...merged, ...newlyAdded];
+      });
+    }
+
+    addAuditLog(
+      'congregation_families',
+      `import-${Date.now()}`,
+      'BULK_IMPORT',
+      null,
+      { added, updated, skipped, createdLingkungan: newLingToCreate.length },
+      `Impor Excel Data Keluarga: ${added} ditambahkan, ${updated} diperbarui, ${skipped} dilewati`
+    );
+
+    return {
+      success: true,
+      added,
+      updated,
+      skipped,
+      createdLingkungan: newLingToCreate.length,
+    };
+  };
+
+  const deleteFamily = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    const target = families.find((f) => f.id === id);
+    if (!target) return { success: false, error: 'Data keluarga tidak ditemukan.' };
+    setFamilies((prev) => prev.filter((f) => f.id !== id));
+    if (isSupabaseConfigured) {
+      const res = await syncDelete('congregation_families', 'id', id);
+      if (!res.success) return { success: false, error: res.error };
+    }
+    addAuditLog('congregation_families', id, 'DELETE', target, null, `Data keluarga "${target.nama_keluarga}" dihapus`);
+    return { success: true };
   };
 
   // ---------------------------------------------------------------------------
@@ -6691,6 +7029,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         saveUserKasAccess,
         removeUserKasAccess,
         updateSettings,
+        lingkunganList,
+        families,
+        saveLingkungan,
+        deleteLingkungan,
+        saveFamily,
+        bulkImportFamilies,
+        deleteFamily,
         fiscalYears,
         saveFiscalYear,
         deleteFiscalYear,

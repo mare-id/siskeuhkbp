@@ -108,17 +108,17 @@ export const ProfilePage: React.FC = () => {
             {userKasAccess.map((uka) => {
               const kas = kasList.find((k) => k.id === uka.kas_id);
               return (
-                <div key={uka.id} className="py-2.5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <div key={uka.id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <span
                       className="w-3 h-3 rounded-full shrink-0"
                       style={{ backgroundColor: kas?.warna || '#7C9CF5' }}
                     />
-                    <span className="font-semibold text-slate-800">{kas?.nama}</span>
-                    <span className="text-[10px] text-slate-400 font-mono">({kas?.kode})</span>
+                    <span className="font-semibold text-slate-800 truncate">{kas?.nama}</span>
+                    <span className="text-[10px] text-slate-400 font-mono shrink-0">({kas?.kode})</span>
                   </div>
                   <span
-                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0 ${
                       uka.access_level === 'ketua'
                         ? 'bg-purple-100 text-purple-800'
                         : 'bg-blue-100 text-blue-800'
@@ -134,8 +134,8 @@ export const ProfilePage: React.FC = () => {
       </div>
 
       {/* Change Password Form */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
+      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
             <KeyRound className="w-4 h-4 text-primary" />
             <span>Ganti Kata Sandi (Password)</span>
@@ -143,7 +143,7 @@ export const ProfilePage: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowPasswords((prev) => !prev)}
-            className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1"
+            className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1 min-h-[44px] sm:min-h-0 px-2 -mr-2"
           >
             {showPasswords ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
             <span>{showPasswords ? 'Sembunyikan' : 'Tampilkan'}</span>
@@ -174,7 +174,7 @@ export const ProfilePage: React.FC = () => {
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 placeholder="Masukkan kata sandi saat ini"
                 autoComplete="current-password"
-                className="w-full p-2.5 rounded-xl border border-slate-200"
+                className="w-full p-2.5 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200"
                 required
               />
             </div>
@@ -187,7 +187,7 @@ export const ProfilePage: React.FC = () => {
               onChange={(e) => setNewPassword(e.target.value)}
               placeholder="Minimal 6 karakter"
               autoComplete="new-password"
-              className="w-full p-2.5 rounded-xl border border-slate-200"
+              className="w-full p-2.5 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200"
               required
             />
           </div>
@@ -199,14 +199,14 @@ export const ProfilePage: React.FC = () => {
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Ulangi kata sandi baru"
               autoComplete="new-password"
-              className="w-full p-2.5 rounded-xl border border-slate-200"
+              className="w-full p-2.5 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200"
               required
             />
           </div>
           <button
             type="submit"
             disabled={saving}
-            className="px-5 py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-60 text-white font-semibold rounded-xl transition-colors shadow-xs"
+            className="w-full sm:w-auto px-5 py-2.5 min-h-[44px] sm:min-h-0 bg-primary hover:bg-primary-dark disabled:opacity-60 text-white font-semibold rounded-xl transition-colors shadow-xs"
           >
             {saving ? 'Menyimpan...' : 'Simpan Kata Sandi'}
           </button>

@@ -112,7 +112,10 @@ export const AdminTransactionsPage: React.FC = () => {
     const storage = storageAccounts.find((s) => s.id === deleteTargetTx.storage_account_id);
     const cat = categories.find((c) => c.id === deleteTargetTx.category_id);
     return [
-      { label: 'Tanggal', newValue: formatDateIndo(deleteTargetTx.tanggal) },
+      { label: 'Tanggal Transaksi', newValue: formatDateIndo(deleteTargetTx.tanggal) },
+      ...(deleteTargetTx.tanggal_warta
+        ? [{ label: 'Tanggal Warta', newValue: formatDateIndo(deleteTargetTx.tanggal_warta) }]
+        : []),
       { label: 'No. Bukti', newValue: deleteTargetTx.receipt_no || '-' },
       { label: 'Kas / Dana', newValue: kas?.nama || deleteTargetTx.kas_id },
       { label: 'Tempat Simpan', newValue: storage?.nama || deleteTargetTx.storage_account_id },
@@ -401,6 +404,11 @@ export const AdminTransactionsPage: React.FC = () => {
                         <div className="font-mono font-semibold text-slate-900 tabular-nums">
                           {formatDateIndo(tx.tanggal)}
                         </div>
+                        {tx.tanggal_warta && (
+                          <div className="text-[11px] font-mono text-blue-700 mt-0.5">
+                            Warta: {formatDateIndo(tx.tanggal_warta)}
+                          </div>
+                        )}
                         <div className="text-[11px] font-mono text-slate-400 mt-0.5">
                           {tx.receipt_no || '-'}
                         </div>
@@ -510,7 +518,9 @@ export const AdminTransactionsPage: React.FC = () => {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-mono font-semibold text-slate-600 tabular-nums truncate">
-                        {formatDateIndo(tx.tanggal)} · {tx.receipt_no || '-'}
+                        {formatDateIndo(tx.tanggal)}
+                        {tx.tanggal_warta ? ` · Warta ${formatDateIndo(tx.tanggal_warta)}` : ''}
+                        {tx.receipt_no ? ` · ${tx.receipt_no}` : ''}
                       </span>
                       <span className={`px-2 py-0.5 rounded-md border text-[10px] font-bold shrink-0 ${badge.cls}`}>
                         {badge.label}

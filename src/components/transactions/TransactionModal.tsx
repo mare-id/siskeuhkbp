@@ -15,6 +15,11 @@ import {
   Layers,
   Sparkles,
   ArrowRight,
+  Calendar,
+  Users,
+  Search,
+  UserPlus,
+  Landmark,
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
@@ -23,10 +28,18 @@ import { formatRupiah } from '../../lib/formatters';
 import { getPpkuProcurementRule, splitSentralisasiAmount } from '../../lib/ppkuRules';
 import { SentralisasiExclusionType } from '../../types/database';
 
+export interface PeleanTaonPrefill {
+  familyId?: string;
+  familyName?: string;
+  lingkungan?: string;
+  year?: number;
+}
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   defaultKasId?: string;
+  defaultPeleanTaon?: PeleanTaonPrefill | null;
 }
 
 interface AllocationDraftRow {
@@ -38,14 +51,41 @@ interface AllocationDraftRow {
   exclusion_type?: SentralisasiExclusionType | null;
 }
 
-export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasId }) => {
+const isPeleanBulananTahunanCategory = (cat?: { id: string; nama: string } | null): boolean => {
+  if (!cat) return false;
+  if (cat.id === 'cat-in-namarboho') return true;
+  return /pelean.*(bulanan|tahunan)/i.test(cat.nama);
+};
+
+const getNextSunday = (baseDateStr: string): string => {
+  const d = baseDateStr ? new Date(`${baseDateStr}T00:00:00`) : new Date();
+  if (Number.isNaN(d.getTime())) return '';
+  const day = d.getDay(); // 0 = Sunday
+  const diff = day === 0 ? 0 : 7 - day;
+  d.setDate(d.getDate() + diff);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${da}`;
+};
+
+export const TransactionModal: React.FC<Props> = ({
+  isOpen,
+  onClose,
+  defaultKasId,
+  defaultPeleanTaon,
+}) => {
   const {
     kasList,
     storageAccounts,
     categories,
+    fiscalYears,
+    lingkunganList,
+    families,
     settings,
     addTransaction,
     addCompoundIncomeTransactions,
+    saveFamily,
     isPeriodClosed,
   } = useData();
   const { canInputKas } = useAuth();
@@ -54,6 +94,7 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
   const [incomeMode, setIncomeMode] = useState<'single' | 'multi'>('single');
 
   const [tanggal, setTanggal] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [tanggalWarta, setTanggalWarta] = useState<string>('');
   const [kasId, setKasId] = useState<string>('');
   const [storageAccountId, setStorageAccountId] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
@@ -69,6 +110,17 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
   const [isSentralisasi, setIsSentralisasi] = useState<boolean>(true);
   const [exclusionType, setExclusionType] = useState<SentralisasiExclusionType>('lainnya');
 
+  // Pelean Taon (Persembahan Tahunan Keluarga) dedicated states
+  const [isPeleanTaonMode, setIsPeleanTaonMode] = useState<boolean>(false);
+  const [peleanYear, setPeleanYear] = useState<number>(settings.active_year || new Date().getFullYear());
+  const [peleanLingkungan, setPeleanLingkungan] = useState<string>('');
+  const [peleanFamilyId, setPeleanFamilyId] = useState<string>('');
+  const [peleanFamilySearch, setPeleanFamilySearch] = useState<string>('');
+  const [peleanUseManualFamily, setPeleanUseManualFamily] = useState<boolean>(false);
+  const [peleanManualFamilyName, setPeleanManualFamilyName] = useState<string>('');
+  const [peleanSaveManualToMaster, setPeleanSaveManualToMaster] = useState<boolean>(true);
+  const [descriptionManuallyEdited, setDescriptionManuallyEdited] = useState<boolean>(false);
+
   // Multi-pos income rows (e.g., Ucapan Syukur)
   const [allocations, setAllocations] = useState<AllocationDraftRow[]>([]);
 
@@ -77,10 +129,66 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
     [kasList, canInputKas]
   );
 
+  const kasUmumHuria = useMemo(
+    () => kasList.find((k) => k.id === 'kas-1' || k.kode === 'KAS-UMUM'),
+    [kasList]
+  );
+
   const sentralisasiKas = useMemo(
     () => kasList.find((k) => k.id === 'kas-9' || k.kode === 'KAS-SENTRAL'),
     [kasList]
   );
+
+  const selectedCategoryObj = useMemo(
+    () => categories.find((c) => c.id === categoryId) || null,
+    [categories, categoryId]
+  );
+
+  const isPeleanCategorySelected = useMemo(
+    () => type === 'income' && incomeMode === 'single' && isPeleanBulananTahunanCategory(selectedCategoryObj),
+    [type, incomeMode, selectedCategoryObj]
+  );
+
+  const availableLingkunganNames = useMemo(() => {
+    const map = new Map<string, string>();
+    lingkunganList
+      .filter((l) => l.is_active !== false)
+      .sort((a, b) => (a.urutan ?? 99) - (b.urutan ?? 99))
+      .forEach((l) => {
+        const clean = l.nama.trim();
+        if (clean && !map.has(clean.toLowerCase())) map.set(clean.toLowerCase(), clean);
+      });
+    families.forEach((f) => {
+      const clean = (f.lingkungan || '').trim();
+      if (clean && !map.has(clean.toLowerCase())) map.set(clean.toLowerCase(), clean);
+    });
+    return Array.from(map.values());
+  }, [lingkunganList, families]);
+
+  const availableYears = useMemo(() => {
+    const yrs = new Set<number>(fiscalYears.map((fy) => fy.year));
+    yrs.add(settings.active_year || new Date().getFullYear());
+    return Array.from(yrs).sort((a, b) => b - a);
+  }, [fiscalYears, settings.active_year]);
+
+  const filteredFamiliesForDropdown = useMemo(() => {
+    const q = peleanFamilySearch.trim().toLowerCase();
+    return families
+      .filter((f) => f.is_active !== false)
+      .filter((f) => {
+        if (peleanLingkungan && f.lingkungan.trim().toLowerCase() !== peleanLingkungan.trim().toLowerCase()) {
+          return false;
+        }
+        if (q) {
+          return (
+            f.nama_keluarga.toLowerCase().includes(q) ||
+            f.lingkungan.toLowerCase().includes(q)
+          );
+        }
+        return true;
+      })
+      .sort((a, b) => a.nama_keluarga.localeCompare(b.nama_keluarga, 'id'));
+  }, [families, peleanLingkungan, peleanFamilySearch]);
 
   const inferExclusionForKas = (kId: string): SentralisasiExclusionType => {
     if (kId === 'kas-8') return 'transitoris';
@@ -96,55 +204,175 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
 
   useEffect(() => {
     if (isOpen) {
+      const todayStr = new Date().toISOString().split('T')[0];
       setError('');
-      setIncomeMode('single');
       setAmountInput('');
-      setDescription('');
       setReceiptNo('');
       setAttachmentUrl(null);
-      setTanggal(new Date().toISOString().split('T')[0]);
-
-      let initialKas = '';
-      if (defaultKasId && canInputKas(defaultKasId)) {
-        initialKas = defaultKasId;
-      } else if (selectableKas.length > 0) {
-        const nonSentral = selectableKas.find((k) => k.id !== 'kas-9');
-        initialKas = (nonSentral || selectableKas[0]).id;
-      }
-      setKasId(initialKas);
-      setIsSentralisasi(inferDefaultSentralisasiForKas(initialKas));
-      setExclusionType(inferExclusionForKas(initialKas));
+      setTanggal(todayStr);
+      setDescriptionManuallyEdited(false);
+      setPeleanFamilySearch('');
 
       if (storageAccounts.length > 0) {
         const activeStor = storageAccounts.filter((s) => s.is_active);
         setStorageAccountId((activeStor[0] || storageAccounts[0]).id);
       }
 
-      setAllocations([
-        {
-          rowId: `row-${Date.now()}-1`,
-          kas_id: initialKas,
-          sub_description: 'Ke Kas Huria',
-          amountInput: '',
-          is_sentralisasi: inferDefaultSentralisasiForKas(initialKas),
-          exclusion_type: inferExclusionForKas(initialKas),
-        },
-      ]);
+      if (defaultPeleanTaon) {
+        setType('income');
+        setIncomeMode('single');
+        const peleanCat =
+          categories.find((c) => c.tipe === 'income' && c.is_active && isPeleanBulananTahunanCategory(c)) ||
+          categories.find((c) => c.tipe === 'income' && c.is_active);
+        if (peleanCat) setCategoryId(peleanCat.id);
+        setIsPeleanTaonMode(true);
+        const yr = defaultPeleanTaon.year || settings.active_year || new Date().getFullYear();
+        setPeleanYear(yr);
+        const ling = defaultPeleanTaon.lingkungan || availableLingkunganNames[0] || '';
+        setPeleanLingkungan(ling);
+        if (defaultPeleanTaon.familyId) {
+          setPeleanUseManualFamily(false);
+          setPeleanFamilyId(defaultPeleanTaon.familyId);
+          setPeleanManualFamilyName('');
+        } else if (defaultPeleanTaon.familyName) {
+          setPeleanUseManualFamily(true);
+          setPeleanFamilyId('');
+          setPeleanManualFamilyName(defaultPeleanTaon.familyName);
+        } else {
+          setPeleanUseManualFamily(false);
+          setPeleanFamilyId('');
+          setPeleanManualFamilyName('');
+        }
+        setPeleanSaveManualToMaster(true);
+        setTanggalWarta(getNextSunday(todayStr));
+        const targetHuria = kasUmumHuria?.id || 'kas-1';
+        setKasId(targetHuria);
+        setIsSentralisasi(true);
+        setExclusionType('lainnya');
+        const famLabel =
+          defaultPeleanTaon.familyName ||
+          families.find((f) => f.id === defaultPeleanTaon.familyId)?.nama_keluarga ||
+          '';
+        setDescription(
+          famLabel
+            ? `Pelean Taon ${yr} - ${famLabel}${ling ? ` (Lingkungan ${ling})` : ''}`
+            : ''
+        );
+      } else {
+        setType('expense');
+        setIncomeMode('single');
+        setTanggalWarta('');
+        setDescription('');
+        setIsPeleanTaonMode(false);
+        setPeleanYear(settings.active_year || new Date().getFullYear());
+        setPeleanLingkungan(availableLingkunganNames[0] || '');
+        setPeleanFamilyId('');
+        setPeleanUseManualFamily(false);
+        setPeleanManualFamilyName('');
+        setPeleanSaveManualToMaster(true);
+
+        let initialKas = '';
+        if (defaultKasId && canInputKas(defaultKasId)) {
+          initialKas = defaultKasId;
+        } else if (selectableKas.length > 0) {
+          const nonSentral = selectableKas.find((k) => k.id !== 'kas-9');
+          initialKas = (nonSentral || selectableKas[0]).id;
+        }
+        setKasId(initialKas);
+        setIsSentralisasi(inferDefaultSentralisasiForKas(initialKas));
+        setExclusionType(inferExclusionForKas(initialKas));
+
+        setAllocations([
+          {
+            rowId: `row-${Date.now()}-1`,
+            kas_id: initialKas,
+            sub_description: 'Ke Kas Huria',
+            amountInput: '',
+            is_sentralisasi: inferDefaultSentralisasiForKas(initialKas),
+            exclusion_type: inferExclusionForKas(initialKas),
+          },
+        ]);
+      }
     }
-  }, [isOpen, defaultKasId]);
+  }, [isOpen, defaultKasId, defaultPeleanTaon]);
 
   useEffect(() => {
+    if (!isOpen) return;
+    if (defaultPeleanTaon && type === 'income') {
+      const peleanCat = categories.find(
+        (c) => c.tipe === 'income' && c.is_active && isPeleanBulananTahunanCategory(c)
+      );
+      if (peleanCat) {
+        setCategoryId(peleanCat.id);
+        return;
+      }
+    }
     const validCategories = categories.filter((c) => c.tipe === type && c.is_active);
     if (validCategories.length > 0) {
-      setCategoryId(validCategories[0].id);
+      setCategoryId((prev) =>
+        validCategories.some((c) => c.id === prev) ? prev : validCategories[0].id
+      );
     } else {
       setCategoryId('');
     }
-  }, [type, categories]);
+  }, [type, categories, isOpen, defaultPeleanTaon]);
+
+  // Auto-enforce Kas Huria + Sentralisasi 55% whenever Pelean Taon mode is active
+  useEffect(() => {
+    if (isPeleanCategorySelected && isPeleanTaonMode) {
+      if (kasUmumHuria && kasId !== kasUmumHuria.id) {
+        setKasId(kasUmumHuria.id);
+      }
+      if (!isSentralisasi) {
+        setIsSentralisasi(true);
+      }
+      if (!tanggalWarta) {
+        setTanggalWarta(getNextSunday(tanggal));
+      }
+    }
+  }, [isPeleanCategorySelected, isPeleanTaonMode, kasUmumHuria]);
+
+  // Auto-generate description for Pelean Taon unless edited manually
+  useEffect(() => {
+    if (!isPeleanCategorySelected || !isPeleanTaonMode || descriptionManuallyEdited) return;
+    const selectedFamObj = families.find((f) => f.id === peleanFamilyId);
+    const resolvedFam = peleanUseManualFamily
+      ? peleanManualFamilyName.trim()
+      : selectedFamObj?.nama_keluarga || '';
+    const resolvedLing = peleanLingkungan || selectedFamObj?.lingkungan || '';
+    if (resolvedFam) {
+      setDescription(
+        `Pelean Taon ${peleanYear} - ${resolvedFam}${resolvedLing ? ` (Lingkungan ${resolvedLing})` : ''}`
+      );
+    }
+  }, [
+    isPeleanCategorySelected,
+    isPeleanTaonMode,
+    peleanYear,
+    peleanFamilyId,
+    peleanUseManualFamily,
+    peleanManualFamilyName,
+    peleanLingkungan,
+    families,
+    descriptionManuallyEdited,
+  ]);
 
   const handleCategoryChange = (newCatId: string) => {
     setCategoryId(newCatId);
     const cat = categories.find((c) => c.id === newCatId);
+    if (type === 'income' && isPeleanBulananTahunanCategory(cat)) {
+      setIsPeleanTaonMode(true);
+      if (kasUmumHuria) setKasId(kasUmumHuria.id);
+      setIsSentralisasi(true);
+      if (!peleanLingkungan && availableLingkunganNames.length > 0) {
+        setPeleanLingkungan(availableLingkunganNames[0]);
+      }
+      if (!tanggalWarta) {
+        setTanggalWarta(getNextSunday(tanggal));
+      }
+      return;
+    }
+    setIsPeleanTaonMode(false);
     if (!defaultKasId && cat?.default_kas_id && canInputKas(cat.default_kas_id)) {
       setKasId(cat.default_kas_id);
       setExclusionType(inferExclusionForKas(cat.default_kas_id));
@@ -308,6 +536,7 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
       setIsSubmitting(true);
       const res = await addCompoundIncomeTransactions({
         tanggal,
+        tanggal_warta: tanggalWarta || null,
         storage_account_id: storageAccountId,
         category_id: categoryId || null,
         description: description.trim(),
@@ -337,7 +566,52 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
       return;
     }
 
-    if (!kasId) {
+    const activePeleanMode = isPeleanCategorySelected && isPeleanTaonMode;
+    let resolvedKasId = kasId;
+    let resolvedFamilyId: string | null = null;
+    let resolvedFamilyName: string | null = null;
+    let resolvedLingkungan: string | null = null;
+    let resolvedPeleanYear: number | null = null;
+
+    if (activePeleanMode) {
+      const targetHuriaKas = kasUmumHuria?.id || 'kas-1';
+      if (!canInputKas(targetHuriaKas)) {
+        setError('Anda tidak memiliki hak akses input pada Kas Umum Huria (Pelean Taon wajib masuk ke Kas Huria).');
+        return;
+      }
+      resolvedKasId = targetHuriaKas;
+      resolvedPeleanYear = peleanYear;
+
+      if (!peleanLingkungan.trim()) {
+        setError('Pilih Lingkungan jemaat terlebih dahulu.');
+        return;
+      }
+      resolvedLingkungan = peleanLingkungan.trim();
+
+      if (peleanUseManualFamily) {
+        if (!peleanManualFamilyName.trim()) {
+          setError('Masukkan Nama Keluarga secara manual.');
+          return;
+        }
+        resolvedFamilyName = peleanManualFamilyName.trim();
+      } else {
+        const famObj = families.find((f) => f.id === peleanFamilyId);
+        if (!famObj) {
+          setError('Pilih Nama Keluarga dari daftar atau gunakan opsi Input Manual.');
+          return;
+        }
+        resolvedFamilyId = famObj.id;
+        resolvedFamilyName = famObj.nama_keluarga;
+        if (!resolvedLingkungan) resolvedLingkungan = famObj.lingkungan;
+      }
+
+      if (!tanggalWarta) {
+        setError('Pilih Tanggal Warta (kalender) untuk pencatatan Pelean Taon.');
+        return;
+      }
+    }
+
+    if (!resolvedKasId) {
       setError('Pilih Kas tujuan.');
       return;
     }
@@ -350,19 +624,32 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
     }
 
     const d = new Date(tanggal);
-    if (isPeriodClosed(d.getFullYear(), d.getMonth() + 1, kasId)) {
+    if (isPeriodClosed(d.getFullYear(), d.getMonth() + 1, resolvedKasId)) {
       setError(`Periode ${d.getMonth() + 1}/${d.getFullYear()} untuk kas ini sudah ditutup.`);
       return;
     }
 
     setIsSubmitting(true);
 
-    const useSentralisasi = type === 'income' ? isSentralisasi : false;
+    // If manual family requested to save to master data, persist it first
+    if (activePeleanMode && peleanUseManualFamily && peleanSaveManualToMaster && resolvedFamilyName && resolvedLingkungan) {
+      const famSave = await saveFamily({
+        nama_keluarga: resolvedFamilyName,
+        lingkungan: resolvedLingkungan,
+        is_active: true,
+      });
+      if (famSave.success && famSave.id) {
+        resolvedFamilyId = famSave.id;
+      }
+    }
+
+    const useSentralisasi = type === 'income' ? (activePeleanMode ? true : isSentralisasi) : false;
     const { bpskAmount, huriaAmount } = splitSentralisasiAmount(rawAmount, useSentralisasi);
 
     const result = await addTransaction({
       tanggal,
-      kas_id: kasId,
+      tanggal_warta: tanggalWarta || null,
+      kas_id: resolvedKasId,
       storage_account_id: storageAccountId,
       category_id: categoryId || null,
       type,
@@ -378,8 +665,12 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
       huria_amount: type === 'income' ? huriaAmount : undefined,
       sentralisasi_exclusion_type:
         type === 'income' && !useSentralisasi
-          ? exclusionType || inferExclusionForKas(kasId)
+          ? exclusionType || inferExclusionForKas(resolvedKasId)
           : null,
+      pelean_taon_year: resolvedPeleanYear,
+      family_id: resolvedFamilyId,
+      family_name: resolvedFamilyName,
+      lingkungan: resolvedLingkungan,
     });
 
     setIsSubmitting(false);
@@ -501,17 +792,40 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Tanggal <span className="text-rose-500">*</span>
+                {isPeleanCategorySelected && isPeleanTaonMode ? 'Tanggal Penerimaan' : 'Tanggal Transaksi'}{' '}
+                <span className="text-rose-500">*</span>
               </label>
               <input
                 type="date"
                 value={tanggal}
                 onChange={(e) => setTanggal(e.target.value)}
-                className="w-full h-10 text-xs px-3 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 required
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between gap-1 mb-1">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Tanggal Warta {isPeleanCategorySelected && isPeleanTaonMode ? <span className="text-rose-500">*</span> : '(Opsional)'}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setTanggalWarta(getNextSunday(tanggal))}
+                  className="text-[10px] font-semibold text-blue-700 hover:underline"
+                  title="Isi otomatis hari Minggu terdekat"
+                >
+                  Minggu Berikutnya
+                </button>
+              </div>
+              <input
+                type="date"
+                value={tanggalWarta}
+                onChange={(e) => setTanggalWarta(e.target.value)}
+                className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
               />
             </div>
 
@@ -524,33 +838,45 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
                 value={receiptNo}
                 onChange={(e) => setReceiptNo(e.target.value)}
                 placeholder="BKM-01 / KW-10"
-                className="w-full h-10 text-xs px-3 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
               />
             </div>
           </div>
 
-          {/* Kas Tujuan (Single mode) */}
+          {/* Kas Tujuan (Single mode - locked to Kas Huria if Pelean Taon mode) */}
           {(type === 'expense' || incomeMode === 'single') && (
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 {type === 'income' ? 'Kas Tujuan' : 'Kas Sumber'} <span className="text-rose-500">*</span>
               </label>
-              <select
-                value={kasId}
-                onChange={(e) => handleKasChange(e.target.value)}
-                className="w-full h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
-                required
-              >
-                {selectableKas.length === 0 ? (
-                  <option value="">Tidak ada akses kas</option>
-                ) : (
-                  selectableKas.map((k) => (
-                    <option key={k.id} value={k.id}>
-                      {k.nama} ({k.kode})
-                    </option>
-                  ))
-                )}
-              </select>
+              {isPeleanCategorySelected && isPeleanTaonMode ? (
+                <div className="h-11 sm:h-10 px-3 rounded-xl border border-blue-200 bg-blue-50/70 flex items-center justify-between text-xs text-blue-950 font-semibold">
+                  <span className="flex items-center gap-1.5">
+                    <Landmark className="w-3.5 h-3.5 text-blue-700" />
+                    {kasUmumHuria?.nama || 'Kas Umum Huria'} ({kasUmumHuria?.kode || 'KAS-UMUM'})
+                  </span>
+                  <span className="text-[10px] font-bold text-blue-700 bg-white px-2 py-0.5 rounded-md border border-blue-200">
+                    Otomatis Pelean Taon
+                  </span>
+                </div>
+              ) : (
+                <select
+                  value={kasId}
+                  onChange={(e) => handleKasChange(e.target.value)}
+                  className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                  required
+                >
+                  {selectableKas.length === 0 ? (
+                    <option value="">Tidak ada akses kas</option>
+                  ) : (
+                    selectableKas.map((k) => (
+                      <option key={k.id} value={k.id}>
+                        {k.nama} ({k.kode})
+                      </option>
+                    ))
+                  )}
+                </select>
+              )}
             </div>
           )}
 
@@ -562,7 +888,7 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
               <select
                 value={storageAccountId}
                 onChange={(e) => setStorageAccountId(e.target.value)}
-                className="w-full h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 required
               >
                 {storageAccounts
@@ -582,7 +908,7 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
               <select
                 value={categoryId}
                 onChange={(e) => handleCategoryChange(e.target.value)}
-                className="w-full h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                className="w-full h-11 sm:h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 required
               >
                 {categories
@@ -596,8 +922,199 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
             </div>
           </div>
 
-          {/* SENTRALISASI DETERMINATION AT TRANSACTION ENTRY (SINGLE INCOME) */}
-          {type === 'income' && incomeMode === 'single' && (
+          {/* FITUR KHUSUS PELEAN TAON (PERSEMBAHAN TAHUNAN KELUARGA) */}
+          {isPeleanCategorySelected && (
+            <div className="p-3.5 rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50/90 to-indigo-50/50 space-y-3 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-900">Persembahan Tahunan (Pelean Taon)</div>
+                    <div className="text-[11px] text-slate-600">
+                      Pencatatan kewajiban tahunan keluarga per lingkungan
+                    </div>
+                  </div>
+                </div>
+                <label className="inline-flex items-center gap-2 cursor-pointer bg-white px-2.5 py-1.5 rounded-xl border border-blue-200 font-semibold text-[11px] text-blue-900">
+                  <input
+                    type="checkbox"
+                    checked={isPeleanTaonMode}
+                    onChange={(e) => setIsPeleanTaonMode(e.target.checked)}
+                    className="rounded border-blue-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                  />
+                  <span>Mode Pelean Taon</span>
+                </label>
+              </div>
+
+              {isPeleanTaonMode && (
+                <div className="space-y-3 pt-1 border-t border-blue-200/70">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Tahun Anggaran <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={peleanYear}
+                        onChange={(e) => setPeleanYear(Number(e.target.value))}
+                        className="w-full h-11 sm:h-10 px-3 rounded-xl border border-blue-200 bg-white text-xs font-semibold text-slate-900"
+                      >
+                        {availableYears.map((yr) => (
+                          <option key={yr} value={yr}>
+                            Tahun Anggaran {yr}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Nama Lingkungan <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={peleanLingkungan}
+                        onChange={(e) => {
+                          setPeleanLingkungan(e.target.value);
+                          setPeleanFamilyId('');
+                        }}
+                        className="w-full h-11 sm:h-10 px-3 rounded-xl border border-blue-200 bg-white text-xs font-semibold text-slate-900"
+                      >
+                        <option value="">-- Pilih Lingkungan --</option>
+                        {availableLingkunganNames.map((ling) => (
+                          <option key={ling} value={ling}>
+                            Lingkungan {ling}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Family Selector vs Manual Entry Toggle */}
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <label className="text-xs font-semibold text-slate-700">
+                        Nama Keluarga Jemaat <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="inline-flex p-0.5 rounded-lg bg-white border border-blue-200">
+                        <button
+                          type="button"
+                          onClick={() => setPeleanUseManualFamily(false)}
+                          className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors ${
+                            !peleanUseManualFamily
+                              ? 'bg-blue-600 text-white'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Pilih Database ({filteredFamiliesForDropdown.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPeleanUseManualFamily(true)}
+                          className={`px-2.5 py-1 rounded-md text-[11px] font-semibold inline-flex items-center gap-1 transition-colors ${
+                            peleanUseManualFamily
+                              ? 'bg-blue-600 text-white'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <UserPlus className="w-3 h-3" />
+                          <span>Input Manual</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {!peleanUseManualFamily ? (
+                      <div className="space-y-2">
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            value={peleanFamilySearch}
+                            onChange={(e) => setPeleanFamilySearch(e.target.value)}
+                            placeholder="Cari cepat nama keluarga..."
+                            className="w-full h-10 pl-8 pr-3 rounded-xl border border-blue-200 bg-white text-xs"
+                          />
+                        </div>
+                        <select
+                          value={peleanFamilyId}
+                          onChange={(e) => {
+                            const fId = e.target.value;
+                            setPeleanFamilyId(fId);
+                            const fam = families.find((f) => f.id === fId);
+                            if (fam?.lingkungan) setPeleanLingkungan(fam.lingkungan);
+                          }}
+                          className="w-full h-11 sm:h-10 px-3 rounded-xl border border-blue-200 bg-white text-xs font-medium text-slate-900"
+                        >
+                          <option value="">
+                            {filteredFamiliesForDropdown.length === 0
+                              ? '-- Belum ada keluarga cocok (gunakan Input Manual) --'
+                              : `-- Pilih Nama Keluarga (${filteredFamiliesForDropdown.length} tersedia) --`}
+                          </option>
+                          {filteredFamiliesForDropdown.map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.nama_keluarga} {!peleanLingkungan ? `(${f.lingkungan})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        {filteredFamiliesForDropdown.length === 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPeleanUseManualFamily(true);
+                              if (peleanFamilySearch.trim()) {
+                                setPeleanManualFamilyName(peleanFamilySearch.trim());
+                              }
+                            }}
+                            className="text-[11px] font-semibold text-blue-700 hover:underline inline-flex items-center gap-1"
+                          >
+                            <UserPlus className="w-3.5 h-3.5" />
+                            <span>Keluarga belum terdaftar? Klik untuk input manual</span>
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={peleanManualFamilyName}
+                          onChange={(e) => setPeleanManualFamilyName(e.target.value)}
+                          placeholder="Contoh: Kel. St. R. Sinaga / br Sitepu"
+                          className="w-full h-11 sm:h-10 px-3 rounded-xl border border-blue-200 bg-white text-xs font-medium text-slate-900"
+                        />
+                        <label className="inline-flex items-center gap-2 text-[11px] text-slate-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={peleanSaveManualToMaster}
+                            onChange={(e) => setPeleanSaveManualToMaster(e.target.checked)}
+                            className="rounded border-blue-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                          />
+                          <span>Sekaligus simpan keluarga baru ini ke Master Data Jemaat</span>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Auto-Sentralisasi Info Box */}
+                  <div className="p-2.5 rounded-xl bg-white border border-blue-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px]">
+                    <span className="text-slate-600 font-medium">
+                      Aturan Huria: Masuk Kas Umum Huria &amp; kena Sentralisasi 55%
+                    </span>
+                    <div className="flex items-center gap-3 font-mono tabular-nums">
+                      <span className="text-emerald-700">
+                        45% Huria: <strong>{formatRupiah(splitSentralisasiAmount(rawAmount, true).huriaAmount)}</strong>
+                      </span>
+                      <span className="text-blue-700">
+                        55% BPSK: <strong>{formatRupiah(splitSentralisasiAmount(rawAmount, true).bpskAmount)}</strong>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SENTRALISASI DETERMINATION AT TRANSACTION ENTRY (SINGLE INCOME - hidden when Pelean Taon enforces 55/45) */}
+          {type === 'income' && incomeMode === 'single' && !(isPeleanCategorySelected && isPeleanTaonMode) && (
             <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/80 space-y-2.5 text-xs">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-slate-700">Status Sentralisasi Transaksi</span>
@@ -874,7 +1391,10 @@ export const TransactionModal: React.FC<Props> = ({ isOpen, onClose, defaultKasI
             </label>
             <textarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                setDescriptionManuallyEdited(true);
+              }}
               rows={2}
               placeholder={
                 type === 'income' && incomeMode === 'multi'

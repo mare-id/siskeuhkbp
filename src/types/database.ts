@@ -287,6 +287,7 @@ export interface Category {
 export interface Transaction {
   id: string;
   tanggal: string; // YYYY-MM-DD
+  tanggal_warta?: string | null; // YYYY-MM-DD (Tanggal Warta Jemaat)
   kas_id: string;
   storage_account_id: string;
   category_id?: string | null;
@@ -332,6 +333,12 @@ export interface Transaction {
   audited_at?: string | null;
   audit_note?: string | null;
 
+  // Pelean Taon (Persembahan Tahunan Keluarga)
+  pelean_taon_year?: number | null;
+  family_id?: string | null;
+  family_name?: string | null;
+  lingkungan?: string | null;
+
   // Joined fields for display
   kas?: Kas;
   storage_account?: StorageAccount;
@@ -341,6 +348,7 @@ export interface Transaction {
   auditor?: Profile;
   transfer_target_kas?: Kas;
   transfer_target_storage?: StorageAccount;
+  family?: CongregationFamily;
 }
 
 export interface PeriodClosing {
@@ -1037,4 +1045,23 @@ export interface LaporanArusKasData {
   saldo_kas_akhir: number;
 }
 
+export interface ChurchLingkungan {
+  id: string;
+  nama: string;
+  kode?: string | null;
+  urutan: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
 
+export interface CongregationFamily {
+  id: string;
+  nama_keluarga: string;
+  lingkungan: string;
+  kepala_keluarga?: string | null;
+  notes?: string | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}

@@ -725,7 +725,7 @@ export const AuditPage: React.FC = () => {
                   });
                 }
               }}
-              className="px-3.5 py-2 min-h-[40px] bg-white/10 hover:bg-white/15 text-white border border-white/20 rounded-xl text-xs font-semibold inline-flex items-center gap-2 transition-colors"
+              className="px-3.5 py-2 min-h-[44px] sm:min-h-[40px] bg-white/10 hover:bg-white/15 text-white border border-white/20 rounded-xl text-xs font-semibold inline-flex items-center gap-2 transition-colors"
             >
               <Download className="w-4 h-4" />
               <span>Berita Acara PDF</span>
@@ -735,7 +735,7 @@ export const AuditPage: React.FC = () => {
           {canAssignAudit && (
             <button
               onClick={openNewEngagementModal}
-              className="px-4 py-2 min-h-[40px] bg-white text-slate-900 hover:bg-slate-100 rounded-xl text-xs font-semibold inline-flex items-center gap-2 transition-colors"
+              className="px-4 py-2 min-h-[44px] sm:min-h-[40px] bg-white text-slate-900 hover:bg-slate-100 rounded-xl text-xs font-semibold inline-flex items-center gap-2 transition-colors"
             >
               <Plus className="w-4 h-4" />
               <span>Buka Penugasan Audit</span>
@@ -748,7 +748,7 @@ export const AuditPage: React.FC = () => {
       <div className="flex items-center gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200/80 overflow-x-auto scrollbar-none">
         <button
           onClick={() => setActiveTab('penugasan')}
-          className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+          className={`px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
             activeTab === 'penugasan'
               ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/70'
               : 'text-slate-600 hover:text-slate-900'
@@ -759,7 +759,7 @@ export const AuditPage: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveTab('transaksi')}
-          className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+          className={`px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
             activeTab === 'transaksi'
               ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/70'
               : 'text-slate-600 hover:text-slate-900'
@@ -771,7 +771,7 @@ export const AuditPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('berkala')}
-          className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+          className={`px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
             activeTab === 'berkala'
               ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/70'
               : 'text-slate-600 hover:text-slate-900'
@@ -783,7 +783,7 @@ export const AuditPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('pemeriksaan')}
-          className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+          className={`px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
             activeTab === 'pemeriksaan'
               ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/70'
               : 'text-slate-600 hover:text-slate-900'
@@ -795,7 +795,7 @@ export const AuditPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('temuan')}
-          className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap relative ${
+          className={`px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap relative ${
             activeTab === 'temuan'
               ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/70'
               : 'text-slate-600 hover:text-slate-900'
@@ -807,7 +807,7 @@ export const AuditPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('opname')}
-          className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+          className={`px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
             activeTab === 'opname'
               ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/70'
               : 'text-slate-600 hover:text-slate-900'
@@ -819,7 +819,7 @@ export const AuditPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('anggota')}
-          className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+          className={`px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
             activeTab === 'anggota'
               ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/70'
               : 'text-slate-600 hover:text-slate-900'
@@ -831,7 +831,7 @@ export const AuditPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('arsip')}
-          className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+          className={`px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
             activeTab === 'arsip'
               ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/70'
               : 'text-slate-600 hover:text-slate-900'
@@ -910,7 +910,109 @@ export const AuditPage: React.FC = () => {
                 )}
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+                {/* Mobile Cards: Penugasan Audit */}
+                <div className="md:hidden divide-y divide-slate-100">
+                  {auditEngagements.map((eng) => {
+                    const engReviews = auditReviews.filter((r) => r.engagement_id === eng.id);
+                    const engFindings = auditFindings.filter((f) => f.engagement_id === eng.id);
+                    const engOpinion = auditFinalOpinions.find((o) => o.engagement_id === eng.id);
+                    const jenisLabel =
+                      eng.jenis === 'semester_1'
+                        ? 'Semester I'
+                        : eng.jenis === 'semester_2'
+                        ? 'Semester II'
+                        : eng.jenis === 'opening'
+                        ? 'Saldo Awal'
+                        : 'LPJ Tahunan (ISAK 35)';
+
+                    return (
+                      <div key={eng.id} className="p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-mono text-xs font-bold text-slate-900">T.A. {eng.tahun}</span>
+                              <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-800 text-[10px] font-bold">
+                                {jenisLabel}
+                              </span>
+                            </div>
+                            <h4 className="font-bold text-sm text-slate-900 mt-1">{eng.judul}</h4>
+                          </div>
+                          <span
+                            className={`shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                              eng.status === 'completed'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : eng.status === 'cancelled'
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : eng.status === 'draft'
+                                ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}
+                          >
+                            {eng.status === 'completed'
+                              ? 'Selesai'
+                              : eng.status === 'cancelled'
+                              ? 'Dibatalkan'
+                              : eng.status === 'draft'
+                              ? 'Draf'
+                              : 'Berjalan'}
+                          </span>
+                        </div>
+                        {eng.deskripsi && <p className="text-xs text-slate-500 leading-relaxed">{eng.deskripsi}</p>}
+                        <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-100 text-[11px]">
+                          <div>
+                            <span className="text-slate-400 block">Dibuka / Batas</span>
+                            <span className="font-semibold text-slate-800">{formatDateIndo(eng.batas_waktu)}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block">Progres Audit</span>
+                            <span className="font-semibold text-slate-800">{engReviews.length}/3 LK • {engFindings.length} Temuan</span>
+                          </div>
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          {engOpinion ? 'Opini Final telah ditetapkan' : 'Menunggu penetapan Opini Final'}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedEngId(eng.id);
+                              setActiveTab('pemeriksaan');
+                            }}
+                            className="flex-1 min-h-[44px] px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors"
+                          >
+                            Lihat Opini
+                          </button>
+                          {canAssignAudit && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openEditEngagementModal(eng)}
+                                className="min-h-[44px] px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl inline-flex items-center gap-1.5 transition-colors"
+                              >
+                                <Edit2 className="w-3.5 h-3.5 text-blue-600" />
+                                <span>Ubah</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setConfirmForceDeleteEng(false);
+                                  setDeleteEngReason('');
+                                  setDeletingEng(eng);
+                                }}
+                                className="min-h-[44px] px-3.5 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl inline-flex items-center gap-1.5 transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                                <span>Hapus</span>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-100">
                     <tr>
@@ -1035,7 +1137,8 @@ export const AuditPage: React.FC = () => {
                     })}
                   </tbody>
                 </table>
-              </div>
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -1062,7 +1165,7 @@ export const AuditPage: React.FC = () => {
               {isCurrentUserAuditor && (
                 <button
                   onClick={handleBulkVerifyCurrentFilter}
-                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors whitespace-nowrap self-start md:self-auto"
+                  className="px-3.5 py-2 min-h-[44px] sm:min-h-0 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors whitespace-nowrap self-start md:self-auto"
                 >
                   <CheckCircle className="w-4 h-4" />
                   <span>Verifikasi Cepat Transaksi Pada Filter Ini</span>
@@ -1077,7 +1180,7 @@ export const AuditPage: React.FC = () => {
                 <select
                   value={txPeriodFilter}
                   onChange={(e) => setTxPeriodFilter(e.target.value as any)}
-                  className="w-full p-2 rounded-xl border border-slate-200 bg-white font-medium"
+                  className="w-full p-2 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200 bg-white font-medium"
                 >
                   <option value="all">Semua Periode 2026</option>
                   <option value="tw_1">Triwulan I (Jan - Mar)</option>
@@ -1095,7 +1198,7 @@ export const AuditPage: React.FC = () => {
                 <select
                   value={txKasFilter}
                   onChange={(e) => setTxKasFilter(e.target.value)}
-                  className="w-full p-2 rounded-xl border border-slate-200 bg-white font-medium"
+                  className="w-full p-2 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200 bg-white font-medium"
                 >
                   <option value="all">Semua Kas Huria ({kasList.length})</option>
                   {kasList.map((k) => (
@@ -1111,7 +1214,7 @@ export const AuditPage: React.FC = () => {
                 <select
                   value={txStatusFilter}
                   onChange={(e) => setTxStatusFilter(e.target.value as any)}
-                  className="w-full p-2 rounded-xl border border-slate-200 bg-white font-medium"
+                  className="w-full p-2 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200 bg-white font-medium"
                 >
                   <option value="all">Semua Status Audit</option>
                   <option value="unverified">Belum Diverifikasi</option>
@@ -1129,7 +1232,7 @@ export const AuditPage: React.FC = () => {
                     value={txSearch}
                     onChange={(e) => setTxSearch(e.target.value)}
                     placeholder="No. BKM / BKK / Uraian..."
-                    className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden"
+                    className="w-full pl-8 pr-3 py-2 min-h-[44px] sm:min-h-0 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden"
                   />
                 </div>
               </div>
@@ -1192,7 +1295,141 @@ export const AuditPage: React.FC = () => {
 
           {/* Transactions Table */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
+            {/* Mobile Cards: Verifikasi Transaksi */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {filteredTxList.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400">
+                  Tidak ada transaksi yang cocok dengan kriteria filter pencarian.
+                </div>
+              ) : (
+                filteredTxList.map((tx) => {
+                  const kas = kasList.find((k) => k.id === tx.kas_id);
+                  const cat = categories.find((c) => c.id === tx.category_id);
+                  const stor = storageAccounts.find((s) => s.id === tx.storage_account_id);
+                  const auditorProfile = profiles.find((p) => p.id === tx.audited_by);
+
+                  return (
+                    <div key={tx.id} className="p-4 space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                            <span className="font-semibold text-slate-900">{formatDateIndo(tx.tanggal)}</span>
+                            <span className="font-mono text-[11px] text-slate-400">• {tx.receipt_no || tx.id}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 mt-1">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: kas?.warna }} />
+                            <span className="truncate">{kas?.nama || tx.kas_id}</span>
+                          </div>
+                          {stor?.nama && <div className="text-[11px] text-slate-400">{stor.nama}</div>}
+                        </div>
+                        <span
+                          className={`shrink-0 font-mono font-bold text-sm tabular-nums ${
+                            tx.type === 'income'
+                              ? 'text-emerald-700'
+                              : tx.type === 'expense'
+                              ? 'text-rose-700'
+                              : 'text-indigo-700'
+                          }`}
+                        >
+                          {tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}
+                          {formatRupiah(tx.amount)}
+                        </span>
+                      </div>
+
+                      <div className="text-xs">
+                        <div className="text-[10px] font-semibold text-slate-500 uppercase">
+                          {cat?.nama || (tx.type === 'transfer_out' ? 'Transfer Keluar' : 'Transfer Masuk')}
+                        </div>
+                        <div className="text-slate-800 font-medium leading-relaxed mt-0.5">{tx.description}</div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        {tx.audit_status === 'verified' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle className="w-3 h-3" />
+                            <span>Lolos Uji Audit{auditorProfile ? ` (${auditorProfile.full_name})` : ''}</span>
+                          </span>
+                        ) : tx.audit_status === 'flagged' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>Ada Temuan Audit</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
+                            <Clock className="w-3 h-3" />
+                            <span>Belum Diperiksa</span>
+                          </span>
+                        )}
+
+                        {tx.attachment_url ? (
+                          <a
+                            href={tx.attachment_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold text-[11px]"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            <span>Lihat Nota</span>
+                          </a>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 italic">Tanpa Foto</span>
+                        )}
+                      </div>
+
+                      {tx.audit_note && (
+                        <div className={`text-[11px] p-2 rounded-lg ${tx.audit_status === 'flagged' ? 'bg-rose-50 text-rose-800' : 'bg-slate-50 text-slate-600 italic'}`}>
+                          {tx.audit_note}
+                        </div>
+                      )}
+
+                      {isCurrentUserAuditor && (
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            onClick={() => handleVerifySingleTx(tx.id, 'verified')}
+                            className={`flex-1 min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors ${
+                              tx.audit_status === 'verified'
+                                ? 'bg-emerald-600 text-white shadow-xs'
+                                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                            }`}
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                            <span>Lolos</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setFlaggingTx(tx);
+                              setFlaggingTitle(`Temuan Transaksi: ${tx.receipt_no || tx.id}`);
+                              setFlaggingDesc(tx.audit_note || `Pemeriksaan transaksi ${tx.description} senilai ${formatRupiah(tx.amount)} memerlukan kelengkapan kuitansi/nota.`);
+                              setFlaggingSeverity('wajib_diperbaiki');
+                              setFlaggingDueDate(new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]);
+                            }}
+                            className={`flex-1 min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors ${
+                              tx.audit_status === 'flagged'
+                                ? 'bg-amber-600 text-white shadow-xs'
+                                : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                            }`}
+                          >
+                            <AlertTriangle className="w-4 h-4" />
+                            <span>Temuan</span>
+                          </button>
+                          {tx.audit_status && tx.audit_status !== 'unverified' && (
+                            <button
+                              onClick={() => handleVerifySingleTx(tx.id, 'unverified')}
+                              className="min-w-[44px] min-h-[44px] p-2 text-slate-500 hover:text-slate-700 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center"
+                              title="Batalkan / Reset Status"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-100">
                   <tr>
@@ -1391,7 +1628,7 @@ export const AuditPage: React.FC = () => {
                 <button
                   key={p.code}
                   onClick={() => setSelectedPeriodCode(p.code as AuditPeriodCode)}
-                  className={`px-3.5 py-2 rounded-xl whitespace-nowrap flex items-center gap-1.5 transition-all ${
+                  className={`px-3.5 py-2 min-h-[44px] sm:min-h-0 rounded-xl whitespace-nowrap flex items-center gap-1.5 transition-all ${
                     selectedPeriodCode === p.code
                       ? 'bg-primary text-white shadow-xs font-bold'
                       : 'text-slate-600 hover:bg-slate-50'
@@ -1443,7 +1680,7 @@ export const AuditPage: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setPreviewingBa(currentPeriodVerification)}
-                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors shadow-xs"
+                    className="px-3.5 py-2 min-h-[44px] sm:min-h-0 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors shadow-xs"
                   >
                     <Printer className="w-4 h-4 text-slate-600" />
                     <span>Pratinjau & Cetak Berita Acara</span>
@@ -1569,17 +1806,17 @@ export const AuditPage: React.FC = () => {
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs text-slate-800 leading-relaxed space-y-2">
                   <p>{currentPeriodVerification.general_notes || 'Belum ada catatan simpulan pemeriksaan tertulis.'}</p>
                   {isCurrentUserAuditor && (
-                    <div className="pt-2 flex items-center gap-2">
+                    <div className="pt-2 flex flex-col sm:flex-row sm:items-center gap-2">
                       <input
                         type="text"
                         value={periodNotesInput}
                         onChange={(e) => setPeriodNotesInput(e.target.value)}
                         placeholder="Tambahkan / ubah catatan simpulan audit..."
-                        className="flex-1 p-2 rounded-xl border border-slate-200 bg-white text-xs"
+                        className="flex-1 p-2.5 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200 bg-white text-xs"
                       />
                       <button
                         onClick={handleSavePeriodNotes}
-                        className="px-3.5 py-2 bg-primary text-white text-xs font-semibold rounded-xl whitespace-nowrap shadow-xs"
+                        className="px-4 py-2 min-h-[44px] sm:min-h-0 bg-primary text-white text-xs font-semibold rounded-xl whitespace-nowrap shadow-xs"
                       >
                         Simpan Catatan
                       </button>
@@ -1590,7 +1827,7 @@ export const AuditPage: React.FC = () => {
 
               {/* 3 Members Collegial Signatures */}
               <div className="space-y-3 pt-3 border-t border-slate-100">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                       <Stamp className="w-4 h-4 text-primary" />
@@ -1606,7 +1843,7 @@ export const AuditPage: React.FC = () => {
                     !currentPeriodVerification.verified_by.includes(currentUser.id) && (
                       <button
                         onClick={() => handleSignPeriodVerification(currentPeriodVerification.period_code)}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                        className="px-4 py-2 min-h-[44px] sm:min-h-0 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all self-start sm:self-auto"
                       >
                         <Stamp className="w-4 h-4" />
                         <span>Bubuhkan Verifikasi & Tanda Tangan Saya</span>
@@ -2245,7 +2482,56 @@ export const AuditPage: React.FC = () => {
 
           {/* Members Table */}
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-            <table className="w-full text-left border-collapse text-xs">
+            {/* Mobile Cards: Anggota Badan Audit */}
+            <div className="md:hidden divide-y divide-gray-100">
+              {auditBodyMembers.map((member) => {
+                const prof = profiles.find((p) => p.id === member.user_id);
+                return (
+                  <div key={member.id} className="p-4 space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm text-gray-900">{prof?.full_name || 'Anggota'}</div>
+                        <div className="text-gray-400 text-[11px] truncate">{prof?.email}</div>
+                      </div>
+                      <span
+                        className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          member.aktif
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        {member.aktif ? 'Aktif' : 'Nonaktif'}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          member.jabatan === 'ketua' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                        }`}
+                      >
+                        {member.jabatan === 'ketua' ? 'Ketua Badan Audit' : 'Anggota Badan Audit'}
+                      </span>
+                      <span className="text-[11px] text-gray-500">
+                        {formatDateIndo(member.periode_mulai)} s.d. {formatDateIndo(member.periode_selesai)}
+                      </span>
+                    </div>
+                    {isAdmin && member.aktif && (
+                      <div className="pt-1">
+                        <button
+                          onClick={() => removeAuditBodyMember(member.id)}
+                          className="w-full min-h-[44px] px-3 py-2 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 font-semibold text-xs transition-colors"
+                        >
+                          Nonaktifkan Anggota
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-gray-50/80 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider">
                   <th className="p-3.5">Nama Anggota</th>
@@ -2305,7 +2591,8 @@ export const AuditPage: React.FC = () => {
                   );
                 })}
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -2380,11 +2667,12 @@ export const AuditPage: React.FC = () => {
 
       {/* MODAL 1: ISI LEMBAR KERJA REVIEW AUDIT */}
       {showReviewModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-xl w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4 max-h-[92dvh] overflow-y-auto shadow-xl mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="font-bold text-gray-900 text-base">Lembar Kerja Pemeriksaan Pribadi Auditor</h3>
-              <button onClick={() => setShowReviewModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowReviewModal(false)} className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -2454,16 +2742,16 @@ export const AuditPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 pt-3 border-t border-gray-100">
               <button
                 onClick={() => setShowReviewModal(false)}
-                className="px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-xs font-medium"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-xs font-medium"
               >
                 Batal
               </button>
               <button
                 onClick={handleSubmitMyReview}
-                className="px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold"
               >
                 Kirim Lembar Kerja
               </button>
@@ -2474,11 +2762,12 @@ export const AuditPage: React.FC = () => {
 
       {/* MODAL 2: TETAPKAN OPINI FINAL */}
       {showFinalizeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-lg w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4 max-h-[92dvh] overflow-y-auto shadow-xl mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="font-bold text-gray-900 text-base">Penetapan Opini Final & Berita Acara</h3>
-              <button onClick={() => setShowFinalizeModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowFinalizeModal(false)} className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -2518,16 +2807,16 @@ export const AuditPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 pt-3 border-t border-gray-100">
               <button
                 onClick={() => setShowFinalizeModal(false)}
-                className="px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-xs font-medium"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-xs font-medium"
               >
                 Batal
               </button>
               <button
                 onClick={handleFinalizeOpinion}
-                className="px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold"
               >
                 Sahkan & Terbitkan Berita Acara
               </button>
@@ -2538,17 +2827,18 @@ export const AuditPage: React.FC = () => {
 
       {/* MODAL 3: CATAT TEMUAN BARU */}
       {showFindingModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-lg w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4 max-h-[92dvh] overflow-y-auto shadow-xl mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="font-bold text-gray-900 text-base">Catat Temuan Pemeriksaan Audit Baru</h3>
-              <button onClick={() => setShowFindingModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowFindingModal(false)} className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Kas / Seksi Terkait</label>
                   <select
@@ -2610,16 +2900,16 @@ export const AuditPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 pt-3 border-t border-gray-100">
               <button
                 onClick={() => setShowFindingModal(false)}
-                className="px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-xs font-medium"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-xs font-medium"
               >
                 Batal
               </button>
               <button
                 onClick={handleSaveFinding}
-                className="px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold"
               >
                 Simpan Temuan
               </button>
@@ -2630,11 +2920,12 @@ export const AuditPage: React.FC = () => {
 
       {/* MODAL 4: TANGGAPAN / PENUTUPAN TEMUAN */}
       {selectedFindingId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4 max-h-[92dvh] overflow-y-auto shadow-xl mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="font-bold text-gray-900 text-base">Tindak Lanjut Temuan Audit</h3>
-              <button onClick={() => setSelectedFindingId(null)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setSelectedFindingId(null)} className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -2665,10 +2956,10 @@ export const AuditPage: React.FC = () => {
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 pt-3 border-t border-gray-100">
               <button
                 onClick={() => setSelectedFindingId(null)}
-                className="px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-xs font-medium"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-xs font-medium"
               >
                 Tutup
               </button>
@@ -2685,7 +2976,7 @@ export const AuditPage: React.FC = () => {
                   }
                   setSelectedFindingId(null);
                 }}
-                className="px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold"
               >
                 Simpan Tanggapan
               </button>
@@ -2696,11 +2987,12 @@ export const AuditPage: React.FC = () => {
 
       {/* MODAL 5: TAMBAH ANGGOTA AUDIT (ADMIN ONLY) */}
       {showAddMemberModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4 max-h-[92dvh] overflow-y-auto shadow-xl mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="font-bold text-gray-900 text-base">Tambah Anggota Badan Audit Huria</h3>
-              <button onClick={() => setShowAddMemberModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowAddMemberModal(false)} className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -2741,16 +3033,16 @@ export const AuditPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 pt-3 border-t border-gray-100">
               <button
                 onClick={() => setShowAddMemberModal(false)}
-                className="px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-xs font-medium"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-xs font-medium"
               >
                 Batal
               </button>
               <button
                 onClick={handleAddMember}
-                className="px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold"
               >
                 Tetapkan Anggota
               </button>
@@ -2761,8 +3053,9 @@ export const AuditPage: React.FC = () => {
 
       {/* MODAL 6: TAMBAH / UBAH PENUGASAN AUDIT */}
       {showNewEngModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-lg w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4 max-h-[92dvh] overflow-y-auto shadow-xl mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div>
                 <h3 className="font-bold text-gray-900 text-base">
@@ -2778,14 +3071,14 @@ export const AuditPage: React.FC = () => {
                   setShowNewEngModal(false);
                   setEditingEngId(null);
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-lg"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Tahun Anggaran</label>
                   <input
@@ -2835,7 +3128,7 @@ export const AuditPage: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Tanggal Dibuka</label>
                   <input
@@ -2873,7 +3166,7 @@ export const AuditPage: React.FC = () => {
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 pt-3 border-t border-gray-100">
               <button
                 type="button"
                 disabled={isSavingEng}
@@ -2881,7 +3174,7 @@ export const AuditPage: React.FC = () => {
                   setShowNewEngModal(false);
                   setEditingEngId(null);
                 }}
-                className="px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-xs font-medium disabled:opacity-50"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-xs font-medium disabled:opacity-50"
               >
                 Batal
               </button>
@@ -2889,7 +3182,7 @@ export const AuditPage: React.FC = () => {
                 type="button"
                 disabled={isSavingEng}
                 onClick={handleSaveEngagement}
-                className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-semibold disabled:opacity-50"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-semibold disabled:opacity-50"
               >
                 {isSavingEng ? 'Menyimpan...' : editingEngId ? 'Simpan Perubahan' : 'Buka Penugasan'}
               </button>
@@ -2900,8 +3193,9 @@ export const AuditPage: React.FC = () => {
 
       {/* MODAL 6B: KONFIRMASI HAPUS PENUGASAN AUDIT */}
       {deletingEng && canAssignAudit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl border border-slate-200">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-lg w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4 max-h-[92dvh] overflow-y-auto shadow-xl border border-slate-200 mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-3 text-rose-600">
                 <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
@@ -2920,7 +3214,7 @@ export const AuditPage: React.FC = () => {
                   setConfirmForceDeleteEng(false);
                   setDeleteEngReason('');
                 }}
-                className="text-slate-400 hover:text-slate-600"
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2983,7 +3277,7 @@ export const AuditPage: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 pt-3 border-t border-slate-100">
               <button
                 type="button"
                 disabled={isDeletingEng}
@@ -2992,7 +3286,7 @@ export const AuditPage: React.FC = () => {
                   setConfirmForceDeleteEng(false);
                   setDeleteEngReason('');
                 }}
-                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-medium disabled:opacity-50"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-medium disabled:opacity-50"
               >
                 Batal
               </button>
@@ -3000,7 +3294,7 @@ export const AuditPage: React.FC = () => {
                 type="button"
                 disabled={isDeletingEng || (deletingEngMetrics.hasLinkedData && !confirmForceDeleteEng)}
                 onClick={handleExecuteDeleteEngagement}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-45 disabled:cursor-not-allowed"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 disabled:opacity-45 disabled:cursor-not-allowed"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{isDeletingEng ? 'Menghapus...' : 'Hapus Permanen'}</span>
@@ -3012,8 +3306,9 @@ export const AuditPage: React.FC = () => {
 
       {/* MODAL 7: TANDAI TEMUAN AUDIT TRANSAKSI */}
       {flaggingTx && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl border border-slate-100">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-lg w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4 max-h-[92dvh] overflow-y-auto shadow-xl border border-slate-100 mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
@@ -3024,7 +3319,7 @@ export const AuditPage: React.FC = () => {
                   <p className="text-[11px] text-slate-500">Koreksi kelengkapan bukti otentik, kuitansi, atau kepatuhan belanja</p>
                 </div>
               </div>
-              <button onClick={() => setFlaggingTx(null)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setFlaggingTx(null)} className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -3075,7 +3370,7 @@ export const AuditPage: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Tingkat Keparahan</label>
                   <select
@@ -3100,16 +3395,16 @@ export const AuditPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 pt-3 border-t border-slate-100">
               <button
                 onClick={() => setFlaggingTx(null)}
-                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-medium hover:bg-slate-50 transition-colors"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-medium hover:bg-slate-50 transition-colors"
               >
                 Batal
               </button>
               <button
                 onClick={handleSaveFlaggedTransaction}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 transition-colors"
               >
                 <AlertTriangle className="w-3.5 h-3.5" />
                 <span>Simpan Catatan Temuan</span>
@@ -3121,9 +3416,10 @@ export const AuditPage: React.FC = () => {
 
       {/* MODAL 8: PRATINJAU & CETAK BERITA ACARA PEMERIKSAAN BERKALA */}
       {previewingBa && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-6 shadow-2xl border border-slate-100 my-8">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-2xl w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-5 max-h-[92dvh] overflow-y-auto shadow-2xl border border-slate-100 sm:my-8 mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
               <div>
                 <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                   <Award className="w-4 h-4 text-indigo-600" />
@@ -3134,12 +3430,12 @@ export const AuditPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => window.print()}
-                  className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors"
+                  className="flex-1 sm:flex-none min-h-[44px] sm:min-h-0 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition-colors"
                 >
                   <Printer className="w-3.5 h-3.5" />
                   <span>Cetak Dokumen</span>
                 </button>
-                <button onClick={() => setPreviewingBa(null)} className="text-slate-400 hover:text-slate-600">
+                <button onClick={() => setPreviewingBa(null)} className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -3174,7 +3470,7 @@ export const AuditPage: React.FC = () => {
               </p>
 
               {/* Data Periode & Identitas */}
-              <div className="grid grid-cols-2 gap-2 bg-white p-3 rounded-lg border border-slate-200 text-[11px]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-white p-3 rounded-lg border border-slate-200 text-[11px]">
                 <div>
                   <span className="text-slate-500 block">Periode Pemeriksaan:</span>
                   <span className="font-bold text-slate-800">{previewingBa.period_title} ({previewingBa.tahun})</span>
@@ -3257,7 +3553,7 @@ export const AuditPage: React.FC = () => {
                 <p className="text-center font-bold text-slate-900 mb-4 text-[11px]">
                   BADAN AUDIT HURIA HKBP HUTARAJA
                 </p>
-                <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center text-[10px]">
                   {auditBodyMembers.map((m) => {
                     const prof = profiles.find((p) => p.id === m.user_id);
                     const sig = (previewingBa.verified_signatures || []).find(
@@ -3292,7 +3588,7 @@ export const AuditPage: React.FC = () => {
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 onClick={() => setPreviewingBa(null)}
-                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors"
               >
                 Tutup
               </button>

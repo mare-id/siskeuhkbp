@@ -203,6 +203,34 @@ create table if not exists public.transactions (
   sentralisasi_remitted_at timestamptz,
   sentralisasi_remitted_ref text,
   sentralisasi_exclusion_type text,
+  tanggal_warta date,
+  pelean_taon_year integer,
+  family_id text,
+  family_name text,
+  lingkungan text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Master Lingkungan / Wijk Jemaat
+create table if not exists public.church_lingkungan (
+  id text primary key default gen_random_uuid()::text,
+  nama text unique not null,
+  kode text,
+  urutan integer not null default 1,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Master Data Keluarga Jemaat per Lingkungan (untuk Pelean Taon)
+create table if not exists public.congregation_families (
+  id text primary key default gen_random_uuid()::text,
+  nama_keluarga text not null,
+  lingkungan text not null,
+  kepala_keluarga text,
+  notes text,
+  is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -762,6 +790,11 @@ do $$ begin
   alter table public.transactions add column if not exists sentralisasi_remitted_at timestamptz;
   alter table public.transactions add column if not exists sentralisasi_remitted_ref text;
   alter table public.transactions add column if not exists sentralisasi_exclusion_type text;
+  alter table public.transactions add column if not exists tanggal_warta date;
+  alter table public.transactions add column if not exists pelean_taon_year integer;
+  alter table public.transactions add column if not exists family_id text;
+  alter table public.transactions add column if not exists family_name text;
+  alter table public.transactions add column if not exists lingkungan text;
 
   -- Budgets workflow columns
   alter table public.budgets add column if not exists is_current_active boolean not null default false;
@@ -844,6 +877,8 @@ exception when others then null; end $$;
 create index if not exists idx_transactions_tanggal on public.transactions(tanggal desc);
 create index if not exists idx_transactions_kas_id on public.transactions(kas_id);
 create index if not exists idx_transactions_status on public.transactions(status);
+create index if not exists idx_transactions_pelean_taon on public.transactions(pelean_taon_year, lingkungan);
+create index if not exists idx_families_lingkungan on public.congregation_families(lingkungan);
 create index if not exists idx_budgets_kas_tahun on public.budgets(kas_id, tahun);
 create index if not exists idx_audit_logs_changed_at on public.audit_logs(changed_at desc);
 
@@ -869,7 +904,8 @@ declare
     'asset_depreciations', 'advances', 'advance_settlements', 'receivables_payables',
     'receivable_payable_payments', 'lpj_notes', 'lpj_settings', 'audit_body_members',
     'audit_engagements', 'audit_reviews', 'audit_findings', 'audit_final_opinions',
-    'cash_counts', 'audit_period_verifications', 'semester_reports', 'lpj_reports', 'lpj_exceptions'
+    'cash_counts', 'audit_period_verifications', 'semester_reports', 'lpj_reports', 'lpj_exceptions',
+    'church_lingkungan', 'congregation_families'
   ];
 begin
   foreach tbl in array tables loop
@@ -894,7 +930,8 @@ declare
     'asset_depreciations', 'advances', 'advance_settlements', 'receivables_payables',
     'receivable_payable_payments', 'lpj_notes', 'lpj_settings', 'audit_body_members',
     'audit_engagements', 'audit_reviews', 'audit_findings', 'audit_final_opinions',
-    'cash_counts', 'audit_period_verifications', 'semester_reports', 'lpj_reports', 'lpj_exceptions'
+    'cash_counts', 'audit_period_verifications', 'semester_reports', 'lpj_reports', 'lpj_exceptions',
+    'church_lingkungan', 'congregation_families'
   ];
 begin
   for tbl in select unnest(tables) loop
@@ -1120,4 +1157,14 @@ on conflict (id) do nothing;
 
 insert into public.lpj_exceptions (id, target_type, target_id, rule_code, reason, granted_by, granted_at) values
 ('exc-1', 'semester', 'sem-rep-1', 'advances_reviewed', 'Dispensasi awal contoh pada template sistem.', 'user-bendum', '2026-07-05T09:00:00Z')
+on conflict (id) do nothing;
+
+-- Lingkungan / Wijk Jemaat Awal HKBP Hutaraja
+insert into public.church_lingkungan (id, nama, kode, urutan, is_active) values
+('ling-efesus', 'Efesus', 'EFS', 1, true),
+('ling-letare', 'Letare', 'LTR', 2, true),
+('ling-exaudi', 'Exaudi', 'EXD', 3, true),
+('ling-judika', 'Judika', 'JDK', 4, true),
+('ling-galatia', 'Galatia', 'GLT', 5, true),
+('ling-jeremia', 'Jeremia', 'JRM', 6, true)
 on conflict (id) do nothing;

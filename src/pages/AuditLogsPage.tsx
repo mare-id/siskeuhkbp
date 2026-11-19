@@ -75,7 +75,7 @@ export const AuditLogsPage: React.FC = () => {
 
         <button
           onClick={handleExportExcel}
-          className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors self-start sm:self-auto"
+          className="px-3.5 py-2 min-h-[44px] sm:min-h-0 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-colors w-full sm:w-auto"
         >
           <FileSpreadsheet className="w-4 h-4" />
           <span>Ekspor Log ke Excel</span>
@@ -91,7 +91,7 @@ export const AuditLogsPage: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari pelaksana, tabel, atau catatan audit..."
-            className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200"
+            className="w-full pl-9 pr-3 py-2 min-h-[44px] sm:min-h-0 text-xs rounded-xl border border-slate-200"
           />
         </div>
 
@@ -99,7 +99,7 @@ export const AuditLogsPage: React.FC = () => {
           <select
             value={selectedAction}
             onChange={(e) => setSelectedAction(e.target.value)}
-            className="text-xs p-2 rounded-xl border border-slate-200 bg-white"
+            className="w-full sm:w-auto text-xs p-2 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200 bg-white"
           >
             <option value="all">Semua Jenis Aksi</option>
             <option value="INSERT">INSERT (Data Baru)</option>
@@ -113,8 +113,89 @@ export const AuditLogsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Audit Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+      {/* Mobile Audit Cards */}
+      <div className="md:hidden space-y-3">
+        {filteredLogs.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-8 text-center text-xs text-slate-400">
+            Tidak ada catatan audit yang cocok.
+          </div>
+        ) : (
+          filteredLogs.map((log) => {
+            const user = profiles.find((p) => p.id === log.changed_by);
+            const isExpanded = expandedLogId === log.id;
+
+            return (
+              <div key={log.id} className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 space-y-2.5 text-xs">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="font-bold text-slate-900 block truncate">
+                      {user?.full_name || log.changed_by || 'Sistem'}
+                    </span>
+                    <span className="text-[11px] text-slate-500 capitalize">
+                      {user?.role.replace('_', ' ') || 'Autentikasi'}
+                    </span>
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider shrink-0 ${
+                      log.action.includes('CLOSED')
+                        ? 'bg-slate-800 text-white'
+                        : log.action.includes('REOPEN')
+                        ? 'bg-amber-100 text-amber-800'
+                        : log.action.includes('TRANSFER')
+                        ? 'bg-indigo-100 text-indigo-800'
+                        : log.action === 'STATUS_CHANGE'
+                        ? 'bg-purple-100 text-purple-800'
+                        : 'bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    {log.action}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 pt-1 border-t border-slate-100">
+                  <span className="font-mono text-slate-600">{log.table_name}</span>
+                  <span className="font-mono">{formatDateTimeIndo(log.changed_at)}</span>
+                </div>
+
+                {log.notes && (
+                  <p className="text-slate-700 leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                    {log.notes}
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                  className="w-full min-h-[44px] px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold flex items-center justify-between transition-colors"
+                >
+                  <span>{isExpanded ? 'Tutup Rincian Data JSON' : 'Lihat Rincian Data JSON'}</span>
+                  {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+
+                {isExpanded && (
+                  <div className="bg-slate-900 text-slate-200 rounded-xl p-3 space-y-3 font-mono">
+                    <div>
+                      <span className="text-slate-400 font-bold block mb-1 text-[11px]">Old Data:</span>
+                      <pre className="bg-slate-950 p-2.5 rounded-lg overflow-x-auto text-[11px] text-slate-300">
+                        {JSON.stringify(log.old_data || {}, null, 2)}
+                      </pre>
+                    </div>
+                    <div>
+                      <span className="text-emerald-400 font-bold block mb-1 text-[11px]">New Data:</span>
+                      <pre className="bg-slate-950 p-2.5 rounded-lg overflow-x-auto text-[11px] text-emerald-300">
+                        {JSON.stringify(log.new_data || {}, null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop Audit Table */}
+      <div className="hidden md:block bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700">
             <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-100">

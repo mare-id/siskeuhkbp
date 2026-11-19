@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import {
   FixedAsset,
   FixedAssetCategory,
@@ -57,6 +58,7 @@ import { exportToExcel } from '../lib/exportUtils';
 import { PPKU_PANJAR_DEADLINE_DAYS } from '../lib/ppkuRules';
 
 export default function LpjDataPage() {
+  const { toast } = useToast();
   const { currentUser, isAdmin, isBendaharaUmum, isLeader, userKasAccess, canInputKas, canApproveKas, canManageLpjData } = useAuth();
   const {
     kasList,
@@ -119,6 +121,15 @@ export default function LpjDataPage() {
   // ---------------- CaLK Form State ----------------
   const [calkForm, setCalkForm] = useState(lpjNotes);
   const [calkSavedToast, setCalkSavedToast] = useState(false);
+
+  // ---------------- Ketua Review Bottom-Sheet State ----------------
+  const [reviewDisposalAsset, setReviewDisposalAsset] = useState<FixedAsset | null>(null);
+  const [disposalRejectNote, setDisposalRejectNote] = useState('');
+  const [reviewSpjTarget, setReviewSpjTarget] = useState<{
+    advance: Advance;
+    settlement: AdvanceSettlement;
+  } | null>(null);
+  const [spjRejectNote, setSpjRejectNote] = useState('');
 
   const isSeksiUser = !isLeader && currentUser?.role === 'pengurus_kas';
   const myAssignedKasIds = useMemo(() => userKasAccess.map((a) => a.kas_id), [userKasAccess]);
@@ -235,12 +246,12 @@ export default function LpjDataPage() {
             onClick={async () => {
               const res = await migrateOpeningPositionsToLpj();
               if (res.success && res.count) {
-                alert(
+                toast.success(
                   `Berhasil memigrasikan ${res.count.assets} aset, ${res.count.advances} panjar, dan ${res.count.rp} piutang/utang dari modul Saldo Awal.`
                 );
               }
             }}
-            className="inline-flex items-center gap-2 px-4 py-2 min-h-[40px] bg-[#0B132B] hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition-colors shrink-0"
+            className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px] inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#0B132B] hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition-colors shrink-0"
           >
             <Sparkles className="w-4 h-4" />
             <span>Sinkronkan {unmigratedCount} Data Saldo Awal</span>
@@ -250,7 +261,7 @@ export default function LpjDataPage() {
 
       {/* ---------------- Overdue Advances Banner Alert ---------------- */}
       {overdueAdvances.length > 0 && (
-        <div className="bg-amber-50/90 border border-amber-300 p-4 rounded-2xl flex items-start justify-between gap-3 shadow-xs">
+        <div className="bg-amber-50/90 border border-amber-300 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
           <div className="flex items-start gap-3">
             <div className="p-2 bg-amber-500 text-white rounded-xl shrink-0 mt-0.5">
               <AlertTriangle className="w-4 h-4" />
@@ -266,7 +277,7 @@ export default function LpjDataPage() {
           </div>
           <button
             onClick={() => setActiveTab('advances')}
-            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg shrink-0"
+            className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 sm:py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-xl sm:rounded-lg shrink-0"
           >
             Periksa Panjar
           </button>
@@ -334,7 +345,7 @@ export default function LpjDataPage() {
       <div className="flex border-b border-slate-200 space-x-2 overflow-x-auto pb-1 scrollbar-none">
         <button
           onClick={() => setActiveTab('assets')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap ${
             activeTab === 'assets'
               ? 'bg-white border-t-2 border-primary text-primary shadow-xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -349,7 +360,7 @@ export default function LpjDataPage() {
 
         <button
           onClick={() => setActiveTab('advances')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap ${
             activeTab === 'advances'
               ? 'bg-white border-t-2 border-primary text-primary shadow-xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -367,7 +378,7 @@ export default function LpjDataPage() {
 
         <button
           onClick={() => setActiveTab('receivables')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap ${
             activeTab === 'receivables'
               ? 'bg-white border-t-2 border-primary text-primary shadow-xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -382,7 +393,7 @@ export default function LpjDataPage() {
 
         <button
           onClick={() => setActiveTab('calk')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap ${
             activeTab === 'calk'
               ? 'bg-white border-t-2 border-primary text-primary shadow-xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -395,7 +406,7 @@ export default function LpjDataPage() {
         {(isAdmin || isBendaharaUmum) && (
           <button
             onClick={() => setActiveTab('settings')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap ${
+            className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap ${
               activeTab === 'settings'
                 ? 'bg-white border-t-2 border-primary text-primary shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -409,23 +420,23 @@ export default function LpjDataPage() {
 
       {/* ---------------- Filter & Search Toolbar (Tabs 1-3) ---------------- */}
       {['assets', 'advances', 'receivables'].includes(activeTab) && (
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-3 w-full md:w-auto">
+        <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full md:w-auto">
             <div className="relative flex-1 md:w-64">
-              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari kode, nama, pihak..."
-                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden focus:border-primary"
+                className="w-full min-h-[44px] sm:min-h-0 pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden focus:border-primary"
               />
             </div>
 
             <select
               value={selectedKasFilter}
               onChange={(e) => setSelectedKasFilter(e.target.value)}
-              className="text-xs py-1.5 px-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
+              className="w-full sm:w-auto min-h-[44px] sm:min-h-0 text-xs py-1.5 px-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
             >
               <option value="all">{isSeksiUser ? 'Semua Kas Seksi Saya' : 'Semua Kas Seksi'}</option>
               {visibleKasList.map((k) => (
@@ -436,7 +447,7 @@ export default function LpjDataPage() {
             </select>
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
             {activeTab === 'assets' && (
               <>
                 <button
@@ -463,7 +474,7 @@ export default function LpjDataPage() {
                     });
                     exportToExcel(exportData, 'Daftar_Aset_Tetap_HKBP_Hutaraja', 'Aset Tetap');
                   }}
-                  className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl flex items-center gap-1.5 transition-colors"
+                  className="flex-1 sm:flex-none min-h-[44px] sm:min-h-0 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl flex items-center justify-center gap-1.5 transition-colors"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Ekspor Excel</span>
@@ -482,7 +493,7 @@ export default function LpjDataPage() {
                       });
                       setIsAssetModalOpen(true);
                     }}
-                    className="px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary-dark rounded-xl flex items-center gap-1.5 shadow-xs transition-colors"
+                    className="flex-1 sm:flex-none min-h-[44px] sm:min-h-0 px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary-dark rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>+ Tambah Aset</span>
@@ -511,7 +522,7 @@ export default function LpjDataPage() {
                     });
                     exportToExcel(exportData, 'Daftar_Panjar_Kegiatan_HKBP_Hutaraja', 'Panjar Kegiatan');
                   }}
-                  className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl flex items-center gap-1.5 transition-colors"
+                  className="flex-1 sm:flex-none min-h-[44px] sm:min-h-0 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl flex items-center justify-center gap-1.5 transition-colors"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Ekspor Excel</span>
@@ -528,7 +539,7 @@ export default function LpjDataPage() {
                       });
                       setIsAdvanceModalOpen(true);
                     }}
-                    className="px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary-dark rounded-xl flex items-center gap-1.5 shadow-xs transition-colors"
+                    className="flex-1 sm:flex-none min-h-[44px] sm:min-h-0 px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary-dark rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>+ Catat Panjar</span>
@@ -559,7 +570,7 @@ export default function LpjDataPage() {
                     });
                     exportToExcel(exportData, 'Daftar_Piutang_Utang_HKBP_Hutaraja', 'Piutang & Utang');
                   }}
-                  className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl flex items-center gap-1.5 transition-colors"
+                  className="flex-1 sm:flex-none min-h-[44px] sm:min-h-0 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl flex items-center justify-center gap-1.5 transition-colors"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Ekspor Excel</span>
@@ -574,7 +585,7 @@ export default function LpjDataPage() {
                       });
                       setIsRpModalOpen(true);
                     }}
-                    className="px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary-dark rounded-xl flex items-center gap-1.5 shadow-xs transition-colors"
+                    className="flex-1 sm:flex-none min-h-[44px] sm:min-h-0 px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary-dark rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>+ Catat Piutang/Utang</span>
@@ -589,7 +600,130 @@ export default function LpjDataPage() {
       {/* ---------------- TAB 1: INVENTARIS & ASET TETAP ---------------- */}
       {activeTab === 'assets' && (
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile Cards: Assets */}
+          <div className="md:hidden divide-y divide-slate-100">
+            {filteredAssets.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-400">
+                Tidak ada data aset tetap yang sesuai dengan pencarian atau filter.
+              </div>
+            ) : (
+              filteredAssets.map((asset) => {
+                const kas = kasList.find((k) => k.id === asset.kas_id);
+                const dep = calculateDepreciation(asset, 2026);
+                const isPendingApproval =
+                  asset.status === 'diajukan_penghapusan' || asset.status === 'diajukan_hibah';
+                const canUserApprove = canApproveKas(asset.kas_id) || isAdmin;
+                const canUserEditAsset = isAdmin || canInputKas(asset.kas_id);
+
+                return (
+                  <div key={asset.id} className="p-4 space-y-2.5 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm text-slate-900">{asset.nama}</div>
+                        <div className="text-[11px] font-mono text-slate-400">
+                          {asset.kode} · Thn {asset.tanggal_perolehan.substring(0, 4)} · {asset.lokasi || '-'}
+                        </div>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase shrink-0 ${
+                          asset.status === 'aktif'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : isPendingApproval
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {asset.status.replace('_', ' ')}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span
+                        className="px-2 py-0.5 rounded-md text-[11px] font-semibold"
+                        style={{ backgroundColor: `${kas?.warna || '#7C9CF5'}25`, color: '#1F2440' }}
+                      >
+                        {kas?.nama || 'Kas Huria'}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                          asset.kondisi === 'baik'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : asset.kondisi === 'rusak_ringan'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}
+                      >
+                        {asset.kondisi.replace('_', ' ')}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Nilai Perolehan</span>
+                        <span className="font-mono font-bold text-slate-800 tabular-nums">
+                          {formatRupiah(asset.nilai_perolehan)}
+                        </span>
+                      </div>
+                      {lpjSettings.enable_depreciation && (
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-400 block">Nilai Buku (2026)</span>
+                          <span className="font-mono font-bold text-indigo-700 tabular-nums">
+                            {formatRupiah(dep.bookValue)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-end gap-2 pt-0.5">
+                      {isPendingApproval ? (
+                        canUserApprove ? (
+                          <button
+                            onClick={() => {
+                              setReviewDisposalAsset(asset);
+                              setDisposalRejectNote('');
+                            }}
+                            className="w-full min-h-[44px] px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl"
+                          >
+                            Review Pengajuan Ketua
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-slate-400">Menunggu Persetujuan Ketua</span>
+                        )
+                      ) : (
+                        canUserEditAsset && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setEditingAsset(asset);
+                                setIsAssetModalOpen(true);
+                              }}
+                              className="min-h-[44px] px-3.5 py-2 border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                              Edit
+                            </button>
+                            {asset.status === 'aktif' && (
+                              <button
+                                onClick={() => {
+                                  setDisposalModalAsset(asset);
+                                  setDisposalReasonInput('');
+                                }}
+                                className="min-h-[44px] px-3.5 py-2 text-xs font-semibold text-rose-600 border border-rose-200 bg-rose-50/50 rounded-xl"
+                              >
+                                Hapus/Hibah
+                              </button>
+                            )}
+                          </>
+                        )
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700">
               <thead className="bg-slate-50/70 text-slate-500 font-semibold border-b border-slate-100">
                 <tr>
@@ -685,15 +819,8 @@ export default function LpjDataPage() {
                             canUserApprove ? (
                               <button
                                 onClick={() => {
-                                  const ans = window.confirm(
-                                    `Setujui pengusulan ${asset.status.replace('_', ' ')} untuk aset "${asset.nama}"?`
-                                  );
-                                  if (ans) {
-                                    approveAssetDisposal(asset.id, true, 'Disetujui Ketua Kas');
-                                  } else {
-                                    const rejectAns = window.confirm('Tolak pengusulan dan kembalikan ke status aktif?');
-                                    if (rejectAns) approveAssetDisposal(asset.id, false, 'Ditolak');
-                                  }
+                                  setReviewDisposalAsset(asset);
+                                  setDisposalRejectNote('');
                                 }}
                                 className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold rounded-lg"
                               >
@@ -752,7 +879,98 @@ export default function LpjDataPage() {
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile Cards: Advances */}
+          <div className="md:hidden divide-y divide-slate-100">
+            {filteredAdvances.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-400">
+                Belum ada catatan panjar kegiatan.
+              </div>
+            ) : (
+              filteredAdvances.map((adv) => {
+                const kas = kasList.find((k) => k.id === adv.kas_id);
+                const isOverdue = adv.status === 'active' && adv.due_date < todayStr;
+                const st = advanceSettlements.find((s) => s.advance_id === adv.id);
+                const canUserApprove = canApproveKas(adv.kas_id) || isAdmin;
+                const canUserSubmitSpj = isAdmin || canInputKas(adv.kas_id);
+                return (
+                  <div key={adv.id} className="p-4 space-y-2.5 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm text-slate-900">{adv.purpose}</div>
+                        <div className="text-[11px] font-mono text-slate-400">{adv.kode} · {adv.recipient_name}</div>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase shrink-0 ${
+                          adv.status === 'settled'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : isOverdue
+                            ? 'bg-rose-100 text-rose-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {adv.status === 'settled' ? 'Selesai' : isOverdue ? 'Jatuh Tempo' : 'Berjalan'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Nominal Panjar</span>
+                        <span className="font-mono font-bold text-sm text-slate-900 tabular-nums">{formatRupiah(adv.amount)}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] text-slate-400 block">Batas SPJ</span>
+                        <span className={`font-mono font-semibold ${isOverdue ? 'text-rose-700' : 'text-slate-700'}`}>
+                          {formatDateIndo(adv.due_date)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 pt-0.5">
+                      <span
+                        className="px-2 py-0.5 rounded-md text-[11px] font-semibold"
+                        style={{ backgroundColor: `${kas?.warna || '#7C9CF5'}25`, color: '#1F2440' }}
+                      >
+                        {kas?.nama}
+                      </span>
+                      {adv.status === 'settled' ? (
+                        <span className="text-[11px] text-emerald-700 font-medium inline-flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> SPJ Tuntas
+                        </span>
+                      ) : st && st.status === 'submitted' ? (
+                        canUserApprove ? (
+                          <button
+                            onClick={() => {
+                              setReviewSpjTarget({ advance: adv, settlement: st });
+                              setSpjRejectNote('');
+                            }}
+                            className="min-h-[44px] px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl"
+                          >
+                            Verifikasi SPJ Ketua
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-slate-400">Menunggu Ketua</span>
+                        )
+                      ) : canUserSubmitSpj ? (
+                        <button
+                          onClick={() => {
+                            setSettlementModalAdvance(adv);
+                            setSettlementSpentInput(st ? String(st.spent_amount) : String(adv.amount));
+                            setSettlementNotesInput(st ? st.notes : '');
+                            setSettlementReceiptUrl(st?.receipt_url || '');
+                          }}
+                          className="min-h-[44px] px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-xl"
+                        >
+                          Buat SPJ Realisasi
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-slate-400">Menunggu SPJ</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700">
               <thead className="bg-slate-50/70 text-slate-500 font-semibold border-b border-slate-100">
                 <tr>
@@ -843,19 +1061,9 @@ export default function LpjDataPage() {
                           ) : st && st.status === 'submitted' ? (
                             canUserApprove ? (
                               <button
-                                onClick={async () => {
-                                  const ans = window.confirm(
-                                    `Setujui SPJ Panjar "${adv.purpose}" (Belanja: ${formatRupiah(st.spent_amount)})?`
-                                  );
-                                  if (ans) {
-                                    const res = await approveAdvanceSettlement(st.id, true);
-                                    if (!res.success) alert(res.error);
-                                  } else {
-                                    const rejectNote = window.prompt('Masukkan catatan penolakan kuitansi:');
-                                    if (rejectNote) {
-                                      await approveAdvanceSettlement(st.id, false, rejectNote);
-                                    }
-                                  }
+                                onClick={() => {
+                                  setReviewSpjTarget({ advance: adv, settlement: st });
+                                  setSpjRejectNote('');
                                 }}
                                 className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold rounded-lg"
                               >
@@ -894,7 +1102,106 @@ export default function LpjDataPage() {
       {/* ---------------- TAB 3: PIUTANG & UTANG ---------------- */}
       {activeTab === 'receivables' && (
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile Cards View */}
+          <div className="md:hidden divide-y divide-slate-100">
+            {filteredRp.length === 0 ? (
+              <div className="py-10 px-4 text-center text-xs text-slate-400">
+                Belum ada catatan piutang maupun utang.
+              </div>
+            ) : (
+              filteredRp.map((rp) => {
+                const kas = kasList.find((k) => k.id === rp.kas_id);
+                const isRec = rp.type === 'receivable';
+                return (
+                  <div key={rp.id} className="p-4 space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                              isRec ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                            }`}
+                          >
+                            {isRec ? 'Piutang' : 'Utang'}
+                          </span>
+                          <span className="font-mono text-[11px] text-slate-400">{rp.kode}</span>
+                          {kas && (
+                            <span
+                              className="px-2 py-0.5 rounded-md text-[10px] font-semibold"
+                              style={{ backgroundColor: `${kas?.warna || '#7C9CF5'}25`, color: '#1F2440' }}
+                            >
+                              {kas.nama}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm font-bold text-slate-900 mt-1">{rp.counterparty_name}</p>
+                        {rp.counterparty_contact && (
+                          <p className="text-[11px] text-slate-400">{rp.counterparty_contact}</p>
+                        )}
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase shrink-0 ${
+                          rp.status === 'paid'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : rp.status === 'partially_paid'
+                            ? 'bg-indigo-100 text-indigo-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {rp.status.replace('_', ' ')}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-700">{rp.description}</p>
+                    <p className="text-[11px] text-slate-400 font-mono">
+                      Tgl: {formatDateIndo(rp.issue_date)}
+                      {rp.due_date && ` · Jatuh Tempo: ${formatDateIndo(rp.due_date)}`}
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs">
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Nominal Pokok</span>
+                        <span className="font-mono font-semibold text-slate-700 tabular-nums">
+                          {formatRupiah(rp.amount)}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] text-slate-500 block">Sisa Saldo</span>
+                        <span
+                          className={`font-mono font-bold tabular-nums ${
+                            rp.remaining_amount === 0
+                              ? 'text-slate-400'
+                              : isRec
+                              ? 'text-emerald-700'
+                              : 'text-rose-700'
+                          }`}
+                        >
+                          {formatRupiah(rp.remaining_amount)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {rp.status !== 'paid' && (isAdmin || canInputKas(rp.kas_id)) && (
+                      <button
+                        onClick={() => {
+                          setPaymentModalRp(rp);
+                          setPaymentAmountInput(String(rp.remaining_amount));
+                          setPaymentDateInput(new Date().toISOString().split('T')[0]);
+                          setPaymentStorageId(storageAccounts[0]?.id || '');
+                          setPaymentNotesInput('');
+                        }}
+                        className="w-full min-h-[44px] py-2 bg-primary hover:bg-primary-dark text-white text-xs font-semibold rounded-xl shadow-xs transition-colors"
+                      >
+                        Catat Pelunasan
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700">
               <thead className="bg-slate-50/70 text-slate-500 font-semibold border-b border-slate-100">
                 <tr>
@@ -1019,8 +1326,8 @@ export default function LpjDataPage() {
 
       {/* ---------------- TAB 4: CATATAN ATAS LAPORAN KEUANGAN (CaLK) ---------------- */}
       {activeTab === 'calk' && (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+        <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div>
               <h3 className="text-base font-bold text-slate-800">
                 Catatan atas Laporan Keuangan (CaLK) Tahun Anggaran {lpjNotes.year}
@@ -1030,7 +1337,7 @@ export default function LpjDataPage() {
               </p>
             </div>
             {calkSavedToast && (
-              <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-semibold rounded-lg flex items-center gap-1">
+              <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-semibold rounded-lg flex items-center gap-1 self-start sm:self-auto">
                 <Check className="w-4 h-4" /> Tersimpan!
               </span>
             )}
@@ -1140,9 +1447,10 @@ export default function LpjDataPage() {
                 onClick={async () => {
                   await saveLpjNotes(calkForm);
                   setCalkSavedToast(true);
+                  toast.success('Perubahan CaLK berhasil disimpan.');
                   setTimeout(() => setCalkSavedToast(false), 3000);
                 }}
-                className="px-5 py-2.5 bg-primary hover:bg-primary-dark text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-5 py-2.5 bg-primary hover:bg-primary-dark text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
               >
                 Simpan Perubahan CaLK
               </button>
@@ -1155,7 +1463,7 @@ export default function LpjDataPage() {
       {activeTab === 'settings' && (isAdmin || isBendaharaUmum) && (
         <div className="space-y-6">
           {/* Klasifikasi Dana per Kas */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+          <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-slate-800">
@@ -1167,7 +1475,48 @@ export default function LpjDataPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile Cards for Fund Type */}
+            <div className="md:hidden space-y-3">
+              {kasList.map((k) => (
+                <div key={k.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-semibold text-xs text-slate-800">
+                      {k.nama} <span className="font-mono text-slate-400 font-normal">({k.kode})</span>
+                    </div>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase shrink-0 ${
+                        k.fund_type === 'restricted'
+                          ? 'bg-purple-100 text-purple-800'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {k.fund_type === 'restricted' ? 'Terikat' : 'Tidak Terikat'}
+                    </span>
+                  </div>
+                  <select
+                    value={k.fund_type || 'unrestricted'}
+                    onChange={(e) => updateKasFundType(k.id, e.target.value as FundType, k.restricted_purpose)}
+                    className="w-full min-h-[44px] text-xs py-2 px-3 bg-white border border-slate-200 rounded-xl"
+                  >
+                    <option value="unrestricted">Tidak Terikat (Unrestricted)</option>
+                    <option value="restricted">Terikat (Restricted)</option>
+                  </select>
+                  {k.fund_type === 'restricted' ? (
+                    <input
+                      type="text"
+                      defaultValue={k.restricted_purpose || ''}
+                      onBlur={(e) => updateKasFundType(k.id, 'restricted', e.target.value)}
+                      placeholder="Contoh: Bantuan sosial kedukaan dan orang sakit..."
+                      className="w-full min-h-[44px] py-2 px-3 text-xs bg-white border border-slate-200 rounded-xl"
+                    />
+                  ) : (
+                    <p className="text-[11px] text-slate-400 italic">Bebas untuk operasional huria</p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-700">
                 <thead className="bg-slate-50/70 text-slate-500 font-semibold border-b border-slate-100">
                   <tr>
@@ -1286,13 +1635,17 @@ export default function LpjDataPage() {
 
       {/* ---------------- MODAL TAMBAH/EDIT ASET ---------------- */}
       {isAssetModalOpen && editingAsset && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4 shadow-xl max-h-[92dvh] overflow-y-auto mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-900">
                 {editingAsset.id ? 'Perbarui Aset Inventaris' : 'Tambah Aset Inventaris Baru'}
               </h3>
-              <button onClick={() => setIsAssetModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-600">
+              <button
+                onClick={() => setIsAssetModalOpen(false)}
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 text-slate-400 hover:text-slate-600 rounded-xl"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1305,11 +1658,11 @@ export default function LpjDataPage() {
                   value={editingAsset.nama || ''}
                   onChange={(e) => setEditingAsset({ ...editingAsset, nama: e.target.value })}
                   placeholder="Contoh: Sound System Yamaha 16 Ch, Mobil Dinas..."
-                  className="w-full py-2 px-3 border border-slate-200 rounded-xl focus:outline-hidden focus:border-primary"
+                  className="w-full py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 px-3 border border-slate-200 rounded-xl focus:outline-hidden focus:border-primary"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-600 font-semibold mb-1">Kategori *</label>
                   <select
@@ -1432,10 +1785,10 @@ export default function LpjDataPage() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
               <button
                 onClick={() => setIsAssetModalOpen(false)}
-                className="px-4 py-2 border border-slate-200 text-slate-600 text-xs font-semibold rounded-xl"
+                className="px-4 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 border border-slate-200 text-slate-600 text-xs font-semibold rounded-xl"
               >
                 Batal
               </button>
@@ -1443,12 +1796,13 @@ export default function LpjDataPage() {
                 onClick={async () => {
                   const res = await saveFixedAsset(editingAsset);
                   if (!res.success) {
-                    alert(res.error);
+                    toast.error(res.error || 'Gagal menyimpan data aset.');
                     return;
                   }
+                  toast.success(editingAsset.id ? 'Aset berhasil diperbarui.' : 'Aset inventaris baru berhasil disimpan.');
                   setIsAssetModalOpen(false);
                 }}
-                className="px-5 py-2 bg-primary hover:bg-primary-dark text-white text-xs font-semibold rounded-xl shadow-xs"
+                className="px-5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 bg-primary hover:bg-primary-dark text-white text-xs font-semibold rounded-xl shadow-xs"
               >
                 Simpan Aset
               </button>
@@ -1459,11 +1813,20 @@ export default function LpjDataPage() {
 
       {/* ---------------- MODAL AJUKAN PENGHAPUSAN / HIBAH ASET ---------------- */}
       {disposalModalAsset && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-xl">
-            <h3 className="text-sm font-bold text-slate-900">
-              Ajukan Penghapusan / Hibah Aset
-            </h3>
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4 shadow-xl max-h-[92dvh] overflow-y-auto mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-900">
+                Ajukan Penghapusan / Hibah Aset
+              </h3>
+              <button
+                onClick={() => setDisposalModalAsset(null)}
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 text-slate-400 hover:text-slate-600 rounded-xl"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             <p className="text-xs text-slate-600">
               Aset: <strong>{disposalModalAsset.nama}</strong> ({disposalModalAsset.kode}). Usulan ini membutuhkan verifikasi dan persetujuan dari Ketua Kas.
             </p>
@@ -1474,7 +1837,7 @@ export default function LpjDataPage() {
                 <select
                   value={disposalActionType}
                   onChange={(e) => setDisposalActionType(e.target.value as any)}
-                  className="w-full py-2 px-3 border border-slate-200 rounded-xl"
+                  className="w-full py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 px-3 border border-slate-200 rounded-xl"
                 >
                   <option value="diajukan_penghapusan">Penghapusan (Rusak total / Afkir)</option>
                   <option value="diajukan_hibah">Hibah (Diserahkan ke pos pelayanan lain)</option>
@@ -1493,10 +1856,10 @@ export default function LpjDataPage() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
               <button
                 onClick={() => setDisposalModalAsset(null)}
-                className="px-4 py-2 border border-slate-200 text-slate-600 text-xs font-semibold rounded-xl"
+                className="px-4 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 border border-slate-200 text-slate-600 text-xs font-semibold rounded-xl"
               >
                 Batal
               </button>
@@ -1504,13 +1867,13 @@ export default function LpjDataPage() {
                 onClick={async () => {
                   const res = await proposeAssetDisposal(disposalModalAsset.id, disposalActionType, disposalReasonInput);
                   if (!res.success) {
-                    alert(res.error);
+                    toast.error(res.error || 'Gagal mengajukan usulan.');
                     return;
                   }
                   setDisposalModalAsset(null);
-                  alert('Usulan telah diajukan ke Ketua Kas untuk ditinjau.');
+                  toast.success('Usulan telah diajukan ke Ketua Kas untuk ditinjau.');
                 }}
-                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl"
+                className="px-5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl"
               >
                 Kirim Usulan ke Ketua
               </button>
@@ -1521,13 +1884,17 @@ export default function LpjDataPage() {
 
       {/* ---------------- MODAL CATAT PANJAR ---------------- */}
       {isAdvanceModalOpen && editingAdvance && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-xl">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4 shadow-xl max-h-[92dvh] overflow-y-auto mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-900">
                 {editingAdvance.id ? 'Perbarui Data Panjar' : 'Catat Panjar Kegiatan Baru'}
               </h3>
-              <button onClick={() => setIsAdvanceModalOpen(false)} className="p-1 text-slate-400">
+              <button
+                onClick={() => setIsAdvanceModalOpen(false)}
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 text-slate-400 hover:text-slate-600 rounded-xl"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1540,7 +1907,7 @@ export default function LpjDataPage() {
                   value={editingAdvance.purpose || ''}
                   onChange={(e) => setEditingAdvance({ ...editingAdvance, purpose: e.target.value })}
                   placeholder="Contoh: Pembelian lilin & konsumsi Natal Sekolah Minggu"
-                  className="w-full py-2 px-3 border border-slate-200 rounded-xl"
+                  className="w-full py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 px-3 border border-slate-200 rounded-xl"
                 />
               </div>
 
@@ -1549,7 +1916,7 @@ export default function LpjDataPage() {
                 <select
                   value={editingAdvance.kas_id || (editableKasList[0] || visibleKasList[0] || kasList[0])?.id}
                   onChange={(e) => setEditingAdvance({ ...editingAdvance, kas_id: e.target.value })}
-                  className="w-full py-2 px-3 border border-slate-200 rounded-xl"
+                  className="w-full py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 px-3 border border-slate-200 rounded-xl"
                 >
                   {(editableKasList.length > 0 ? editableKasList : visibleKasList).map((k) => (
                     <option key={k.id} value={k.id}>
@@ -1559,7 +1926,7 @@ export default function LpjDataPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-600 font-semibold mb-1">Nama Penerima Panjar *</label>
                   <input
@@ -1626,10 +1993,10 @@ export default function LpjDataPage() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
               <button
                 onClick={() => setIsAdvanceModalOpen(false)}
-                className="px-4 py-2 border border-slate-200 text-slate-600 text-xs font-semibold rounded-xl"
+                className="px-4 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 border border-slate-200 text-slate-600 text-xs font-semibold rounded-xl"
               >
                 Batal
               </button>
@@ -1637,12 +2004,13 @@ export default function LpjDataPage() {
                 onClick={async () => {
                   const res = await saveAdvance(editingAdvance);
                   if (!res.success) {
-                    alert(res.error);
+                    toast.error(res.error || 'Gagal menyimpan data panjar.');
                     return;
                   }
+                  toast.success(editingAdvance.id ? 'Data panjar diperbarui.' : 'Panjar kegiatan berhasil dicatat.');
                   setIsAdvanceModalOpen(false);
                 }}
-                className="px-5 py-2 bg-primary hover:bg-primary-dark text-white text-xs font-semibold rounded-xl shadow-xs"
+                className="px-5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 bg-primary hover:bg-primary-dark text-white text-xs font-semibold rounded-xl shadow-xs"
               >
                 Simpan Panjar
               </button>
@@ -1653,11 +2021,20 @@ export default function LpjDataPage() {
 
       {/* ---------------- MODAL SPJ REALISASI PANJAR ---------------- */}
       {settlementModalAdvance && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-xl">
-            <h3 className="text-sm font-bold text-slate-900">
-              Pertanggungjawaban (SPJ) Realisasi Panjar
-            </h3>
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4 shadow-xl max-h-[92dvh] overflow-y-auto mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-900">
+                Pertanggungjawaban (SPJ) Realisasi Panjar
+              </h3>
+              <button
+                onClick={() => setSettlementModalAdvance(null)}
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 text-slate-400 hover:text-slate-600 rounded-xl"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             <div className="p-3 bg-slate-50 rounded-xl text-xs space-y-1">
               <div className="flex justify-between">
                 <span className="text-slate-500">Kegiatan:</span>
@@ -1713,10 +2090,10 @@ export default function LpjDataPage() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
               <button
                 onClick={() => setSettlementModalAdvance(null)}
-                className="px-4 py-2 border border-slate-200 text-slate-600 text-xs font-semibold rounded-xl"
+                className="px-4 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 border border-slate-200 text-slate-600 text-xs font-semibold rounded-xl"
               >
                 Batal
               </button>
@@ -1729,14 +2106,14 @@ export default function LpjDataPage() {
                     receipt_url: settlementReceiptUrl || null,
                   });
                   if (!saveRes.success || !saveRes.id) {
-                    alert(saveRes.error || 'Gagal menyimpan SPJ');
+                    toast.error(saveRes.error || 'Gagal menyimpan SPJ');
                     return;
                   }
                   await submitAdvanceSettlement(saveRes.id);
                   setSettlementModalAdvance(null);
-                  alert('Laporan SPJ berhasil diajukan ke Ketua Kas untuk disahkan.');
+                  toast.success('Laporan SPJ berhasil diajukan ke Ketua Kas untuk disahkan.');
                 }}
-                className="px-5 py-2 bg-primary hover:bg-primary-dark text-white text-xs font-semibold rounded-xl shadow-xs"
+                className="px-5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 bg-primary hover:bg-primary-dark text-white text-xs font-semibold rounded-xl shadow-xs"
               >
                 Ajukan SPJ ke Ketua
               </button>
@@ -1747,13 +2124,17 @@ export default function LpjDataPage() {
 
       {/* ---------------- MODAL CATAT PIUTANG / UTANG ---------------- */}
       {isRpModalOpen && editingRp && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-xl">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4 shadow-xl max-h-[92dvh] overflow-y-auto mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-900">
                 Catat {editingRp.type === 'receivable' ? 'Piutang' : 'Utang'} Baru
               </h3>
-              <button onClick={() => setIsRpModalOpen(false)} className="p-1 text-slate-400">
+              <button
+                onClick={() => setIsRpModalOpen(false)}
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 text-slate-400 hover:text-slate-600 rounded-xl"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1763,7 +2144,7 @@ export default function LpjDataPage() {
                 <button
                   type="button"
                   onClick={() => setEditingRp({ ...editingRp, type: 'receivable' })}
-                  className={`flex-1 py-2 rounded-xl font-bold text-xs ${
+                  className={`flex-1 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl font-bold text-xs ${
                     editingRp.type === 'receivable'
                       ? 'bg-emerald-600 text-white'
                       : 'bg-slate-100 text-slate-600'
@@ -1774,7 +2155,7 @@ export default function LpjDataPage() {
                 <button
                   type="button"
                   onClick={() => setEditingRp({ ...editingRp, type: 'payable' })}
-                  className={`flex-1 py-2 rounded-xl font-bold text-xs ${
+                  className={`flex-1 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl font-bold text-xs ${
                     editingRp.type === 'payable'
                       ? 'bg-rose-600 text-white'
                       : 'bg-slate-100 text-slate-600'
@@ -1791,7 +2172,7 @@ export default function LpjDataPage() {
                   value={editingRp.counterparty_name || ''}
                   onChange={(e) => setEditingRp({ ...editingRp, counterparty_name: e.target.value })}
                   placeholder="Nama orang / instansi / percetakan..."
-                  className="w-full py-2 px-3 border border-slate-200 rounded-xl"
+                  className="w-full py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 px-3 border border-slate-200 rounded-xl"
                 />
               </div>
 
@@ -1800,7 +2181,7 @@ export default function LpjDataPage() {
                 <select
                   value={editingRp.kas_id || (editableKasList[0] || visibleKasList[0] || kasList[0])?.id}
                   onChange={(e) => setEditingRp({ ...editingRp, kas_id: e.target.value })}
-                  className="w-full py-2 px-3 border border-slate-200 rounded-xl"
+                  className="w-full py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 px-3 border border-slate-200 rounded-xl"
                 >
                   {(editableKasList.length > 0 ? editableKasList : visibleKasList).map((k) => (
                     <option key={k.id} value={k.id}>
@@ -1810,7 +2191,7 @@ export default function LpjDataPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-600 font-semibold mb-1">Nominal Pokok (Rp) *</label>
                   <input
@@ -1818,7 +2199,7 @@ export default function LpjDataPage() {
                     value={editingRp.amount ?? ''}
                     onChange={(e) => setEditingRp({ ...editingRp, amount: Number(e.target.value) })}
                     placeholder="0"
-                    className="w-full py-2 px-3 border border-slate-200 rounded-xl font-mono font-bold"
+                    className="w-full py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 px-3 border border-slate-200 rounded-xl font-mono font-bold"
                   />
                 </div>
                 <div>
@@ -1827,7 +2208,7 @@ export default function LpjDataPage() {
                     type="date"
                     value={editingRp.due_date || ''}
                     onChange={(e) => setEditingRp({ ...editingRp, due_date: e.target.value })}
-                    className="w-full py-2 px-3 border border-slate-200 rounded-xl"
+                    className="w-full py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 px-3 border border-slate-200 rounded-xl"
                   />
                 </div>
               </div>
@@ -1844,10 +2225,10 @@ export default function LpjDataPage() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
               <button
                 onClick={() => setIsRpModalOpen(false)}
-                className="px-4 py-2 border border-slate-200 text-slate-600 text-xs font-semibold rounded-xl"
+                className="px-4 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 border border-slate-200 text-slate-600 text-xs font-semibold rounded-xl"
               >
                 Batal
               </button>
@@ -1855,12 +2236,13 @@ export default function LpjDataPage() {
                 onClick={async () => {
                   const res = await saveReceivablePayable(editingRp);
                   if (!res.success) {
-                    alert(res.error);
+                    toast.error(res.error || 'Gagal menyimpan piutang/utang.');
                     return;
                   }
+                  toast.success('Catatan piutang/utang berhasil disimpan.');
                   setIsRpModalOpen(false);
                 }}
-                className="px-5 py-2 bg-primary hover:bg-primary-dark text-white text-xs font-semibold rounded-xl shadow-xs"
+                className="px-5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 bg-primary hover:bg-primary-dark text-white text-xs font-semibold rounded-xl shadow-xs"
               >
                 Simpan
               </button>
@@ -1871,19 +2253,28 @@ export default function LpjDataPage() {
 
       {/* ---------------- MODAL CATAT PELUNASAN PIUTANG / UTANG ---------------- */}
       {paymentModalRp && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-xl">
-            <h3 className="text-sm font-bold text-slate-900">
-              Catat Pelunasan {paymentModalRp.type === 'receivable' ? 'Piutang' : 'Utang'}
-            </h3>
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4 shadow-xl max-h-[92dvh] overflow-y-auto mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-900">
+                Catat Pelunasan {paymentModalRp.type === 'receivable' ? 'Piutang' : 'Utang'}
+              </h3>
+              <button
+                onClick={() => setPaymentModalRp(null)}
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 text-slate-400 hover:text-slate-600 rounded-xl"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             <div className="p-3 bg-slate-50 rounded-xl text-xs space-y-1">
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-2">
                 <span className="text-slate-500">Pihak Terkait:</span>
-                <span className="font-semibold text-slate-800">{paymentModalRp.counterparty_name}</span>
+                <span className="font-semibold text-slate-800 text-right">{paymentModalRp.counterparty_name}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-2">
                 <span className="text-slate-500">Sisa Saldo Berjalan:</span>
-                <span className="font-mono font-bold text-slate-900">
+                <span className="font-mono font-bold text-slate-900 tabular-nums">
                   {formatRupiah(paymentModalRp.remaining_amount)}
                 </span>
               </div>
@@ -1897,7 +2288,7 @@ export default function LpjDataPage() {
                   value={paymentAmountInput}
                   onChange={(e) => setPaymentAmountInput(e.target.value)}
                   placeholder="0"
-                  className="w-full py-2 px-3 border border-slate-200 rounded-xl font-mono font-bold"
+                  className="w-full py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 px-3 border border-slate-200 rounded-xl font-mono font-bold"
                 />
               </div>
 
@@ -1906,7 +2297,7 @@ export default function LpjDataPage() {
                 <select
                   value={paymentStorageId}
                   onChange={(e) => setPaymentStorageId(e.target.value)}
-                  className="w-full py-2 px-3 border border-slate-200 rounded-xl"
+                  className="w-full py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 px-3 border border-slate-200 rounded-xl"
                 >
                   {storageAccounts.map((s) => (
                     <option key={s.id} value={s.id}>
@@ -1923,15 +2314,15 @@ export default function LpjDataPage() {
                   value={paymentNotesInput}
                   onChange={(e) => setPaymentNotesInput(e.target.value)}
                   placeholder="Termin ke-..., transfer bank, atau tunai..."
-                  className="w-full py-2 px-3 border border-slate-200 rounded-xl"
+                  className="w-full py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 px-3 border border-slate-200 rounded-xl"
                 />
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
               <button
                 onClick={() => setPaymentModalRp(null)}
-                className="px-4 py-2 border border-slate-200 text-slate-600 text-xs font-semibold rounded-xl"
+                className="px-4 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 border border-slate-200 text-slate-600 text-xs font-semibold rounded-xl"
               >
                 Batal
               </button>
@@ -1945,15 +2336,193 @@ export default function LpjDataPage() {
                     paymentNotesInput
                   );
                   if (!res.success) {
-                    alert(res.error);
+                    toast.error(res.error || 'Gagal mencatat pelunasan.');
                     return;
                   }
                   setPaymentModalRp(null);
-                  alert('Pelunasan berhasil dicatat.');
+                  toast.success('Pelunasan berhasil dicatat.');
                 }}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs"
+                className="px-5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs"
               >
                 Simpan Pelunasan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------------- MODAL KETUA: VERIFIKASI PENGHAPUSAN / HIBAH ASET ---------------- */}
+      {reviewDisposalAsset && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4 shadow-xl max-h-[92dvh] overflow-y-auto mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-900">Verifikasi Usulan Aset (Ketua Kas)</h3>
+              <button
+                onClick={() => setReviewDisposalAsset(null)}
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 text-slate-400 hover:text-slate-600 rounded-xl"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-xl text-xs space-y-1.5">
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-500">Aset:</span>
+                <span className="font-bold text-slate-900 text-right">{reviewDisposalAsset.nama}</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-500">Usulan:</span>
+                <span className="font-semibold text-amber-800 uppercase">
+                  {reviewDisposalAsset.status.replace('diajukan_', '')}
+                </span>
+              </div>
+              {reviewDisposalAsset.disposal_reason && (
+                <div className="pt-1 border-t border-slate-200/70">
+                  <span className="text-slate-500 block">Alasan Usulan:</span>
+                  <p className="text-slate-700 mt-0.5">{reviewDisposalAsset.disposal_reason}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="text-xs">
+              <label className="block text-slate-600 font-semibold mb-1">
+                Catatan Ketua (Wajib jika menolak usulan)
+              </label>
+              <textarea
+                rows={2}
+                value={disposalRejectNote}
+                onChange={(e) => setDisposalRejectNote(e.target.value)}
+                placeholder="Catatan keputusan atau alasan penolakan..."
+                className="w-full py-2 px-3 border border-slate-200 rounded-xl"
+              />
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                onClick={async () => {
+                  const res = await approveAssetDisposal(
+                    reviewDisposalAsset.id,
+                    false,
+                    disposalRejectNote.trim() || 'Ditolak oleh Ketua Kas'
+                  );
+                  if (!res.success) {
+                    toast.error(res.error || 'Gagal menolak usulan.');
+                    return;
+                  }
+                  setReviewDisposalAsset(null);
+                  setDisposalRejectNote('');
+                  toast.success('Usulan penghapusan/hibah ditolak.');
+                }}
+                className="px-4 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold rounded-xl"
+              >
+                Tolak Usulan
+              </button>
+              <button
+                onClick={async () => {
+                  const res = await approveAssetDisposal(reviewDisposalAsset.id, true);
+                  if (!res.success) {
+                    toast.error(res.error || 'Gagal menyetujui usulan.');
+                    return;
+                  }
+                  setReviewDisposalAsset(null);
+                  setDisposalRejectNote('');
+                  toast.success('Usulan aset berhasil disetujui & disahkan.');
+                }}
+                className="px-5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs"
+              >
+                Setujui Usulan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------------- MODAL KETUA: VERIFIKASI SPJ PANJAR ---------------- */}
+      {reviewSpjTarget && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4 shadow-xl max-h-[92dvh] overflow-y-auto mobile-sheet-enter">
+            <div className="sm:hidden w-12 h-1.5 bg-slate-200 rounded-full mx-auto -mt-0.5 mb-1" />
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-900">Verifikasi SPJ Realisasi Panjar</h3>
+              <button
+                onClick={() => setReviewSpjTarget(null)}
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 text-slate-400 hover:text-slate-600 rounded-xl"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-xl text-xs space-y-1.5">
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-500">Kegiatan:</span>
+                <span className="font-bold text-slate-900 text-right">{reviewSpjTarget.advance.purpose}</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-500">Panjar Awal:</span>
+                <span className="font-mono font-semibold text-slate-700 tabular-nums">
+                  {formatRupiah(reviewSpjTarget.advance.amount)}
+                </span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-500">Realisasi Belanja:</span>
+                <span className="font-mono font-bold text-indigo-700 tabular-nums">
+                  {formatRupiah(reviewSpjTarget.settlement.spent_amount)}
+                </span>
+              </div>
+              {reviewSpjTarget.settlement.notes && (
+                <div className="pt-1 border-t border-slate-200/70">
+                  <span className="text-slate-500 block">Rincian SPJ:</span>
+                  <p className="text-slate-700 mt-0.5">{reviewSpjTarget.settlement.notes}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="text-xs">
+              <label className="block text-slate-600 font-semibold mb-1">
+                Alasan Penolakan / Catatan (Jika ditolak)
+              </label>
+              <textarea
+                rows={2}
+                value={spjRejectNote}
+                onChange={(e) => setSpjRejectNote(e.target.value)}
+                placeholder="Isi catatan revisi apabila SPJ perlu diperbaiki..."
+                className="w-full py-2 px-3 border border-slate-200 rounded-xl"
+              />
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                onClick={async () => {
+                  const res = await approveAdvanceSettlement(
+                    reviewSpjTarget.settlement.id,
+                    false,
+                    spjRejectNote.trim() || 'Ditolak Ketua'
+                  );
+                  if (!res.success) {
+                    toast.error(res.error || 'Gagal menolak SPJ.');
+                    return;
+                  }
+                  setReviewSpjTarget(null);
+                  setSpjRejectNote('');
+                  toast.success('SPJ dikembalikan untuk revisi.');
+                }}
+                className="px-4 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold rounded-xl"
+              >
+                Tolak / Revisi
+              </button>
+              <button
+                onClick={async () => {
+                  const res = await approveAdvanceSettlement(reviewSpjTarget.settlement.id, true);
+                  if (!res.success) {
+                    toast.error(res.error || 'Gagal menyetujui SPJ.');
+                    return;
+                  }
+                  setReviewSpjTarget(null);
+                  setSpjRejectNote('');
+                  toast.success('SPJ Panjar berhasil disahkan.');
+                }}
+                className="px-5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs"
+              >
+                Sahkan SPJ
               </button>
             </div>
           </div>

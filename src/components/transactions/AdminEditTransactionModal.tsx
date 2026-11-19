@@ -61,10 +61,11 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
   onClose,
   onSaved,
 }) => {
-  const { kasList, storageAccounts, categories, updateTransaction } = useData();
+  const { kasList, storageAccounts, categories, lingkunganList, fiscalYears, updateTransaction } = useData();
   const { toast } = useToast();
 
   const [tanggal, setTanggal] = useState('');
+  const [tanggalWarta, setTanggalWarta] = useState('');
   const [type, setType] = useState<TransactionType>('income');
   const [kasId, setKasId] = useState('');
   const [storageAccountId, setStorageAccountId] = useState('');
@@ -78,6 +79,9 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
   const [isSentralisasi, setIsSentralisasi] = useState(true);
   const [sentralisasiRole, setSentralisasiRole] = useState<SentralisasiRole | ''>('');
   const [exclusionType, setExclusionType] = useState<SentralisasiExclusionType>('lainnya');
+  const [peleanTaonYear, setPeleanTaonYear] = useState<string>('');
+  const [lingkungan, setLingkungan] = useState<string>('');
+  const [familyName, setFamilyName] = useState<string>('');
   const [changeReason, setChangeReason] = useState('');
   const [formError, setFormError] = useState('');
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -86,6 +90,7 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
   useEffect(() => {
     if (isOpen && transaction) {
       setTanggal(transaction.tanggal || '');
+      setTanggalWarta(transaction.tanggal_warta || '');
       setType(transaction.type || 'income');
       setKasId(transaction.kas_id || '');
       setStorageAccountId(transaction.storage_account_id || '');
@@ -105,6 +110,9 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
           : ''
       );
       setExclusionType(transaction.sentralisasi_exclusion_type || 'lainnya');
+      setPeleanTaonYear(transaction.pelean_taon_year ? String(transaction.pelean_taon_year) : '');
+      setLingkungan(transaction.lingkungan || '');
+      setFamilyName(transaction.family_name || '');
       setChangeReason('');
       setFormError('');
       setIsConfirmOpen(false);
@@ -151,13 +159,33 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
 
     if (tanggal !== transaction.tanggal) {
       rows.push({
-        label: 'Tanggal',
+        label: 'Tanggal Transaksi',
         oldValue: formatDateIndo(transaction.tanggal),
         newValue: formatDateIndo(tanggal),
         highlight: true,
       });
     } else {
-      rows.push({ label: 'Tanggal', newValue: formatDateIndo(tanggal) });
+      rows.push({ label: 'Tanggal Transaksi', newValue: formatDateIndo(tanggal) });
+    }
+
+    if ((tanggalWarta || '') !== (transaction.tanggal_warta || '')) {
+      rows.push({
+        label: 'Tanggal Warta',
+        oldValue: transaction.tanggal_warta ? formatDateIndo(transaction.tanggal_warta) : '-',
+        newValue: tanggalWarta ? formatDateIndo(tanggalWarta) : '-',
+        highlight: true,
+      });
+    } else if (tanggalWarta) {
+      rows.push({ label: 'Tanggal Warta', newValue: formatDateIndo(tanggalWarta) });
+    }
+
+    if ((familyName.trim() || '') !== (transaction.family_name || '') || (lingkungan.trim() || '') !== (transaction.lingkungan || '')) {
+      rows.push({
+        label: 'Keluarga / Lingkungan',
+        oldValue: `${transaction.family_name || '-'} (${transaction.lingkungan || '-'})`,
+        newValue: `${familyName.trim() || '-'} (${lingkungan.trim() || '-'})`,
+        highlight: true,
+      });
     }
 
     if (type !== transaction.type) {
@@ -271,6 +299,9 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
     storageAccounts,
     categories,
     tanggal,
+    tanggalWarta,
+    familyName,
+    lingkungan,
     type,
     kasId,
     storageAccountId,
@@ -342,6 +373,7 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
     const finalReason = confirmReason || changeReason.trim() || undefined;
     const updates: Partial<Transaction> = {
       tanggal,
+      tanggal_warta: tanggalWarta || null,
       type,
       kas_id: kasId,
       storage_account_id: storageAccountId,
@@ -361,6 +393,10 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
           : null,
       sentralisasi_exclusion_type:
         type === 'income' && !isSentralisasi ? exclusionType : null,
+      pelean_taon_year:
+        type === 'income' && peleanTaonYear ? Number(peleanTaonYear) : null,
+      lingkungan: type === 'income' ? lingkungan.trim() || null : null,
+      family_name: type === 'income' ? familyName.trim() || null : null,
     };
 
     const res = await updateTransaction(transaction.id, updates, finalReason);
@@ -432,8 +468,20 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
                   type="date"
                   value={tanggal}
                   onChange={(e) => setTanggal(e.target.value)}
-                  className="w-full text-xs md:text-sm p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                  className="w-full min-h-[44px] sm:min-h-0 text-xs md:text-sm p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
                   required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Tanggal Warta Jemaat (Opsional)
+                </label>
+                <input
+                  type="date"
+                  value={tanggalWarta}
+                  onChange={(e) => setTanggalWarta(e.target.value)}
+                  className="w-full min-h-[44px] sm:min-h-0 text-xs md:text-sm p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
                 />
               </div>
 
@@ -574,6 +622,68 @@ export const AdminEditTransactionModal: React.FC<AdminEditTransactionModalProps>
                   placeholder="Tuliskan alasan penolakan transaksi..."
                   className="w-full text-xs md:text-sm p-2.5 rounded-xl border border-rose-200 bg-rose-50/40 focus:outline-hidden focus:ring-2 focus:ring-rose-300"
                 />
+              </div>
+            )}
+
+            {type === 'income' && (Boolean(transaction.pelean_taon_year) || categoryId === 'cat-in-namarboho' || Boolean(familyName) || Boolean(lingkungan)) && (
+              <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/50 space-y-3">
+                <span className="text-xs font-bold text-emerald-900 block">
+                  Atribut Pelean Taon (Persembahan Tahunan Keluarga)
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Tahun Anggaran
+                    </label>
+                    <select
+                      value={peleanTaonYear}
+                      onChange={(e) => setPeleanTaonYear(e.target.value)}
+                      className="w-full min-h-[44px] sm:min-h-0 text-xs p-2 rounded-lg border border-slate-200 bg-white"
+                    >
+                      <option value="">-- Tidak Diatur --</option>
+                      {fiscalYears.map((fy) => (
+                        <option key={fy.id || fy.year} value={fy.year}>
+                          {fy.year}
+                        </option>
+                      ))}
+                      {peleanTaonYear && !fiscalYears.some((f) => String(f.year) === peleanTaonYear) && (
+                        <option value={peleanTaonYear}>{peleanTaonYear}</option>
+                      )}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Lingkungan
+                    </label>
+                    <select
+                      value={lingkungan}
+                      onChange={(e) => setLingkungan(e.target.value)}
+                      className="w-full min-h-[44px] sm:min-h-0 text-xs p-2 rounded-lg border border-slate-200 bg-white"
+                    >
+                      <option value="">-- Pilih Lingkungan --</option>
+                      {lingkunganList.map((l) => (
+                        <option key={l.id} value={l.nama}>
+                          {l.nama}
+                        </option>
+                      ))}
+                      {lingkungan && !lingkunganList.some((l) => l.nama === lingkungan) && (
+                        <option value={lingkungan}>{lingkungan}</option>
+                      )}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Nama Keluarga
+                    </label>
+                    <input
+                      type="text"
+                      value={familyName}
+                      onChange={(e) => setFamilyName(e.target.value)}
+                      placeholder="Contoh: Kel. St. R. Sinaga / Br. Sitepu"
+                      className="w-full min-h-[44px] sm:min-h-0 text-xs p-2 rounded-lg border border-slate-200 bg-white"
+                    />
+                  </div>
+                </div>
               </div>
             )}
 

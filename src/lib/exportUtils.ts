@@ -40,7 +40,7 @@ export function exportToExcel(
   sheetName: string = 'Data'
 ) {
   if (!data || data.length === 0) {
-    alert('Tidak ada data untuk diekspor ke Excel.');
+    console.warn('Tidak ada data untuk diekspor ke Excel.');
     return;
   }
 

@@ -144,10 +144,10 @@ export const PeriodClosingPage: React.FC = () => {
       )}
 
       {/* Control & Inspection Card */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-6">
+      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
           {/* Selectors */}
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="grid grid-cols-1 sm:flex sm:items-center gap-3 flex-wrap w-full sm:w-auto">
             <div>
               <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                 Bulan Buku
@@ -155,7 +155,7 @@ export const PeriodClosingPage: React.FC = () => {
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                className="text-xs p-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800"
+                className="w-full sm:w-auto text-xs p-2.5 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800"
               >
                 {MONTH_NAMES_INDO.map((name, i) => (
                   <option key={name} value={i + 1}>
@@ -172,7 +172,7 @@ export const PeriodClosingPage: React.FC = () => {
               <select
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(Number(e.target.value))}
-                className="text-xs p-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800"
+                className="w-full sm:w-auto text-xs p-2.5 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800"
               >
                 {fiscalYears && fiscalYears.length > 0 ? (
                   fiscalYears.map((fy) => (
@@ -196,7 +196,7 @@ export const PeriodClosingPage: React.FC = () => {
               <select
                 value={targetKasId}
                 onChange={(e) => setTargetKasId(e.target.value)}
-                className="text-xs p-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800"
+                className="w-full sm:w-auto text-xs p-2.5 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800"
               >
                 <option value="all">Semua Kas Seksi (Global)</option>
                 {kasList.map((k) => (
@@ -209,22 +209,22 @@ export const PeriodClosingPage: React.FC = () => {
           </div>
 
           {/* Action button to lock */}
-          <div>
+          <div className="w-full sm:w-auto">
             {!isAdmin && !isBendaharaUmum ? (
-              <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold border border-slate-200">
-                <Lock className="w-4 h-4 text-slate-400" />
+              <div className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] sm:min-h-0 bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold border border-slate-200">
+                <Lock className="w-4 h-4 text-slate-400 shrink-0" />
                 <span>Wewenang Khusus Bendahara Umum & Admin</span>
               </div>
             ) : isPeriodAlreadyClosed ? (
-              <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold border border-slate-200">
-                <Lock className="w-4 h-4 text-slate-500" />
+              <div className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] sm:min-h-0 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold border border-slate-200">
+                <Lock className="w-4 h-4 text-slate-500 shrink-0" />
                 <span>Periode Ini Sudah Ditutup</span>
               </div>
             ) : (
               <button
                 disabled={isClosingSubmitting || totalIncompleteKas > 0}
                 onClick={handleClosePeriod}
-                className={`px-5 py-2.5 text-xs font-semibold rounded-xl shadow-xs transition-colors flex items-center gap-2 ${
+                className={`w-full sm:w-auto px-5 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 ${
                   totalIncompleteKas > 0
                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                     : 'bg-primary hover:bg-primary-dark text-white'
@@ -239,24 +239,72 @@ export const PeriodClosingPage: React.FC = () => {
 
         {/* Pre-closing Completeness Inspection Panel */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
               Pemeriksaan Kelengkapan Catatan Kas per Seksi ({getIndoMonthName(selectedMonth)} {selectedYear})
             </h3>
             {totalIncompleteKas > 0 ? (
-              <span className="text-xs text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5" />
+              <span className="text-xs text-amber-800 bg-amber-100 px-2.5 py-1 rounded-full font-semibold inline-flex items-center gap-1 self-start sm:self-auto">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                 <span>{totalIncompleteKas} Seksi Belum Selesai</span>
               </span>
             ) : (
-              <span className="text-xs text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1">
-                <CheckCircle className="w-3.5 h-3.5" />
+              <span className="text-xs text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full font-semibold inline-flex items-center gap-1 self-start sm:self-auto">
+                <CheckCircle className="w-3.5 h-3.5 shrink-0" />
                 <span>Semua Kas Lengkap & Siap Ditutup</span>
               </span>
             )}
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Mobile Cards for Completeness Inspection */}
+          <div className="md:hidden space-y-2.5">
+            {completenessInspection.map((item) => (
+              <div key={item.kas.id} className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/40 space-y-2.5 text-xs">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="font-bold text-slate-800 block">{item.kas.nama}</span>
+                    <span className="text-[10px] text-slate-400 font-mono">{item.kas.kode}</span>
+                  </div>
+                  {item.isComplete ? (
+                    <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1 text-[11px] shrink-0">
+                      <CheckCircle className="w-3 h-3" />
+                      <span>Lengkap</span>
+                    </span>
+                  ) : (
+                    <span className="text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1 text-[11px] shrink-0">
+                      <AlertTriangle className="w-3 h-3" />
+                      <span>Belum Selesai</span>
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-4 gap-1.5 text-center pt-2 border-t border-slate-200/60">
+                  <div className="p-1.5 rounded-lg bg-white border border-slate-100">
+                    <span className="block text-[10px] text-slate-400">Draf</span>
+                    <span className={`font-mono font-bold ${item.drafts > 0 ? 'text-amber-700' : 'text-slate-400'}`}>
+                      {item.drafts}
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-white border border-slate-100">
+                    <span className="block text-[10px] text-slate-400">Diajukan</span>
+                    <span className={`font-mono font-bold ${item.submitted > 0 ? 'text-blue-700' : 'text-slate-400'}`}>
+                      {item.submitted}
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-white border border-slate-100">
+                    <span className="block text-[10px] text-slate-400">Disetujui</span>
+                    <span className="font-mono font-bold text-emerald-700">{item.approved}</span>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-white border border-slate-100">
+                    <span className="block text-[10px] text-slate-400">Ditolak</span>
+                    <span className="font-mono font-bold text-rose-600">{item.rejected}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700">
               <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-100">
                 <tr>
@@ -320,11 +368,75 @@ export const PeriodClosingPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Historical Closings Table */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+      {/* Historical Closings Table & Mobile Cards */}
+      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
         <h3 className="font-bold text-slate-900 text-sm">Riwayat Penutupan Buku Kas (Audit Log)</h3>
 
-        <div className="overflow-x-auto">
+        {/* Mobile Cards for Historical Closings */}
+        <div className="md:hidden space-y-2.5">
+          {periodClosings.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-400">
+              Belum ada catatan penutupan buku.
+            </div>
+          ) : (
+            periodClosings.map((pc) => {
+              const kas = kasList.find((k) => k.id === pc.kas_id);
+
+              return (
+                <div key={pc.id} className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/40 space-y-2 text-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="font-bold text-slate-900 block">
+                        {getIndoMonthName(pc.bulan)} {pc.tahun}
+                      </span>
+                      <span className="text-[11px] text-slate-600">
+                        {kas ? kas.nama : 'Seluruh Kas (Konsolidasi)'}
+                      </span>
+                    </div>
+                    {pc.is_closed ? (
+                      <span className="text-[10px] px-2.5 py-1 rounded-full font-bold bg-slate-800 text-white inline-flex items-center gap-1 shrink-0">
+                        <Lock className="w-3 h-3" />
+                        <span>Terkunci</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-2.5 py-1 rounded-full font-bold bg-amber-100 text-amber-800 inline-flex items-center gap-1 shrink-0">
+                        <Unlock className="w-3 h-3" />
+                        <span>Dibuka Kembali</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200/60">
+                    <span>Ditutup Pada</span>
+                    <span className="font-mono">{formatDateIndo(pc.closed_at)}</span>
+                  </div>
+
+                  {pc.reopen_reason && (
+                    <div className="text-[11px] text-amber-800 font-medium bg-amber-50 p-2 rounded-lg border border-amber-200/60">
+                      Buka: {pc.reopen_reason}
+                    </div>
+                  )}
+
+                  {pc.is_closed && (isBendaharaUmum || isAdmin) && (
+                    <button
+                      onClick={() => {
+                        setReopenTargetClosing(pc);
+                        setReopenReason('');
+                        setReopenError('');
+                      }}
+                      className="w-full min-h-[44px] px-3 py-2 text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl text-xs font-semibold transition-colors inline-flex items-center justify-center gap-1.5"
+                    >
+                      <Unlock className="w-3.5 h-3.5" />
+                      <span>Buka Kembali</span>
+                    </button>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700">
             <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-100">
               <tr>
@@ -404,22 +516,25 @@ export const PeriodClosingPage: React.FC = () => {
 
       {/* Modal Reopen Period */}
       {reopenTargetClosing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-100">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-amber-100 bg-amber-50/50">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full max-h-[92dvh] overflow-y-auto shadow-2xl border border-slate-100 mobile-sheet-enter">
+            <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-amber-100 bg-amber-50/50 sticky top-0 z-10">
               <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
-                <Unlock className="w-5 h-5 text-amber-700" />
+                <Unlock className="w-5 h-5 text-amber-700 shrink-0" />
                 <span>Buka Kembali Buku Kas Terkunci</span>
               </div>
               <button
                 onClick={() => setReopenTargetClosing(null)}
-                className="p-1 text-slate-400 hover:text-slate-700"
+                className="p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-slate-400 hover:text-slate-700 rounded-xl"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleReopenSubmit} className="p-6 space-y-4 text-xs">
+            <form
+              onSubmit={handleReopenSubmit}
+              className="p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4 text-xs"
+            >
               <p className="text-slate-600">
                 Membuka kembali buku periode <strong>{getIndoMonthName(reopenTargetClosing.bulan)} {reopenTargetClosing.tahun}</strong>{' '}
                 akan mengizinkan penginputan koreksi baru. Tindakan ini wajib menyertakan alasan yang sah dan akan dicatat dalam audit trail.
@@ -434,23 +549,23 @@ export const PeriodClosingPage: React.FC = () => {
                   onChange={(e) => setReopenReason(e.target.value)}
                   rows={3}
                   placeholder="Contoh: Koreksi selisih persembahan pesta pembangunan atas persetujuan Pendeta Ressort..."
-                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                  className="w-full p-3 sm:p-2.5 rounded-xl border border-slate-200"
                   required
                 />
                 {reopenError && <p className="text-rose-500 mt-1">{reopenError}</p>}
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setReopenTargetClosing(null)}
-                  className="px-4 py-2 text-slate-600 font-semibold hover:bg-slate-100 rounded-xl"
+                  className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] sm:min-h-0 text-slate-600 font-semibold hover:bg-slate-100 rounded-xl border border-slate-200 sm:border-transparent"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl shadow-xs"
+                  className="w-full sm:w-auto px-5 py-2.5 min-h-[44px] sm:min-h-0 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl shadow-xs"
                 >
                   Buka Kunci Buku
                 </button>

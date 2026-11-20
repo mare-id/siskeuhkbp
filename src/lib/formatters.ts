@@ -141,3 +141,26 @@ export function sortStorageAccountsPreferred<
     return (a.nama || '').localeCompare(b.nama || '', 'id');
   });
 }
+
+export function sortKasPreferred<
+  T extends { id?: string; kode?: string; nama?: string }
+>(kasItems: T[]): T[] {
+  const getPriority = (k: T): number => {
+    const id = (k.id || '').toLowerCase();
+    const kode = (k.kode || '').toUpperCase();
+    const nama = (k.nama || '').toLowerCase();
+
+    if (id === 'kas-1' || kode === 'KAS-UMUM' || /kas\s*umum\s*huria/i.test(nama)) return 0;
+    if (id === 'kas-7' || kode === 'KAS-BANGUN' || /kas\s*pembangunan/i.test(nama)) return 1;
+    if (id === 'kas-2' || kode === 'KAS-SOSIAL' || /kas\s*sosial/i.test(nama)) return 2;
+    if (id === 'kas-8' || kode === 'KAS-TRANSITORIS' || /kas\s*transitoris/i.test(nama)) return 3;
+    if (id === 'kas-9' || kode === 'KAS-SENTRAL' || /kas\s*sentralisasi/i.test(nama)) return 4;
+    return 5;
+  };
+
+  return [...kasItems].sort((a, b) => {
+    const diff = getPriority(a) - getPriority(b);
+    if (diff !== 0) return diff;
+    return (a.nama || '').localeCompare(b.nama || '', 'id');
+  });
+}

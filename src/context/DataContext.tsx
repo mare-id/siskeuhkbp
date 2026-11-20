@@ -130,6 +130,7 @@ import {
   getYmdMonth,
   getTodayYmd,
   sortStorageAccountsPreferred,
+  sortKasPreferred,
 } from '../lib/formatters';
 import { useAuth } from './AuthContext';
 
@@ -457,6 +458,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { currentUser } = useAuth();
 
   const [kasList, setKasList] = useState<Kas[]>(() => readLocalOrDefault('siku_kas_list', isSupabaseConfigured ? [] : DEMO_KAS));
+
+  const sortedKasList = useMemo(
+    () => sortKasPreferred(kasList),
+    [kasList]
+  );
 
   const [storageAccounts, setStorageAccounts] = useState<StorageAccount[]>(() =>
     readLocalOrDefault('siku_storage_accounts', isSupabaseConfigured ? [] : DEMO_STORAGE_ACCOUNTS)
@@ -7445,7 +7451,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <DataContext.Provider
       value={{
-        kasList,
+        kasList: sortedKasList,
         storageAccounts: sortedStorageAccounts,
         categories,
         transactions,

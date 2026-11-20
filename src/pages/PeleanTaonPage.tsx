@@ -23,7 +23,11 @@ import {
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { formatDateIndo, formatRupiah, formatNamaKeluarga } from '../lib/formatters';
-import { PeleanTaonPrefill, TransactionModal } from '../components/transactions/TransactionModal';
+import {
+  isPeleanBulananTahunanCategory,
+  PeleanTaonPrefill,
+  TransactionModal,
+} from '../components/transactions/TransactionModal';
 
 interface PaymentGroup {
   groupId: string;
@@ -63,6 +67,7 @@ export const PeleanTaonPage: React.FC = () => {
     families,
     lingkunganList,
     transactions,
+    categories,
     fiscalYears,
     settings,
   } = useData();
@@ -97,9 +102,14 @@ export const PeleanTaonPage: React.FC = () => {
       if (tx.type !== 'income' || tx.is_reversal || tx.status === 'rejected') return false;
       if (reversedIds.has(tx.id)) return false;
 
+      const txCat = tx.category_id ? categories.find((c) => c.id === tx.category_id) : undefined;
+      const isPeleanCat = txCat
+        ? isPeleanBulananTahunanCategory(txCat)
+        : tx.category_id === 'cat-in-namarboho';
+
       const isPeleanTaon =
         Boolean(tx.pelean_taon_year) ||
-        tx.category_id === 'cat-in-namarboho' ||
+        isPeleanCat ||
         /pelean\s*taon/i.test(tx.description);
       if (!isPeleanTaon) return false;
 
@@ -178,7 +188,7 @@ export const PeleanTaonPage: React.FC = () => {
     });
 
     return groups;
-  }, [transactions, selectedYear]);
+  }, [transactions, categories, selectedYear]);
 
   // Combine Master Families + PaymentGroups into Rekap Rows
   const allRekapRows = useMemo<FamilyRekapRow[]>(() => {

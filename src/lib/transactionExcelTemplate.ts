@@ -194,8 +194,12 @@ const formatCategoryOption = (c: Category): string =>
 
 const isPeleanCategory = (cat?: Category | null): boolean => {
   if (!cat) return false;
-  if (cat.id === 'cat-in-namarboho') return true;
-  return /pelean.*(bulanan|tahunan)/i.test(cat.nama);
+  const nama = (cat.nama || '').trim();
+  if (!nama) return false;
+  return (
+    /pelean.*(bulanan|tahunan|\btaon\b|namarboho)/i.test(nama) ||
+    /bulanan\s*[/&-]\s*tahunan/i.test(nama)
+  );
 };
 
 // -----------------------------------------------------------------------------

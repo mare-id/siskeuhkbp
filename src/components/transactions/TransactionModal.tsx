@@ -61,10 +61,28 @@ const WIZARD_STEPS = [
   { step: 4 as const, shortLabel: 'Konfirmasi', title: 'Bukti & Konfirmasi' },
 ];
 
-const isPeleanBulananTahunanCategory = (cat?: { id: string; nama: string } | null): boolean => {
+export const isPeleanBulananTahunanCategory = (cat?: { id?: string; nama?: string } | null): boolean => {
   if (!cat) return false;
-  if (cat.id === 'cat-in-namarboho') return true;
-  return /pelean.*(bulanan|tahunan)/i.test(cat.nama);
+  const nama = (cat.nama || '').trim();
+  if (!nama) return false;
+  return (
+    /pelean.*(bulanan|tahunan|\btaon\b|namarboho)/i.test(nama) ||
+    /bulanan\s*[/&-]\s*tahunan/i.test(nama)
+  );
+};
+
+const isTransitorisKas = (kas?: { id?: string; kode?: string; nama?: string } | null): boolean => {
+  if (!kas) return false;
+  if (kas.id === 'kas-8') return true;
+  const combined = `${kas.kode || ''} ${kas.nama || ''}`.toLowerCase();
+  return combined.includes('transitoris') || combined.includes('titipan');
+};
+
+const getMultiPosCategoryPriority = (cat: { nama?: string; sentralisasi_group?: string | null }): number => {
+  const nama = (cat.nama || '').trim();
+  if (/hamauliateon|ucapan\s*syukur/i.test(nama)) return 0;
+  if (cat.sentralisasi_group === 'pelean_syukur' || /\bsyukur\b/i.test(nama)) return 1;
+  return 2;
 };
 
 const getNextSunday = (baseDateStr: string): string => {
@@ -165,6 +183,16 @@ export const TransactionModal: React.FC<Props> = ({
     [kasList]
   );
 
+  const displayedCategories = useMemo(() => {
+    const active = categories.filter((c) => c.tipe === type && c.is_active);
+    if (type === 'income' && incomeMode === 'multi') {
+      return [...active].sort(
+        (a, b) => getMultiPosCategoryPriority(a) - getMultiPosCategoryPriority(b)
+      );
+    }
+    return active;
+  }, [categories, type, incomeMode]);
+
   const selectedCategoryObj = useMemo(
     () => categories.find((c) => c.id === categoryId) || null,
     [categories, categoryId]
@@ -255,7 +283,7 @@ export const TransactionModal: React.FC<Props> = ({
           categories.find((c) => c.tipe === 'income' && c.is_active && isPeleanBulananTahunanCategory(c)) ||
           categories.find((c) => c.tipe === 'income' && c.is_active);
         if (peleanCat) setCategoryId(peleanCat.id);
-        setIsPeleanTaonMode(true);
+        setIsPeleanTaonMode(Boolean(peleanCat && isPeleanBulananTahunanCategory(peleanCat)));
         const yr = defaultPeleanTaon.year || settings.active_year || new Date().getFullYear();
         setPeleanYear(yr);
         const ling = defaultPeleanTaon.lingkungan || availableLingkunganNames[0] || '';
@@ -317,7 +345,7 @@ export const TransactionModal: React.FC<Props> = ({
           {
             rowId: `row-${Date.now()}-1`,
             kas_id: initialKas,
-            sub_description: 'Ke Kas Huria',
+            sub_description: '',
             amountInput: '',
             is_sentralisasi: inferDefaultSentralisasiForKas(initialKas),
             exclusion_type: inferExclusionForKas(initialKas),
@@ -345,15 +373,27 @@ export const TransactionModal: React.FC<Props> = ({
         return;
       }
     }
-    const validCategories = categories.filter((c) => c.tipe === type && c.is_active);
-    if (validCategories.length > 0) {
+    if (displayedCategories.length > 0) {
       setCategoryId((prev) =>
-        validCategories.some((c) => c.id === prev) ? prev : validCategories[0].id
+        displayedCategories.some((c) => c.id === prev) ? prev : displayedCategories[0].id
       );
     } else {
       setCategoryId('');
     }
-  }, [type, categories, isOpen, defaultPeleanTaon]);
+  }, [type, displayedCategories, isOpen, defaultPeleanTaon]);
+
+  const handleSelectIncomeMode = (nextMode: 'single' | 'multi') => {
+    setIncomeMode(nextMode);
+    if (nextMode === 'multi') {
+      const incomeSorted = categories
+        .filter((c) => c.tipe === 'income' && c.is_active)
+        .sort((a, b) => getMultiPosCategoryPriority(a) - getMultiPosCategoryPriority(b));
+      const topSyukur = incomeSorted.find((c) => getMultiPosCategoryPriority(c) < 2) || incomeSorted[0];
+      if (topSyukur) {
+        setCategoryId(topSyukur.id);
+      }
+    }
+  };
 
   // Auto-enforce Kas Huria + Sentralisasi 55% whenever Pelean Taon mode is active
   useEffect(() => {
@@ -395,10 +435,20 @@ export const TransactionModal: React.FC<Props> = ({
     descriptionManuallyEdited,
   ]);
 
+  // Reset Mode Pelean Taon cleanly whenever selected category/type/mode is not Pelean Bulanan/Tahunan
+  useEffect(() => {
+    if (!isPeleanCategorySelected && isPeleanTaonMode) {
+      setIsPeleanTaonMode(false);
+      if (!descriptionManuallyEdited && /^Pelean Taon\s/i.test(description)) {
+        setDescription('');
+      }
+    }
+  }, [isPeleanCategorySelected, isPeleanTaonMode, descriptionManuallyEdited, description]);
+
   const handleCategoryChange = (newCatId: string) => {
     setCategoryId(newCatId);
     const cat = categories.find((c) => c.id === newCatId);
-    if (type === 'income' && isPeleanBulananTahunanCategory(cat)) {
+    if (type === 'income' && incomeMode === 'single' && isPeleanBulananTahunanCategory(cat)) {
       setIsPeleanTaonMode(true);
       if (kasUmumHuria) setKasId(kasUmumHuria.id);
       setIsSentralisasi(true);
@@ -411,6 +461,9 @@ export const TransactionModal: React.FC<Props> = ({
       return;
     }
     setIsPeleanTaonMode(false);
+    if (!descriptionManuallyEdited && /^Pelean Taon\s/i.test(description)) {
+      setDescription('');
+    }
     if (!defaultKasId && cat?.default_kas_id && canInputKas(cat.default_kas_id)) {
       setKasId(cat.default_kas_id);
       setExclusionType(inferExclusionForKas(cat.default_kas_id));
@@ -517,9 +570,9 @@ export const TransactionModal: React.FC<Props> = ({
       isSentralisasi: boolean;
       exType: SentralisasiExclusionType | null;
     }> = [
-      { kasId: 'kas-1', subDesc: 'Ke Kas Huria', amount: '200000', isSentralisasi: true, exType: null },
-      { kasId: 'kas-7', subDesc: 'Ke Kas Pembangunan', amount: '100000', isSentralisasi: false, exType: 'pembangunan_lokal' },
-      { kasId: 'kas-2', subDesc: 'Ke Kas Diakonia Sosial', amount: '100000', isSentralisasi: false, exType: 'sosial_duka' },
+      { kasId: 'kas-1', subDesc: '', amount: '200000', isSentralisasi: true, exType: null },
+      { kasId: 'kas-7', subDesc: '', amount: '100000', isSentralisasi: false, exType: 'pembangunan_lokal' },
+      { kasId: 'kas-2', subDesc: '', amount: '100000', isSentralisasi: false, exType: 'sosial_duka' },
       { kasId: 'kas-8', subDesc: 'Ke Pendeta', amount: '100000', isSentralisasi: false, exType: 'transitoris' },
       { kasId: 'kas-8', subDesc: 'Ke Lingkungan', amount: '100000', isSentralisasi: false, exType: 'transitoris' },
     ];
@@ -537,9 +590,12 @@ export const TransactionModal: React.FC<Props> = ({
 
     if (availableRows.length > 0) {
       setAllocations(availableRows);
+      const activeIncomeCats = categories.filter((c) => c.tipe === 'income' && c.is_active);
       const syukurCat =
-        categories.find((c) => c.id === 'cat-in-syukur-keluarga' && c.is_active) ||
-        categories.find((c) => c.id === 'cat-in-syukur-altar' && c.is_active);
+        activeIncomeCats.find((c) => getMultiPosCategoryPriority(c) === 0) ||
+        activeIncomeCats.find((c) => c.id === 'cat-in-syukur-keluarga') ||
+        activeIncomeCats.find((c) => c.id === 'cat-in-syukur-altar') ||
+        activeIncomeCats.find((c) => getMultiPosCategoryPriority(c) === 1);
       if (syukurCat) setCategoryId(syukurCat.id);
       if (!description.trim()) {
         setDescription('Ucapan Syukur Keluarga');
@@ -686,13 +742,19 @@ export const TransactionModal: React.FC<Props> = ({
         receipt_no: receiptNo.trim() || undefined,
         attachment_url: attachmentUrl,
         status: submitDirectly ? 'submitted' : 'draft',
-        allocations: allocations.map((r) => ({
-          kas_id: r.kas_id,
-          amount: parseNum(r.amountInput),
-          is_sentralisasi: r.is_sentralisasi,
-          sub_description: r.sub_description.trim() || undefined,
-          exclusion_type: r.is_sentralisasi ? null : r.exclusion_type || inferExclusionForKas(r.kas_id),
-        })),
+        allocations: allocations.map((r) => {
+          const targetKas = kasList.find((k) => k.id === r.kas_id);
+          const cleanSubDesc = isTransitorisKas(targetKas)
+            ? r.sub_description.trim() || undefined
+            : undefined;
+          return {
+            kas_id: r.kas_id,
+            amount: parseNum(r.amountInput),
+            is_sentralisasi: r.is_sentralisasi,
+            sub_description: cleanSubDesc,
+            exclusion_type: r.is_sentralisasi ? null : r.exclusion_type || inferExclusionForKas(r.kas_id),
+          };
+        }),
       });
       setIsSubmitting(false);
 
@@ -1130,7 +1192,9 @@ export const TransactionModal: React.FC<Props> = ({
         {allocations.map((row, idx) => {
           const rowAmt = parseNum(row.amountInput);
           const rowSplit = splitSentralisasiAmount(rowAmt, row.is_sentralisasi);
-          const rowKasName = kasList.find((k) => k.id === row.kas_id)?.nama || 'Kas';
+          const selectedRowKas = kasList.find((k) => k.id === row.kas_id);
+          const rowKasName = selectedRowKas?.nama || 'Kas';
+          const rowIsTransitoris = isTransitorisKas(selectedRowKas);
 
           return (
             <div
@@ -1204,30 +1268,19 @@ export const TransactionModal: React.FC<Props> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                <input
-                  type="text"
-                  value={row.sub_description}
-                  onChange={(e) =>
-                    setAllocations((prev) =>
-                      prev.map((r) =>
-                        r.rowId === row.rowId ? { ...r, sub_description: e.target.value } : r
-                      )
-                    )
-                  }
-                  placeholder="- Ke Kas Huria / Pendeta"
-                  className="sm:col-span-4 h-11 sm:h-9 px-3 rounded-xl sm:rounded-lg border border-slate-200 text-xs"
-                />
-
                 <select
                   value={row.kas_id}
                   onChange={(e) => {
                     const nextKas = e.target.value;
+                    const nextKasObj = kasList.find((k) => k.id === nextKas);
+                    const nextIsTrans = isTransitorisKas(nextKasObj);
                     setAllocations((prev) =>
                       prev.map((r) =>
                         r.rowId === row.rowId
                           ? {
                               ...r,
                               kas_id: nextKas,
+                              sub_description: nextIsTrans ? r.sub_description : '',
                               is_sentralisasi: inferDefaultSentralisasiForKas(nextKas),
                               exclusion_type: inferExclusionForKas(nextKas),
                             }
@@ -1235,7 +1288,10 @@ export const TransactionModal: React.FC<Props> = ({
                       )
                     );
                   }}
-                  className="sm:col-span-4 h-11 sm:h-9 px-2.5 rounded-xl sm:rounded-lg border border-slate-200 bg-white text-xs"
+                  aria-label={`Daftar Kas baris ${idx + 1}`}
+                  className={`${
+                    rowIsTransitoris ? 'sm:col-span-4' : 'sm:col-span-7'
+                  } h-11 sm:h-9 px-2.5 rounded-xl sm:rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-900`}
                 >
                   {selectableKas.map((k) => (
                     <option key={k.id} value={k.id}>
@@ -1243,6 +1299,23 @@ export const TransactionModal: React.FC<Props> = ({
                     </option>
                   ))}
                 </select>
+
+                {rowIsTransitoris && (
+                  <input
+                    type="text"
+                    value={row.sub_description}
+                    onChange={(e) =>
+                      setAllocations((prev) =>
+                        prev.map((r) =>
+                          r.rowId === row.rowId ? { ...r, sub_description: e.target.value } : r
+                        )
+                      )
+                    }
+                    placeholder="Tujuan titipan (mis. Ke Pendeta / Lingkungan)"
+                    aria-label={`Tujuan Transitoris baris ${idx + 1}`}
+                    className="sm:col-span-4 h-11 sm:h-9 px-3 rounded-xl sm:rounded-lg border border-blue-200 bg-blue-50/30 text-xs focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                  />
+                )}
 
                 <input
                   type="text"
@@ -1260,7 +1333,9 @@ export const TransactionModal: React.FC<Props> = ({
                     )
                   }
                   placeholder="Nominal (Rp)"
-                  className="sm:col-span-4 h-11 sm:h-9 px-3 rounded-xl sm:rounded-lg border border-slate-200 font-mono font-bold text-right text-xs tabular-nums"
+                  className={`${
+                    rowIsTransitoris ? 'sm:col-span-4' : 'sm:col-span-5'
+                  } h-11 sm:h-9 px-3 rounded-xl sm:rounded-lg border border-slate-200 font-mono font-bold text-right text-xs tabular-nums`}
                 />
               </div>
 
@@ -1486,7 +1561,7 @@ export const TransactionModal: React.FC<Props> = ({
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        onClick={() => setIncomeMode('single')}
+                        onClick={() => handleSelectIncomeMode('single')}
                         className={`p-3 min-h-[56px] rounded-xl border text-left transition-all cursor-pointer ${
                           incomeMode === 'single'
                             ? 'bg-blue-50 border-blue-600 text-blue-950 ring-2 ring-blue-600/15'
@@ -1499,7 +1574,7 @@ export const TransactionModal: React.FC<Props> = ({
 
                       <button
                         type="button"
-                        onClick={() => setIncomeMode('multi')}
+                        onClick={() => handleSelectIncomeMode('multi')}
                         className={`p-3 min-h-[56px] rounded-xl border text-left transition-all cursor-pointer ${
                           incomeMode === 'multi'
                             ? 'bg-emerald-50 border-emerald-600 text-emerald-950 ring-2 ring-emerald-600/15'
@@ -1572,13 +1647,11 @@ export const TransactionModal: React.FC<Props> = ({
                     onChange={(e) => handleCategoryChange(e.target.value)}
                     className="w-full h-12 text-sm px-3.5 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                   >
-                    {categories
-                      .filter((c) => c.tipe === type && c.is_active)
-                      .map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.nama}
-                        </option>
-                      ))}
+                    {displayedCategories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nama}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1940,7 +2013,7 @@ export const TransactionModal: React.FC<Props> = ({
             <div className="grid grid-cols-2 gap-2 p-1 bg-slate-200/60 rounded-xl">
               <button
                 type="button"
-                onClick={() => setIncomeMode('single')}
+                onClick={() => handleSelectIncomeMode('single')}
                 className={`h-9 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   incomeMode === 'single'
                     ? 'bg-white text-slate-900 shadow-xs'
@@ -1951,7 +2024,7 @@ export const TransactionModal: React.FC<Props> = ({
               </button>
               <button
                 type="button"
-                onClick={() => setIncomeMode('multi')}
+                onClick={() => handleSelectIncomeMode('multi')}
                 className={`h-9 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   incomeMode === 'multi'
                     ? 'bg-white text-emerald-800 shadow-xs'
@@ -2112,13 +2185,11 @@ export const TransactionModal: React.FC<Props> = ({
                     className="w-full h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                     required
                   >
-                    {categories
-                      .filter((c) => c.tipe === type && c.is_active)
-                      .map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.nama}
-                        </option>
-                      ))}
+                    {displayedCategories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nama}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -2168,13 +2239,11 @@ export const TransactionModal: React.FC<Props> = ({
                   className="w-full h-10 text-xs px-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                   required
                 >
-                  {categories
-                    .filter((c) => c.tipe === type && c.is_active)
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nama}
-                      </option>
-                    ))}
+                  {displayedCategories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nama}
+                    </option>
+                  ))}
                 </select>
               </div>
 

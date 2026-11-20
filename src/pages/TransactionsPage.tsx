@@ -468,23 +468,23 @@ export const TransactionsPage: React.FC = () => {
   return (
     <div className="space-y-5 w-full max-w-7xl mx-auto min-w-0">
       {/* Header & Controls */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
             Transaksi &amp; Buku Kas
           </h1>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 mt-0.5">
             Pemasukan, pengeluaran, dan transfer dana kas huria
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5">
           {/* View Mode Segmented Switch */}
-          <div className="inline-flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200/80">
+          <div className="grid grid-cols-2 sm:inline-flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200/80 w-full sm:w-auto">
             <button
               type="button"
               onClick={() => setViewMode('list')}
-              className={`px-3 py-1.5 min-h-[40px] sm:min-h-[34px] rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+              className={`px-3 py-2 sm:py-1.5 min-h-[42px] sm:min-h-[34px] rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap cursor-pointer ${
                 viewMode === 'list'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -496,7 +496,7 @@ export const TransactionsPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setViewMode('ledger')}
-              className={`px-3 py-1.5 min-h-[40px] sm:min-h-[34px] rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+              className={`px-3 py-2 sm:py-1.5 min-h-[42px] sm:min-h-[34px] rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap cursor-pointer ${
                 viewMode === 'ledger'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -507,57 +507,60 @@ export const TransactionsPage: React.FC = () => {
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={handleExportExcel}
-            className="px-3.5 py-2 min-h-[44px] sm:min-h-[40px] bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
-            <span>Ekspor Excel</span>
-          </button>
+          {/* Mobile 2x2 Action Grid / Desktop Inline Row */}
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
+            {(isAdmin || (canRecordTransactions && kasList.some((k) => k.is_active && canInputKas(k.id)))) && (
+              <button
+                type="button"
+                onClick={() => setIsTxModalOpen(true)}
+                className="col-span-2 sm:col-span-1 sm:order-4 px-4 py-2.5 sm:py-2 min-h-[44px] sm:min-h-[40px] bg-[#0B132B] hover:bg-slate-800 text-white text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap shadow-xs cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Catat Transaksi</span>
+              </button>
+            )}
 
-          {(isAdmin || (canRecordTransactions && kasList.some((k) => k.is_active && canInputKas(k.id)))) && (
+            {(isAdmin || (canTransfer && kasList.some((k) => k.is_active && canInputKas(k.id)))) && (
+              <button
+                type="button"
+                onClick={() => setIsTransferModalOpen(true)}
+                className="sm:order-3 px-3.5 py-2 min-h-[44px] sm:min-h-[40px] bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap cursor-pointer"
+              >
+                <ArrowRightLeft className="w-4 h-4 text-blue-700" />
+                <span>Transfer</span>
+              </button>
+            )}
+
+            {(isAdmin || (canRecordTransactions && kasList.some((k) => k.is_active && canInputKas(k.id)))) && (
+              <button
+                type="button"
+                onClick={() => setIsImportModalOpen(true)}
+                className="sm:order-2 px-3.5 py-2 min-h-[44px] sm:min-h-[40px] bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap cursor-pointer"
+              >
+                <Upload className="w-4 h-4 text-emerald-700" />
+                <span>Impor Excel</span>
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={() => setIsImportModalOpen(true)}
-              className="px-3.5 py-2 min-h-[44px] sm:min-h-[40px] bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap cursor-pointer"
+              onClick={handleExportExcel}
+              className="sm:order-1 px-3.5 py-2 min-h-[44px] sm:min-h-[40px] bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap cursor-pointer"
             >
-              <Upload className="w-4 h-4 text-emerald-700" />
-              <span>Impor Excel</span>
+              <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
+              <span>Ekspor Excel</span>
             </button>
-          )}
 
-          {(isAdmin || (canTransfer && kasList.some((k) => k.is_active && canInputKas(k.id)))) && (
-            <button
-              type="button"
-              onClick={() => setIsTransferModalOpen(true)}
-              className="px-3.5 py-2 min-h-[44px] sm:min-h-[40px] bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
-            >
-              <ArrowRightLeft className="w-4 h-4 text-blue-700" />
-              <span>Transfer</span>
-            </button>
-          )}
-
-          {(isAdmin || (canRecordTransactions && kasList.some((k) => k.is_active && canInputKas(k.id)))) && (
-            <button
-              type="button"
-              onClick={() => setIsTxModalOpen(true)}
-              className="px-4 py-2 min-h-[44px] sm:min-h-[40px] bg-[#0B132B] hover:bg-slate-800 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Catat Transaksi</span>
-            </button>
-          )}
-
-          {isAuditor && (
-            <NavLink
-              to="/audit"
-              className="px-3.5 py-2 min-h-[44px] sm:min-h-[40px] bg-purple-800 hover:bg-purple-900 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
-            >
-              <ShieldCheck className="w-4 h-4" />
-              <span>Modul Audit</span>
-            </NavLink>
-          )}
+            {isAuditor && (
+              <NavLink
+                to="/audit"
+                className="col-span-2 sm:col-span-1 sm:order-5 px-3.5 py-2 min-h-[44px] sm:min-h-[40px] bg-purple-800 hover:bg-purple-900 text-white text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>Modul Audit</span>
+              </NavLink>
+            )}
+          </div>
         </div>
       </div>
 
@@ -579,21 +582,21 @@ export const TransactionsPage: React.FC = () => {
 
       {/* Summary Strip */}
       <div className="bg-white rounded-2xl border border-slate-200/90 grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
-        <div className="p-4 flex items-center justify-between gap-2">
+        <div className="px-4 py-3.5 sm:p-4 flex items-center justify-between gap-2">
           <span className="text-xs font-medium text-slate-500">Pemasukan Disetujui</span>
-          <span className="text-base sm:text-lg font-bold font-mono text-emerald-700 tabular-nums">
+          <span className="text-sm sm:text-lg font-bold font-mono text-emerald-700 tabular-nums">
             +{formatRupiah(filteredTotals.masuk)}
           </span>
         </div>
-        <div className="p-4 flex items-center justify-between gap-2">
+        <div className="px-4 py-3.5 sm:p-4 flex items-center justify-between gap-2">
           <span className="text-xs font-medium text-slate-500">Pengeluaran Disetujui</span>
-          <span className="text-base sm:text-lg font-bold font-mono text-rose-700 tabular-nums">
+          <span className="text-sm sm:text-lg font-bold font-mono text-rose-700 tabular-nums">
             -{formatRupiah(filteredTotals.keluar)}
           </span>
         </div>
-        <div className="p-4 flex items-center justify-between gap-2">
+        <div className="px-4 py-3.5 sm:p-4 flex items-center justify-between gap-2">
           <span className="text-xs font-medium text-slate-500">Total Catatan</span>
-          <span className="text-base sm:text-lg font-bold font-mono text-slate-900 tabular-nums">
+          <span className="text-sm sm:text-lg font-bold font-mono text-slate-900 tabular-nums">
             {filteredTransactions.length} Baris
           </span>
         </div>

@@ -457,21 +457,25 @@ export default function OpeningBalancePage() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex items-center p-1 bg-gray-100/80 rounded-xl border border-gray-200 overflow-x-auto scrollbar-none gap-1">
+      <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200/80 overflow-x-auto scrollbar-none gap-1">
         <button
           onClick={() => setActiveTab('status')}
-          className={`flex items-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-0 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
-            activeTab === 'status' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+          className={`flex items-center gap-2 px-3.5 py-2 min-h-[40px] rounded-lg text-xs transition-all whitespace-nowrap shrink-0 ${
+            activeTab === 'status'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Layers className="w-4 h-4 text-[#7C9CF5]" />
+          <Layers className="w-4 h-4 text-blue-600" />
           Status Pembukaan per Kas
         </button>
         {canRecordTransactions && (
           <button
             onClick={() => setActiveTab('excel')}
-            className={`flex items-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-0 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
-              activeTab === 'excel' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+            className={`flex items-center gap-2 px-3.5 py-2 min-h-[40px] rounded-lg text-xs transition-all whitespace-nowrap shrink-0 ${
+              activeTab === 'excel'
+                ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                : 'text-slate-600 hover:text-slate-900 font-medium'
             }`}
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
@@ -480,20 +484,24 @@ export default function OpeningBalancePage() {
         )}
         <button
           onClick={() => setActiveTab('adjustments')}
-          className={`flex items-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-0 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
-            activeTab === 'adjustments' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+          className={`flex items-center gap-2 px-3.5 py-2 min-h-[40px] rounded-lg text-xs transition-all whitespace-nowrap shrink-0 ${
+            activeTab === 'adjustments'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <RotateCcw className="w-4 h-4 text-[#FFB4A2]" />
+          <RotateCcw className="w-4 h-4 text-amber-600" />
           Penyesuaian Saldo Awal ({openingAdjustments.length})
         </button>
         <button
           onClick={() => setActiveTab('prior_year')}
-          className={`flex items-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-0 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
-            activeTab === 'prior_year' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+          className={`flex items-center gap-2 px-3.5 py-2 min-h-[40px] rounded-lg text-xs transition-all whitespace-nowrap shrink-0 ${
+            activeTab === 'prior_year'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Calendar className="w-4 h-4 text-[#CDB4FF]" />
+          <Calendar className="w-4 h-4 text-indigo-600" />
           Ringkasan Tahun Lalu (Manual)
         </button>
       </div>
@@ -554,7 +562,7 @@ export default function OpeningBalancePage() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {!isLocked && canInput && (
-                        <button onClick={() => handleOpenWizard(k)} className="flex-1 min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600">
+                        <button onClick={() => handleOpenWizard(k)} className="flex-1 min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors">
                           {status === 'not_started' ? 'Mulai Wizard' : 'Lanjutkan Wizard'}
                         </button>
                       )}
@@ -638,7 +646,7 @@ export default function OpeningBalancePage() {
                             {!isLocked && canInput && (
                               <button
                                 onClick={() => handleOpenWizard(k)}
-                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 transition-colors shadow-xs"
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-xs"
                               >
                                 {status === 'not_started' ? 'Mulai Wizard' : 'Lanjutkan Wizard'}
                               </button>
@@ -701,7 +709,7 @@ export default function OpeningBalancePage() {
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
               <button
                 onClick={handleDownloadExcelTemplate}
-                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm transition-colors"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-xs transition-colors"
               >
                 <Download className="w-4 h-4" />
                 Unduh Template Excel (.xlsx)
@@ -799,7 +807,7 @@ export default function OpeningBalancePage() {
       {/* ========================================================================= */}
       {activeTab === 'adjustments' && (
         <div className="space-y-6">
-          <div className="bg-[#FFB4A2]/15 border border-[#FFB4A2]/40 rounded-2xl p-5 flex items-start gap-4">
+          <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-5 flex items-start gap-4">
             <AlertCircle className="w-6 h-6 text-rose-600 shrink-0 mt-0.5" />
             <div className="space-y-1">
               <h3 className="text-base font-bold text-gray-900">Aturan Penyesuaian Saldo Awal Terkunci</h3>
@@ -829,7 +837,7 @@ export default function OpeningBalancePage() {
                   setAdjDocName('');
                   setShowAdjModal(true);
                 }}
-                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm transition-colors"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-xs transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 Ajukan Penyesuaian
@@ -1003,7 +1011,7 @@ export default function OpeningBalancePage() {
                             setPriorYearEditTarget({ categoryId: cat.id, categoryName: cat.nama });
                             setPriorYearAmountInput(String(val));
                           }}
-                          className="min-h-[40px] px-3 py-1.5 text-xs font-semibold text-[#5A7BE0] bg-indigo-50 hover:bg-indigo-100 rounded-lg"
+                          className="min-h-[40px] px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg"
                         >
                           Ubah Angka Realisasi
                         </button>
@@ -1048,7 +1056,7 @@ export default function OpeningBalancePage() {
                                 setPriorYearEditTarget({ categoryId: cat.id, categoryName: cat.nama });
                                 setPriorYearAmountInput(String(val));
                               }}
-                              className="px-2.5 py-1 text-xs font-semibold text-[#7C9CF5] hover:bg-indigo-50 rounded"
+                              className="px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded"
                             >
                               Ubah Angka
                             </button>
@@ -1076,16 +1084,16 @@ export default function OpeningBalancePage() {
             {/* Wizard Header */}
             <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-gray-100 gap-2">
               <div className="min-w-0">
-                <span className="text-xs font-bold text-[#7C9CF5] uppercase tracking-wider">
+                <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">
                   Wizard Pembukaan Buku
                 </span>
-                <h3 className="text-base sm:text-lg font-bold text-gray-900 mt-0.5 truncate">
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 mt-0.5 truncate">
                   Saldo Awal: {selectedWizardKas.nama}
                 </h3>
               </div>
               <button
                 onClick={() => setWizardKasId(null)}
-                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 p-2 sm:p-1.5 flex items-center justify-center rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 shrink-0"
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 p-2 sm:p-1.5 flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 shrink-0"
                 aria-label="Tutup"
               >
                 <X className="w-5 h-5" />
@@ -1097,10 +1105,10 @@ export default function OpeningBalancePage() {
               <div
                 className={`p-2 rounded-xl border ${
                   wizardStep === 1
-                    ? 'border-[#7C9CF5] bg-[#7C9CF5]/10 font-bold text-[#7C9CF5]'
+                    ? 'border-blue-600 bg-blue-50 font-bold text-blue-700'
                     : wizardStep > 1
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : 'border-gray-200 text-gray-400'
+                    : 'border-slate-200 text-slate-400'
                 }`}
               >
                 1. Saldo Kas & Bank
@@ -1108,10 +1116,10 @@ export default function OpeningBalancePage() {
               <div
                 className={`p-2 rounded-xl border ${
                   wizardStep === 2
-                    ? 'border-[#7C9CF5] bg-[#7C9CF5]/10 font-bold text-[#7C9CF5]'
+                    ? 'border-blue-600 bg-blue-50 font-bold text-blue-700'
                     : wizardStep > 2
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : 'border-gray-200 text-gray-400'
+                    : 'border-slate-200 text-slate-400'
                 }`}
               >
                 2. Pencocokan Fisik
@@ -1119,10 +1127,10 @@ export default function OpeningBalancePage() {
               <div
                 className={`p-2 rounded-xl border ${
                   wizardStep === 3
-                    ? 'border-[#7C9CF5] bg-[#7C9CF5]/10 font-bold text-[#7C9CF5]'
+                    ? 'border-blue-600 bg-blue-50 font-bold text-blue-700'
                     : wizardStep > 3
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : 'border-gray-200 text-gray-400'
+                    : 'border-slate-200 text-slate-400'
                 }`}
               >
                 3. Posisi Lain
@@ -1130,8 +1138,8 @@ export default function OpeningBalancePage() {
               <div
                 className={`p-2 rounded-xl border ${
                   wizardStep === 4
-                    ? 'border-[#7C9CF5] bg-[#7C9CF5]/10 font-bold text-[#7C9CF5]'
-                    : 'border-gray-200 text-gray-400'
+                    ? 'border-blue-600 bg-blue-50 font-bold text-blue-700'
+                    : 'border-slate-200 text-slate-400'
                 }`}
               >
                 4. Ringkasan
@@ -1176,7 +1184,7 @@ export default function OpeningBalancePage() {
                             }));
                           }}
                           placeholder="0"
-                          className="w-full min-h-[44px] sm:min-h-0 pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-sm font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-[#7C9CF5] bg-white"
+                          className="w-full min-h-[44px] sm:min-h-0 pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm font-bold tabular-nums focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 bg-white"
                         />
                       </div>
                       {wizardAmounts[sa.id] > 0 && (
@@ -1198,7 +1206,7 @@ export default function OpeningBalancePage() {
                 <div className="flex justify-end pt-2">
                   <button
                     onClick={handleWizardSaveStep1}
-                    className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm"
+                    className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-xs"
                   >
                     <span>Lanjut ke Pencocokan Fisik</span>
                     <ArrowRight className="w-4 h-4" />
@@ -1257,7 +1265,7 @@ export default function OpeningBalancePage() {
                                   [sa.id]: { ...prev[sa.id], physical: val },
                                 }));
                               }}
-                              className="w-full min-h-[44px] sm:min-h-0 px-3 py-1.5 rounded-lg border border-gray-200 bg-white font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                              className="w-full min-h-[44px] sm:min-h-0 px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-bold tabular-nums focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                             />
                           </div>
                         </div>
@@ -1314,7 +1322,7 @@ export default function OpeningBalancePage() {
                   </button>
                   <button
                     onClick={handleWizardSaveStep2}
-                    className="min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm"
+                    className="min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-xs"
                   >
                     <span>Lanjut ke Posisi Lain</span>
                     <ArrowRight className="w-4 h-4" />
@@ -1382,7 +1390,7 @@ export default function OpeningBalancePage() {
                   </button>
                   <button
                     onClick={() => setWizardStep(4)}
-                    className="min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm"
+                    className="min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-xs"
                   >
                     <span>Lanjut ke Ringkasan & Ajukan</span>
                     <ArrowRight className="w-4 h-4" />
@@ -1554,7 +1562,7 @@ export default function OpeningBalancePage() {
                   setOtherPosAmount(0);
                   setOtherPosNotes('');
                 }}
-                className="min-h-[44px] sm:min-h-0 px-5 py-2 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600"
+                className="min-h-[44px] sm:min-h-0 px-5 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700"
               >
                 Simpan Posisi
               </button>
@@ -1672,7 +1680,7 @@ export default function OpeningBalancePage() {
                   toast.success('Pengajuan penyesuaian saldo awal berhasil diajukan.');
                   setShowAdjModal(false);
                 }}
-                className="min-h-[44px] sm:min-h-0 px-5 py-2 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600"
+                className="min-h-[44px] sm:min-h-0 px-5 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700"
               >
                 Kirim Pengajuan
               </button>
@@ -1770,7 +1778,7 @@ export default function OpeningBalancePage() {
                 step="10000"
                 value={priorYearAmountInput}
                 onChange={(e) => setPriorYearAmountInput(e.target.value)}
-                className="w-full min-h-[44px] sm:min-h-0 px-3 py-2 rounded-xl border border-gray-200 text-sm font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                className="w-full min-h-[44px] sm:min-h-0 px-3 py-2 rounded-xl border border-slate-200 text-sm font-bold tabular-nums focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 autoFocus
               />
               {Number(priorYearAmountInput) > 0 && (
@@ -1807,7 +1815,7 @@ export default function OpeningBalancePage() {
                   toast.success(`Realisasi ${priorYearEditTarget.categoryName} berhasil diperbarui.`);
                   setPriorYearEditTarget(null);
                 }}
-                className="min-h-[44px] sm:min-h-0 px-5 py-2 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600"
+                className="min-h-[44px] sm:min-h-0 px-5 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700"
               >
                 Simpan Angka
               </button>

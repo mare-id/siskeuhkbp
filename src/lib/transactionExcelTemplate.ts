@@ -19,7 +19,7 @@ import {
   StorageAccount,
   TransactionStatus,
 } from '../types/database';
-import { formatNamaKeluarga, formatRupiah } from './formatters';
+import { formatNamaKeluarga, formatRupiah, getTodayYmd } from './formatters';
 import { splitSentralisasiAmount } from './ppkuRules';
 
 // -----------------------------------------------------------------------------
@@ -741,7 +741,7 @@ export async function downloadTransactionExcelTemplate(ctx: TransactionTemplateC
   const sampleLing = safeLingkungan[0] || 'Efesus';
   const sampleFam =
     familyOptions[0] || 'Kel. St. Saruddin Naibaho, BA (+) / Maria Magdalena Siregar, BA';
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getTodayYmd();
 
   const guideLines: Array<[string, string]> = [
     ['PANDUAN IMPOR TRANSAKSI', `SIKU ${ctx.settings.church_name || 'HKBP Hutaraja'} (Sheet ini TIDAK ikut diimpor, hanya contoh pengisian)`],
@@ -939,7 +939,7 @@ export async function downloadTransactionExcelTemplate(ctx: TransactionTemplateC
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `Template_Impor_Transaksi_HKBP_Hutaraja_${new Date().toISOString().split('T')[0]}.xlsx`;
+  a.download = `Template_Impor_Transaksi_HKBP_Hutaraja_${getTodayYmd()}.xlsx`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -1151,6 +1151,16 @@ const inferDefaultSentralisasi = (kasId: string): boolean => {
 
 const isPlaceholderFamilyText = (s: string): boolean =>
   s.startsWith('(belum ada di database');
+
+const isExpenseJenis = (raw: string): boolean => {
+  const l = raw.trim().toLowerCase();
+  return l.includes('pengeluaran') || l.includes('keluar') || l === 'expense';
+};
+
+const isIncomeJenis = (raw: string): boolean => {
+  const l = raw.trim().toLowerCase();
+  return l.includes('pemasukan') || l.includes('masuk') || l === 'income';
+};
 
 export async function parseTransactionExcelFile(
   file: File,
@@ -1409,16 +1419,16 @@ export async function parseTransactionExcelFile(
 
         let txType: 'income' | 'expense' = 'income';
         if (isPeleanTaon) {
-          if (jenisRaw && jenisRaw.toLowerCase().includes('keluar')) {
+          if (jenisRaw && isExpenseJenis(jenisRaw)) {
             errors.push('Pelean Taon harus berjenis Pemasukan.');
           }
           txType = 'income';
         } else {
           if (!jenisRaw) {
             errors.push('Jenis Transaksi (Pemasukan / Pengeluaran) wajib dipilih.');
-          } else if (jenisRaw.toLowerCase().includes('keluar')) {
+          } else if (isExpenseJenis(jenisRaw)) {
             txType = 'expense';
-          } else if (jenisRaw.toLowerCase().includes('masuk')) {
+          } else if (isIncomeJenis(jenisRaw)) {
             txType = 'income';
           } else {
             errors.push(`Jenis Transaksi "${jenisRaw}" tidak valid.`);
@@ -1707,7 +1717,7 @@ export async function parseTransactionExcelFile(
         const allocations: Array<CompoundIncomeAllocationItem & { kas_name: string; rowNumber: number }> = [];
 
         rows.forEach((rw) => {
-          if (rw.jenisRaw && rw.jenisRaw.toLowerCase().includes('keluar')) {
+          if (rw.jenisRaw && isExpenseJenis(rw.jenisRaw)) {
             errors.push(`Baris ${rw.rowNumber}: Multi Pos hanya mendukung jenis Pemasukan.`);
           }
           if (rw.tanggalRes.value && primaryTanggal && rw.tanggalRes.value !== primaryTanggal) {

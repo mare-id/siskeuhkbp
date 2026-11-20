@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   FolderArchive,
   Package,
@@ -53,7 +53,7 @@ import {
   ReceivablePayableStatus,
   FundType,
 } from '../types/database';
-import { formatRupiah, formatDateIndo } from '../lib/formatters';
+import { formatRupiah, formatDateIndo, getTodayYmd, parseYmdParts } from '../lib/formatters';
 import { exportToExcel } from '../lib/exportUtils';
 import { PPKU_PANJAR_DEADLINE_DAYS } from '../lib/ppkuRules';
 
@@ -64,6 +64,7 @@ export default function LpjDataPage() {
     kasList,
     storageAccounts,
     transactions,
+    settings,
     fixedAssets,
     advances,
     advanceSettlements,
@@ -90,6 +91,21 @@ export default function LpjDataPage() {
     migrateOpeningPositionsToLpj,
   } = useData();
 
+  const activeYear = settings.active_year || new Date().getFullYear();
+  const addLocalDays = (baseYmd: string, days: number): string => {
+    const parts = parseYmdParts(baseYmd);
+    const dt = new Date(
+      parts?.year || new Date().getFullYear(),
+      (parts?.month || 1) - 1,
+      parts?.day || 1
+    );
+    dt.setDate(dt.getDate() + days);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
   const [activeTab, setActiveTab] = useState<'assets' | 'advances' | 'receivables' | 'calk' | 'settings'>('assets');
   const [selectedKasFilter, setSelectedKasFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -114,13 +130,17 @@ export default function LpjDataPage() {
   const [editingRp, setEditingRp] = useState<Partial<ReceivablePayable> | null>(null);
   const [paymentModalRp, setPaymentModalRp] = useState<ReceivablePayable | null>(null);
   const [paymentAmountInput, setPaymentAmountInput] = useState<string>('');
-  const [paymentDateInput, setPaymentDateInput] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [paymentDateInput, setPaymentDateInput] = useState<string>(getTodayYmd());
   const [paymentStorageId, setPaymentStorageId] = useState<string>('');
   const [paymentNotesInput, setPaymentNotesInput] = useState<string>('');
 
   // ---------------- CaLK Form State ----------------
   const [calkForm, setCalkForm] = useState(lpjNotes);
   const [calkSavedToast, setCalkSavedToast] = useState(false);
+
+  useEffect(() => {
+    setCalkForm(lpjNotes);
+  }, [lpjNotes]);
 
   // ---------------- Ketua Review Bottom-Sheet State ----------------
   const [reviewDisposalAsset, setReviewDisposalAsset] = useState<FixedAsset | null>(null);
@@ -160,7 +180,7 @@ export default function LpjDataPage() {
   );
 
   // ---------------- Check Overdue Advances ----------------
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getTodayYmd();
   const overdueAdvances = scopedAdvances.filter(
     (a) => a.status === 'active' && a.due_date < todayStr
   );
@@ -206,7 +226,7 @@ export default function LpjDataPage() {
 
   const totalNilaiBukuAset = scopedAssets
     .filter((a) => a.status === 'aktif')
-    .reduce((sum, a) => sum + calculateDepreciation(a, 2026).bookValue, 0);
+    .reduce((sum, a) => sum + calculateDepreciation(a, activeYear).bookValue, 0);
 
   const totalPanjarAktif = scopedAdvances
     .filter((a) => a.status !== 'settled')
@@ -342,77 +362,77 @@ export default function LpjDataPage() {
       </div>
 
       {/* ---------------- Navigation Tabs ---------------- */}
-      <div className="flex border-b border-slate-200 space-x-2 overflow-x-auto pb-1 scrollbar-none">
+      <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200/80 overflow-x-auto scrollbar-none gap-1">
         <button
           onClick={() => setActiveTab('assets')}
-          className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap ${
+          className={`flex items-center gap-2 px-3.5 py-2 min-h-[40px] text-xs rounded-lg transition-all whitespace-nowrap shrink-0 ${
             activeTab === 'assets'
-              ? 'bg-white border-t-2 border-primary text-primary shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Package className="w-4 h-4" />
+          <Package className="w-4 h-4 text-blue-600" />
           <span>Inventaris & Aset Tetap</span>
-          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-600 font-mono">
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-slate-200/70 text-slate-700 font-mono">
             {scopedAssets.length}
           </span>
         </button>
 
         <button
           onClick={() => setActiveTab('advances')}
-          className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap ${
+          className={`flex items-center gap-2 px-3.5 py-2 min-h-[40px] text-xs rounded-lg transition-all whitespace-nowrap shrink-0 ${
             activeTab === 'advances'
-              ? 'bg-white border-t-2 border-primary text-primary shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Clock className="w-4 h-4" />
+          <Clock className="w-4 h-4 text-amber-600" />
           <span>Panjar / Uang Muka Kegiatan</span>
           {overdueAdvances.length > 0 && (
             <span className="w-2 h-2 rounded-full bg-rose-500" />
           )}
-          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-600 font-mono">
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-slate-200/70 text-slate-700 font-mono">
             {scopedAdvances.length}
           </span>
         </button>
 
         <button
           onClick={() => setActiveTab('receivables')}
-          className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap ${
+          className={`flex items-center gap-2 px-3.5 py-2 min-h-[40px] text-xs rounded-lg transition-all whitespace-nowrap shrink-0 ${
             activeTab === 'receivables'
-              ? 'bg-white border-t-2 border-primary text-primary shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <CreditCard className="w-4 h-4" />
+          <CreditCard className="w-4 h-4 text-emerald-600" />
           <span>Piutang & Utang</span>
-          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-600 font-mono">
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-slate-200/70 text-slate-700 font-mono">
             {scopedRp.length}
           </span>
         </button>
 
         <button
           onClick={() => setActiveTab('calk')}
-          className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap ${
+          className={`flex items-center gap-2 px-3.5 py-2 min-h-[40px] text-xs rounded-lg transition-all whitespace-nowrap shrink-0 ${
             activeTab === 'calk'
-              ? 'bg-white border-t-2 border-primary text-primary shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <FileText className="w-4 h-4" />
+          <FileText className="w-4 h-4 text-indigo-600" />
           <span>Catatan Laporan Keuangan (CaLK)</span>
         </button>
 
         {(isAdmin || isBendaharaUmum) && (
           <button
             onClick={() => setActiveTab('settings')}
-            className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap ${
+            className={`flex items-center gap-2 px-3.5 py-2 min-h-[40px] text-xs rounded-lg transition-all whitespace-nowrap shrink-0 ${
               activeTab === 'settings'
-                ? 'bg-white border-t-2 border-primary text-primary shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                : 'text-slate-600 hover:text-slate-900 font-medium'
             }`}
           >
-            <Layers className="w-4 h-4" />
+            <Layers className="w-4 h-4 text-slate-700" />
             <span>Pengaturan LPJ & Klasifikasi Dana</span>
           </button>
         )}
@@ -454,7 +474,7 @@ export default function LpjDataPage() {
                   onClick={() => {
                     const exportData = filteredAssets.map((a) => {
                       const kas = kasList.find((k) => k.id === a.kas_id);
-                      const dep = calculateDepreciation(a, 2026);
+                      const dep = calculateDepreciation(a, activeYear);
                       return {
                         Kode: a.kode,
                         Nama: a.nama,
@@ -486,7 +506,7 @@ export default function LpjDataPage() {
                         kategori: 'elektronik',
                         kondisi: 'baik',
                         status: 'aktif',
-                        tanggal_perolehan: new Date().toISOString().split('T')[0],
+                        tanggal_perolehan: getTodayYmd(),
                         useful_life_years: 5,
                         salvage_value: 0,
                         kas_id: (editableKasList[0] || visibleKasList[0] || kasList[0])?.id,
@@ -530,11 +550,10 @@ export default function LpjDataPage() {
                 {canManageLpjData && (
                   <button
                     onClick={() => {
-                      const due = new Date();
-                      due.setDate(due.getDate() + (lpjSettings.default_advance_days || 14));
+                      const advToday = getTodayYmd();
                       setEditingAdvance({
-                        advance_date: new Date().toISOString().split('T')[0],
-                        due_date: due.toISOString().split('T')[0],
+                        advance_date: advToday,
+                        due_date: addLocalDays(advToday, lpjSettings.default_advance_days || 14),
                         kas_id: (editableKasList[0] || visibleKasList[0] || kasList[0])?.id,
                       });
                       setIsAdvanceModalOpen(true);
@@ -580,7 +599,7 @@ export default function LpjDataPage() {
                     onClick={() => {
                       setEditingRp({
                         type: 'receivable',
-                        issue_date: new Date().toISOString().split('T')[0],
+                        issue_date: getTodayYmd(),
                         kas_id: (editableKasList[0] || visibleKasList[0] || kasList[0])?.id,
                       });
                       setIsRpModalOpen(true);
@@ -609,7 +628,7 @@ export default function LpjDataPage() {
             ) : (
               filteredAssets.map((asset) => {
                 const kas = kasList.find((k) => k.id === asset.kas_id);
-                const dep = calculateDepreciation(asset, 2026);
+                const dep = calculateDepreciation(asset, activeYear);
                 const isPendingApproval =
                   asset.status === 'diajukan_penghapusan' || asset.status === 'diajukan_hibah';
                 const canUserApprove = canApproveKas(asset.kas_id) || isAdmin;
@@ -640,7 +659,7 @@ export default function LpjDataPage() {
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span
                         className="px-2 py-0.5 rounded-md text-[11px] font-semibold"
-                        style={{ backgroundColor: `${kas?.warna || '#7C9CF5'}25`, color: '#1F2440' }}
+                        style={{ backgroundColor: `${kas?.warna || '#2563EB'}18`, color: '#0F172A' }}
                       >
                         {kas?.nama || 'Kas Huria'}
                       </span>
@@ -666,7 +685,7 @@ export default function LpjDataPage() {
                       </div>
                       {lpjSettings.enable_depreciation && (
                         <div className="text-right">
-                          <span className="text-[10px] text-slate-400 block">Nilai Buku (2026)</span>
+                          <span className="text-[10px] text-slate-400 block">Nilai Buku ({activeYear})</span>
                           <span className="font-mono font-bold text-indigo-700 tabular-nums">
                             {formatRupiah(dep.bookValue)}
                           </span>
@@ -732,7 +751,7 @@ export default function LpjDataPage() {
                   <th className="py-3 px-4">Kas Pengelola</th>
                   <th className="py-3 px-4 text-right">Nilai Perolehan</th>
                   {lpjSettings.enable_depreciation && (
-                    <th className="py-3 px-4 text-right">Nilai Buku (2026)</th>
+                    <th className="py-3 px-4 text-right">Nilai Buku ({activeYear})</th>
                   )}
                   <th className="py-3 px-4 text-center">Kondisi</th>
                   <th className="py-3 px-4 text-center">Status</th>
@@ -749,7 +768,7 @@ export default function LpjDataPage() {
                 ) : (
                   filteredAssets.map((asset) => {
                     const kas = kasList.find((k) => k.id === asset.kas_id);
-                    const dep = calculateDepreciation(asset, 2026);
+                    const dep = calculateDepreciation(asset, activeYear);
                     const isPendingApproval =
                       asset.status === 'diajukan_penghapusan' || asset.status === 'diajukan_hibah';
                     const canUserApprove = canApproveKas(asset.kas_id) || isAdmin;
@@ -773,8 +792,8 @@ export default function LpjDataPage() {
                           <span
                             className="px-2 py-0.5 rounded-md text-[11px] font-semibold"
                             style={{
-                              backgroundColor: `${kas?.warna || '#7C9CF5'}25`,
-                              color: '#1F2440',
+                              backgroundColor: `${kas?.warna || '#2563EB'}18`,
+                              color: '#0F172A',
                             }}
                           >
                             {kas?.nama || 'Kas Huria'}
@@ -926,7 +945,7 @@ export default function LpjDataPage() {
                     <div className="flex items-center justify-between gap-2 pt-0.5">
                       <span
                         className="px-2 py-0.5 rounded-md text-[11px] font-semibold"
-                        style={{ backgroundColor: `${kas?.warna || '#7C9CF5'}25`, color: '#1F2440' }}
+                        style={{ backgroundColor: `${kas?.warna || '#2563EB'}18`, color: '#0F172A' }}
                       >
                         {kas?.nama}
                       </span>
@@ -1009,8 +1028,8 @@ export default function LpjDataPage() {
                           <span
                             className="px-2 py-0.5 rounded-md text-[11px] font-semibold"
                             style={{
-                              backgroundColor: `${kas?.warna || '#7C9CF5'}25`,
-                              color: '#1F2440',
+                              backgroundColor: `${kas?.warna || '#2563EB'}18`,
+                              color: '#0F172A',
                             }}
                           >
                             {kas?.nama}
@@ -1128,7 +1147,7 @@ export default function LpjDataPage() {
                           {kas && (
                             <span
                               className="px-2 py-0.5 rounded-md text-[10px] font-semibold"
-                              style={{ backgroundColor: `${kas?.warna || '#7C9CF5'}25`, color: '#1F2440' }}
+                              style={{ backgroundColor: `${kas?.warna || '#2563EB'}18`, color: '#0F172A' }}
                             >
                               {kas.nama}
                             </span>
@@ -1186,7 +1205,7 @@ export default function LpjDataPage() {
                         onClick={() => {
                           setPaymentModalRp(rp);
                           setPaymentAmountInput(String(rp.remaining_amount));
-                          setPaymentDateInput(new Date().toISOString().split('T')[0]);
+                          setPaymentDateInput(getTodayYmd());
                           setPaymentStorageId(storageAccounts[0]?.id || '');
                           setPaymentNotesInput('');
                         }}
@@ -1251,8 +1270,8 @@ export default function LpjDataPage() {
                           <span
                             className="px-2 py-0.5 rounded-md text-[11px] font-semibold"
                             style={{
-                              backgroundColor: `${kas?.warna || '#7C9CF5'}25`,
-                              color: '#1F2440',
+                              backgroundColor: `${kas?.warna || '#2563EB'}18`,
+                              color: '#0F172A',
                             }}
                           >
                             {kas?.nama}
@@ -1299,7 +1318,7 @@ export default function LpjDataPage() {
                                 onClick={() => {
                                   setPaymentModalRp(rp);
                                   setPaymentAmountInput(String(rp.remaining_amount));
-                                  setPaymentDateInput(new Date().toISOString().split('T')[0]);
+                                  setPaymentDateInput(getTodayYmd());
                                   setPaymentStorageId(storageAccounts[0]?.id || '');
                                   setPaymentNotesInput('');
                                 }}
@@ -1969,9 +1988,7 @@ export default function LpjDataPage() {
                       const advDate = e.target.value;
                       let nextDue = editingAdvance.due_date || '';
                       if (advDate) {
-                        const dt = new Date(advDate);
-                        dt.setDate(dt.getDate() + (lpjSettings.default_advance_days || PPKU_PANJAR_DEADLINE_DAYS));
-                        nextDue = dt.toISOString().split('T')[0];
+                        nextDue = addLocalDays(advDate, lpjSettings.default_advance_days || PPKU_PANJAR_DEADLINE_DAYS);
                       }
                       setEditingAdvance({ ...editingAdvance, advance_date: advDate, due_date: nextDue });
                     }}

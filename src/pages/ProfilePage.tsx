@@ -112,7 +112,7 @@ export const ProfilePage: React.FC = () => {
                   <div className="flex items-center gap-2 min-w-0">
                     <span
                       className="w-3 h-3 rounded-full shrink-0"
-                      style={{ backgroundColor: kas?.warna || '#7C9CF5' }}
+                      style={{ backgroundColor: kas?.warna || '#2563EB' }}
                     />
                     <span className="font-semibold text-slate-800 truncate">{kas?.nama}</span>
                     <span className="text-[10px] text-slate-400 font-mono shrink-0">({kas?.kode})</span>

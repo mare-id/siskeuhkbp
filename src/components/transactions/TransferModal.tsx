@@ -8,7 +8,7 @@ import { ArrowRightLeft, X, AlertCircle, Info, Upload, CheckCircle } from 'lucid
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { uploadReceiptFile } from '../../lib/supabase';
-import { formatRupiah } from '../../lib/formatters';
+import { formatRupiah, getTodayYmd, getYmdYear, getYmdMonth } from '../../lib/formatters';
 
 interface Props {
   isOpen: boolean;
@@ -20,7 +20,7 @@ export const TransferModal: React.FC<Props> = ({ isOpen, onClose, defaultSourceK
   const { kasList, storageAccounts, createTransfer, isPeriodClosed } = useData();
   const { canInputKas } = useAuth();
 
-  const [tanggal, setTanggal] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [tanggal, setTanggal] = useState<string>(getTodayYmd());
   const [sourceKasId, setSourceKasId] = useState<string>('');
   const [sourceStorageId, setSourceStorageId] = useState<string>('');
   const [targetKasId, setTargetKasId] = useState<string>('');
@@ -42,7 +42,7 @@ export const TransferModal: React.FC<Props> = ({ isOpen, onClose, defaultSourceK
       setDescription('');
       setReceiptNo('');
       setAttachmentUrl(null);
-      setTanggal(new Date().toISOString().split('T')[0]);
+      setTanggal(getTodayYmd());
 
       if (defaultSourceKasId && canInputKas(defaultSourceKasId)) {
         setSourceKasId(defaultSourceKasId);
@@ -102,9 +102,14 @@ export const TransferModal: React.FC<Props> = ({ isOpen, onClose, defaultSourceK
       return;
     }
 
-    const d = new Date(tanggal);
-    if (isPeriodClosed(d.getFullYear(), d.getMonth() + 1, sourceKasId)) {
-      setError('Periode pada kas pengirim sudah ditutup.');
+    const txYr = getYmdYear(tanggal);
+    const txMo = getYmdMonth(tanggal);
+    if (isPeriodClosed(txYr, txMo, sourceKasId)) {
+      setError(`Periode ${txMo}/${txYr} pada kas pengirim sudah ditutup.`);
+      return;
+    }
+    if (!isSameKas && isPeriodClosed(txYr, txMo, targetKasId)) {
+      setError(`Periode ${txMo}/${txYr} pada kas penerima sudah ditutup.`);
       return;
     }
 

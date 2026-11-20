@@ -40,7 +40,7 @@ import {
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { formatRupiah, formatDateIndo, getIndoMonthName, MONTH_NAMES_INDO } from '../lib/formatters';
+import { formatRupiah, formatDateIndo, getIndoMonthName, MONTH_NAMES_INDO, getTodayYmd, getYmdYear, getYmdMonth } from '../lib/formatters';
 import {
   exportToExcel,
   exportMultiSheetExcel,
@@ -73,6 +73,7 @@ export const ReportsPage: React.FC = () => {
     settings,
     reconciliations,
     saveReconciliation,
+    getKasOpeningForYear,
     getKasBalances,
     getStorageBalances,
     getSentralisasiSummary,
@@ -156,7 +157,7 @@ export const ReportsPage: React.FC = () => {
 
   // Reconciliation form states
   const [recStorageId, setRecStorageId] = useState<string>(storageAccounts[0]?.id || '');
-  const [recDate, setRecDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [recDate, setRecDate] = useState<string>(() => getTodayYmd());
   const [recPhysicalAmount, setRecPhysicalAmount] = useState<string>('');
   const [recNotes, setRecNotes] = useState<string>('');
   const [recSuccess, setRecSuccess] = useState<boolean>(false);
@@ -296,16 +297,22 @@ export const ReportsPage: React.FC = () => {
     transactions
       .filter((tx) => {
         if (tx.status !== 'approved') return false;
-        const d = new Date(tx.tanggal);
-        const m = d.getMonth() + 1;
-        return d.getFullYear() === selectedYear && m >= startMonth && m <= endMonth;
+        const m = getYmdMonth(tx.tanggal);
+        return getYmdYear(tx.tanggal) === selectedYear && m >= startMonth && m <= endMonth;
       })
       .forEach((tx) => {
         const amt = Number(tx.amount) || 0;
-        if (tx.type === 'income') totalPenerimaan += amt;
-        else if (tx.type === 'expense') totalPengeluaran += amt;
-        else if (tx.type === 'transfer_in') totalTransferMasuk += amt;
-        else if (tx.type === 'transfer_out') totalTransferKeluar += amt;
+        if (tx.is_reversal) {
+          if (tx.type === 'expense') totalPenerimaan -= amt;
+          else if (tx.type === 'income') totalPengeluaran -= amt;
+          else if (tx.type === 'transfer_out') totalTransferMasuk -= amt;
+          else if (tx.type === 'transfer_in') totalTransferKeluar -= amt;
+        } else {
+          if (tx.type === 'income') totalPenerimaan += amt;
+          else if (tx.type === 'expense') totalPengeluaran += amt;
+          else if (tx.type === 'transfer_in') totalTransferMasuk += amt;
+          else if (tx.type === 'transfer_out') totalTransferKeluar += amt;
+        }
       });
 
     return {
@@ -343,13 +350,20 @@ export const ReportsPage: React.FC = () => {
     let transferKeluar = 0;
 
     transactions
-      .filter((tx) => tx.status === 'approved' && new Date(tx.tanggal).getFullYear() === selectedYear)
+      .filter((tx) => tx.status === 'approved' && getYmdYear(tx.tanggal) === selectedYear)
       .forEach((tx) => {
         const amt = Number(tx.amount) || 0;
-        if (tx.type === 'income') penerimaanMurni += amt;
-        else if (tx.type === 'expense') pengeluaranMurni += amt;
-        else if (tx.type === 'transfer_in') transferMasuk += amt;
-        else if (tx.type === 'transfer_out') transferKeluar += amt;
+        if (tx.is_reversal) {
+          if (tx.type === 'expense') penerimaanMurni -= amt;
+          else if (tx.type === 'income') pengeluaranMurni -= amt;
+          else if (tx.type === 'transfer_out') transferMasuk -= amt;
+          else if (tx.type === 'transfer_in') transferKeluar -= amt;
+        } else {
+          if (tx.type === 'income') penerimaanMurni += amt;
+          else if (tx.type === 'expense') pengeluaranMurni += amt;
+          else if (tx.type === 'transfer_in') transferMasuk += amt;
+          else if (tx.type === 'transfer_out') transferKeluar += amt;
+        }
       });
 
     return {
@@ -361,18 +375,27 @@ export const ReportsPage: React.FC = () => {
     };
   }, [currentLpjReport, transactions, selectedYear]);
 
-  // Initial balance for single kas
-  const initialBalance = openingBalances
-    .filter((ob) => ob.kas_id === selectedKasId && ob.tahun === selectedYear)
-    .reduce((sum, item) => sum + Number(item.amount), 0);
+  // Monthly opening balance for single kas (annual opening + prior months of selectedYear)
+  const initialBalance = useMemo(() => {
+    const yearOpening = getKasOpeningForYear(selectedKasId, selectedYear);
+    let priorMonthsNet = 0;
+    transactions.forEach((tx) => {
+      if (tx.kas_id !== selectedKasId || tx.status !== 'approved') return;
+      if (getYmdYear(tx.tanggal) !== selectedYear) return;
+      if (getYmdMonth(tx.tanggal) >= selectedMonth) return;
+      const amt = Number(tx.amount) || 0;
+      if (tx.type === 'income' || tx.type === 'transfer_in') priorMonthsNet += amt;
+      else if (tx.type === 'expense' || tx.type === 'transfer_out') priorMonthsNet -= amt;
+    });
+    return yearOpening + priorMonthsNet;
+  }, [getKasOpeningForYear, transactions, selectedKasId, selectedYear, selectedMonth]);
 
   // Kas Transactions for single kas
   const kasTransactions = useMemo(() => {
     return transactions
       .filter((tx) => {
         if (tx.kas_id !== selectedKasId || tx.status !== 'approved') return false;
-        const d = new Date(tx.tanggal);
-        return d.getFullYear() === selectedYear && d.getMonth() + 1 === selectedMonth;
+        return getYmdYear(tx.tanggal) === selectedYear && getYmdMonth(tx.tanggal) === selectedMonth;
       })
       .sort((a, b) => a.tanggal.localeCompare(b.tanggal));
   }, [transactions, selectedKasId, selectedYear, selectedMonth]);
@@ -380,10 +403,8 @@ export const ReportsPage: React.FC = () => {
   // Combined Summaries for All Kas
   const combinedSummaries = useMemo(() => {
     return kasList.map((k) => {
-      const init = openingBalances
-        .filter((ob) => ob.kas_id === k.id && ob.tahun === selectedYear)
-        .reduce((sum, ob) => sum + Number(ob.amount), 0);
-
+      const yearOpening = getKasOpeningForYear(k.id, selectedYear);
+      let priorMonthsNet = 0;
       let masuk = 0;
       let keluar = 0;
       let tfIn = 0;
@@ -392,17 +413,30 @@ export const ReportsPage: React.FC = () => {
       transactions
         .filter((tx) => {
           if (tx.kas_id !== k.id || tx.status !== 'approved') return false;
-          const d = new Date(tx.tanggal);
-          return d.getFullYear() === selectedYear && d.getMonth() + 1 === selectedMonth;
+          return getYmdYear(tx.tanggal) === selectedYear;
         })
         .forEach((tx) => {
-          const amt = Number(tx.amount);
-          if (tx.type === 'income') masuk += amt;
-          if (tx.type === 'expense') keluar += amt;
-          if (tx.type === 'transfer_in') tfIn += amt;
-          if (tx.type === 'transfer_out') tfOut += amt;
+          const amt = Number(tx.amount) || 0;
+          const m = getYmdMonth(tx.tanggal);
+          if (m < selectedMonth) {
+            if (tx.type === 'income' || tx.type === 'transfer_in') priorMonthsNet += amt;
+            else if (tx.type === 'expense' || tx.type === 'transfer_out') priorMonthsNet -= amt;
+          } else if (m === selectedMonth) {
+            if (tx.is_reversal) {
+              if (tx.type === 'expense') masuk -= amt;
+              else if (tx.type === 'income') keluar -= amt;
+              else if (tx.type === 'transfer_out') tfIn -= amt;
+              else if (tx.type === 'transfer_in') tfOut -= amt;
+            } else {
+              if (tx.type === 'income') masuk += amt;
+              else if (tx.type === 'expense') keluar += amt;
+              else if (tx.type === 'transfer_in') tfIn += amt;
+              else if (tx.type === 'transfer_out') tfOut += amt;
+            }
+          }
         });
 
+      const init = yearOpening + priorMonthsNet;
       return {
         nama: k.nama,
         kode: k.kode,
@@ -414,7 +448,7 @@ export const ReportsPage: React.FC = () => {
         saldoAkhir: init + masuk - keluar + tfIn - tfOut,
       };
     });
-  }, [kasList, openingBalances, transactions, selectedYear, selectedMonth]);
+  }, [kasList, getKasOpeningForYear, transactions, selectedYear, selectedMonth]);
 
   // Reconciliation calculations
   const targetStorageAccount = storageAccounts.find((s) => s.id === recStorageId) || storageAccounts[0];
@@ -506,9 +540,7 @@ export const ReportsPage: React.FC = () => {
     const activeKas = (isSeksiOnly ? viewableKas : kasList).filter((k) => k.is_active !== false);
 
     const reports: KasWeeklyReportData[] = activeKas.map((k) => {
-      const openingYearAmount = openingBalances
-        .filter((ob) => ob.kas_id === k.id && ob.tahun === weekYear)
-        .reduce((sum, ob) => sum + Number(ob.amount || 0), 0);
+      const openingYearAmount = getKasOpeningForYear(k.id, weekYear);
 
       // Approved transactions from Jan 1 up to day before weekStartStr
       let priorNet = 0;
@@ -581,7 +613,7 @@ export const ReportsPage: React.FC = () => {
     );
 
     return { reports, totals, pendingInWeek };
-  }, [kasList, viewableKas, isSeksiOnly, openingBalances, transactions, wartaRange]);
+  }, [kasList, viewableKas, isSeksiOnly, getKasOpeningForYear, transactions, wartaRange]);
 
   const handleCopyWeeklyWartaText = () => {
     const { weekStartStr, weekEndStr, announcementSundayStr } = wartaRange;
@@ -678,28 +710,25 @@ export const ReportsPage: React.FC = () => {
       )}
 
       {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-950 via-[#0B132B] to-[#0F172A] text-white p-6 md:p-8 shadow-md border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-950 via-[#0B132B] to-[#0F172A] text-white p-5 sm:p-6 md:p-8 shadow-md border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-5">
         <div className="space-y-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-900/90 border border-slate-700/80 text-slate-300 flex items-center gap-1.5">
-              <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
-              <span>Laporan Keuangan & Akuntabilitas Huria</span>
-            </span>
-            <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-950/60 text-emerald-300 border border-emerald-800/60">
-              Standar ISAK 35 (Nonlaba)
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Laporan Keuangan · Standar ISAK 35</span>
             </span>
             {isYearLockedByLpj(selectedYear) && (
-              <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-purple-950/60 text-purple-200 border border-purple-800/60 flex items-center gap-1.5">
-                <Lock className="w-3 h-3 text-amber-300" />
-                <span>Tahun {selectedYear} Terkunci Permanen (LPJ Disahkan)</span>
+              <span className="px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-950/70 text-emerald-300 border border-emerald-800/60 flex items-center gap-1">
+                <Lock className="w-3 h-3" />
+                <span>Tahun {selectedYear} Terkunci (LPJ Disahkan)</span>
               </span>
             )}
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white tracking-tight">
             Laporan Semester & LPJ Tahunan HKBP Hutaraja
           </h1>
           <p className="text-xs md:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
-            Laporan Semester I & II untuk Warta Jemaat, dan Laporan Pertanggungjawaban (LPJ) 12 Pos ISAK 35 dengan Neraca Berimbang, Arus Kas Langsung, dan penguncian permanen tahun buku.
+            Laporan Semester I & II untuk Warta Jemaat dan LPJ 12 Pos ISAK 35 dengan Neraca Berimbang, Arus Kas Langsung, serta penguncian tahun buku.
           </p>
         </div>
 
@@ -729,17 +758,17 @@ export const ReportsPage: React.FC = () => {
       </div>
 
       {/* Main Tabs Segmented Bar */}
-      <div className="flex items-center gap-1.5 p-1.5 bg-slate-100/90 rounded-xl border border-slate-200/90 overflow-x-auto scrollbar-none">
+      <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200/80 overflow-x-auto scrollbar-none">
         {canViewWarta && (
           <button
             onClick={() => setActiveTab('warta')}
-            className={`px-3.5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+            className={`px-3.5 py-2 min-h-[40px] text-xs rounded-lg flex items-center gap-2 transition-all whitespace-nowrap shrink-0 ${
               activeTab === 'warta'
-                ? 'bg-[#0B132B] text-white shadow-2xs border border-slate-800 font-bold'
-                : 'text-slate-700 hover:text-slate-900 hover:bg-white/70'
+                ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                : 'text-slate-600 hover:text-slate-900 font-medium'
             }`}
           >
-            <Calendar className="w-4 h-4 text-amber-400" />
+            <Calendar className="w-4 h-4 text-amber-500" />
             <span>Warta Keuangan (Minggu–Sabtu)</span>
           </button>
         )}
@@ -748,37 +777,37 @@ export const ReportsPage: React.FC = () => {
           <>
             <button
               onClick={() => setActiveTab('semester')}
-              className={`px-3.5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+              className={`px-3.5 py-2 min-h-[40px] text-xs rounded-lg flex items-center gap-2 transition-all whitespace-nowrap shrink-0 ${
                 activeTab === 'semester'
-                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 font-medium'
               }`}
             >
-              <FileText className="w-4 h-4" />
+              <FileText className="w-4 h-4 text-blue-600" />
               <span>Laporan Semester</span>
             </button>
 
             <button
               onClick={() => setActiveTab('lpj')}
-              className={`px-3.5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+              className={`px-3.5 py-2 min-h-[40px] text-xs rounded-lg flex items-center gap-2 transition-all whitespace-nowrap shrink-0 ${
                 activeTab === 'lpj'
-                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 font-medium'
               }`}
             >
-              <Award className="w-4 h-4" />
+              <Award className="w-4 h-4 text-indigo-600" />
               <span>LPJ Tahunan (ISAK 35)</span>
             </button>
 
             <button
               onClick={() => setActiveTab('pelaporan')}
-              className={`px-3.5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+              className={`px-3.5 py-2 min-h-[40px] text-xs rounded-lg flex items-center gap-2 transition-all whitespace-nowrap shrink-0 ${
                 activeTab === 'pelaporan'
-                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 font-medium'
               }`}
             >
-              <BookmarkCheck className="w-4 h-4" />
+              <BookmarkCheck className="w-4 h-4 text-emerald-600" />
               <span>Pelaporan Semester</span>
             </button>
           </>
@@ -786,13 +815,13 @@ export const ReportsPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('buku_kas')}
-          className={`px-3.5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+          className={`px-3.5 py-2 min-h-[40px] text-xs rounded-lg flex items-center gap-2 transition-all whitespace-nowrap shrink-0 ${
             activeTab === 'buku_kas'
-              ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
-              : 'text-slate-600 hover:text-slate-900'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Layers className="w-4 h-4" />
+          <Layers className="w-4 h-4 text-slate-600" />
           <span>Buku Kas Seksi</span>
         </button>
 
@@ -800,25 +829,25 @@ export const ReportsPage: React.FC = () => {
           <>
             <button
               onClick={() => setActiveTab('gabungan')}
-              className={`px-3.5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+              className={`px-3.5 py-2 min-h-[40px] text-xs rounded-lg flex items-center gap-2 transition-all whitespace-nowrap shrink-0 ${
                 activeTab === 'gabungan'
-                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 font-medium'
               }`}
             >
-              <Scale className="w-4 h-4" />
+              <Scale className="w-4 h-4 text-slate-600" />
               <span>Konsolidasi Kas</span>
             </button>
 
             <button
               onClick={() => setActiveTab('rekonsiliasi')}
-              className={`px-3.5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+              className={`px-3.5 py-2 min-h-[40px] text-xs rounded-lg flex items-center gap-2 transition-all whitespace-nowrap shrink-0 ${
                 activeTab === 'rekonsiliasi'
-                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200 font-bold'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 font-medium'
               }`}
             >
-              <FileCheck className="w-4 h-4" />
+              <FileCheck className="w-4 h-4 text-emerald-600" />
               <span>Rekonsiliasi Bank & Kas</span>
             </button>
           </>
@@ -827,13 +856,13 @@ export const ReportsPage: React.FC = () => {
         {canViewBpsk && (
           <button
             onClick={() => setActiveTab('bpsk')}
-            className={`px-3.5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${
+            className={`px-3.5 py-2 min-h-[40px] text-xs rounded-lg flex items-center gap-2 transition-all whitespace-nowrap shrink-0 ${
               activeTab === 'bpsk'
-                ? 'bg-blue-900 text-white shadow-2xs border border-blue-800 font-bold'
-                : 'text-blue-900 hover:bg-blue-50 font-bold'
+                ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                : 'text-slate-600 hover:text-slate-900 font-medium'
             }`}
           >
-            <Landmark className="w-4 h-4" />
+            <Landmark className="w-4 h-4 text-blue-600" />
             <span>Sentralisasi BPSK HKBP (55% / 45%)</span>
           </button>
         )}
@@ -1576,7 +1605,7 @@ export const ReportsPage: React.FC = () => {
                     },
                   });
                 }}
-                className="px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
+                className="min-h-[44px] sm:min-h-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
               >
                 <Download className="w-3.5 h-3.5" />
                 Unduh Warta Jemaat (PDF)
@@ -1818,7 +1847,7 @@ export const ReportsPage: React.FC = () => {
             <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-3">
                 <div className="flex items-center gap-2">
-                  <Printer className="w-4 h-4 text-[#7C9CF5]" />
+                  <Printer className="w-4 h-4 text-blue-600" />
                   <h3 className="font-bold text-gray-900 text-sm">Pratinjau Ringkasan Warta Jemaat (Ramah Publik)</h3>
                 </div>
                 <div className="flex items-center gap-2.5">
@@ -2149,7 +2178,7 @@ export const ReportsPage: React.FC = () => {
                     notes: lpjNotes,
                   });
                 }}
-                className="px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
+                className="min-h-[44px] sm:min-h-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
               >
                 <Download className="w-3.5 h-3.5" />
                 Unduh Dokumen LPJ Lengkap (PDF)
@@ -2451,7 +2480,7 @@ export const ReportsPage: React.FC = () => {
                   onClick={() => setActiveLpjSection(sec.id)}
                   className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-colors flex items-center justify-between ${
                     activeLpjSection === sec.id
-                      ? 'bg-[#7C9CF5]/15 text-[#2B4C9B] font-bold'
+                      ? 'bg-blue-50 text-blue-700 font-bold'
                       : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
@@ -2950,7 +2979,7 @@ export const ReportsPage: React.FC = () => {
                     namaKetua,
                   });
                 }}
-                className="flex-1 sm:flex-none min-h-[44px] sm:min-h-0 px-3.5 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+                className="flex-1 sm:flex-none min-h-[44px] sm:min-h-0 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
               >
                 <Download className="w-3.5 h-3.5" />
                 Unduh PDF
@@ -3053,7 +3082,7 @@ export const ReportsPage: React.FC = () => {
                     settings,
                   });
                 }}
-                className="min-h-[44px] sm:min-h-0 px-3.5 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-colors self-start sm:self-auto"
+                className="min-h-[44px] sm:min-h-0 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs transition-colors self-start sm:self-auto"
               >
                 <Download className="w-3.5 h-3.5" />
                 Unduh Laporan Konsolidasi (PDF)
@@ -3126,9 +3155,8 @@ export const ReportsPage: React.FC = () => {
         const isStorageReconciledInSem = (storageId: string) =>
           reconciliations.some((r) => {
             if (r.storage_account_id !== storageId) return false;
-            const d = new Date(r.tanggal);
-            const m = d.getMonth() + 1;
-            return d.getFullYear() === selectedYear && m >= startMonth && m <= endMonth;
+            const m = getYmdMonth(r.tanggal);
+            return getYmdYear(r.tanggal) === selectedYear && m >= startMonth && m <= endMonth;
           });
 
         const completedCount = activeStorages.filter((s) => isStorageReconciledInSem(s.id)).length;
@@ -3212,7 +3240,7 @@ export const ReportsPage: React.FC = () => {
                     e.preventDefault();
                     if (!targetStorageAccount) return;
                     const res = await saveReconciliation({
-                      tanggal: recDate || new Date().toISOString().split('T')[0],
+                      tanggal: recDate || getTodayYmd(),
                       storage_account_id: targetStorageAccount.id,
                       system_balance: currentSystemBalance,
                       physical_balance: rawPhysical,
@@ -3314,7 +3342,7 @@ export const ReportsPage: React.FC = () => {
 
                   <button
                     type="submit"
-                    className="w-full py-2.5 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white font-semibold rounded-xl transition-colors shadow-xs"
+                    className="w-full min-h-[44px] sm:min-h-0 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors shadow-xs"
                   >
                     Simpan Berita Acara Rekonsiliasi
                   </button>
@@ -3418,21 +3446,39 @@ export const ReportsPage: React.FC = () => {
       {activeTab === 'bpsk' && (() => {
         const bpskSummary = getSentralisasiSummary(selectedYear);
 
-        const yearAllApproved = transactions.filter(
-          (tx) => tx.status === 'approved' && new Date(tx.tanggal).getFullYear() === selectedYear
+        const allApprovedById = new Map(
+          transactions.filter((t) => t.status === 'approved').map((t) => [t.id, t])
         );
-        const bpskCompliance = evaluateBpskRemittanceCompliance(yearAllApproved, categories);
+        const yearAllApproved = transactions.filter(
+          (tx) => tx.status === 'approved' && getYmdYear(tx.tanggal) === selectedYear
+        );
+        const bpskCompliance = evaluateBpskRemittanceCompliance(yearAllApproved, categories, getTodayYmd());
 
-        const yearIncomes = yearAllApproved.filter((tx) => tx.type === 'income');
+        const yearOperatingIncomeRows = yearAllApproved
+          .map((tx) => {
+            if (tx.is_reversal) {
+              const orig = tx.reverses_id ? allApprovedById.get(tx.reverses_id) : undefined;
+              if (tx.type === 'expense' || orig?.type === 'income') {
+                return { refTx: orig || tx, sign: -1 as const };
+              }
+              return null;
+            }
+            if (tx.type === 'income') {
+              return { refTx: tx, sign: 1 as const };
+            }
+            return null;
+          })
+          .filter((item): item is { refTx: typeof transactions[number]; sign: 1 | -1 } => item !== null);
 
         const yearBpskRemittances = yearAllApproved.filter((tx) => {
-          if (tx.type !== 'expense') return false;
+          if (tx.is_reversal || tx.type !== 'expense') return false;
           const cat = categories.find((c) => c.id === tx.category_id);
           return (
             cat?.id === 'cat-out-bpsk' ||
             cat?.kode === 'OUT-01' ||
             (cat?.nama || '').toLowerCase().includes('bpsk') ||
-            (tx.description || '').toLowerCase().includes('bpsk')
+            ((tx.description || '').toLowerCase().includes('setoran') &&
+              (tx.description || '').toLowerCase().includes('bpsk'))
           );
         });
 
@@ -3459,9 +3505,9 @@ export const ReportsPage: React.FC = () => {
         );
         // Group 4: Kategori yang memiliki transaksi Non-Sentralisasi (100% Kas Tujuan)
         const nonSentralisasiCatIds = new Set(
-          yearIncomes
-            .filter((tx) => tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi')
-            .map((tx) => tx.category_id)
+          yearOperatingIncomeRows
+            .filter(({ refTx }) => refTx.is_sentralisasi === false || refTx.sentralisasi_role === 'non_sentralisasi')
+            .map(({ refTx }) => refTx.category_id)
             .filter(Boolean)
         );
         const g4Cats = categories.filter(
@@ -3471,29 +3517,29 @@ export const ReportsPage: React.FC = () => {
         );
 
         const getCatStats = (catId: string, onlyNonSentralisasi = false) => {
-          const catTxs = yearIncomes.filter((tx) => {
-            if (tx.category_id !== catId) return false;
-            const isExcluded = tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi';
+          const catTxs = yearOperatingIncomeRows.filter(({ refTx }) => {
+            if (refTx.category_id !== catId) return false;
+            const isExcluded = refTx.is_sentralisasi === false || refTx.sentralisasi_role === 'non_sentralisasi';
             return onlyNonSentralisasi ? isExcluded : !isExcluded;
           });
           let total = 0;
           let bpsk = 0;
           let huria = 0;
 
-          catTxs.forEach((tx) => {
-            const amt = Number(tx.amount) || 0;
-            total += amt;
-            const isExcluded = tx.is_sentralisasi === false || tx.sentralisasi_role === 'non_sentralisasi';
+          catTxs.forEach(({ refTx, sign }) => {
+            const amt = Number(refTx.amount) || 0;
+            total += sign * amt;
+            const isExcluded = refTx.is_sentralisasi === false || refTx.sentralisasi_role === 'non_sentralisasi';
             if (isExcluded) {
-              huria += amt;
-            } else if (tx.sentralisasi_role === 'huria_share') {
-              huria += amt;
-            } else if (tx.sentralisasi_role === 'bpsk_share') {
-              bpsk += amt;
+              huria += sign * amt;
+            } else if (refTx.sentralisasi_role === 'huria_share') {
+              huria += sign * amt;
+            } else if (refTx.sentralisasi_role === 'bpsk_share') {
+              bpsk += sign * amt;
             } else {
-              const b = tx.bpsk_amount !== undefined ? Number(tx.bpsk_amount) : Math.round(amt * 0.55);
-              bpsk += b;
-              huria += tx.huria_amount !== undefined ? Number(tx.huria_amount) : amt - b;
+              const b = refTx.bpsk_amount !== undefined ? Number(refTx.bpsk_amount) : Math.round(amt * 0.55);
+              bpsk += sign * b;
+              huria += sign * (refTx.huria_amount !== undefined ? Number(refTx.huria_amount) : amt - b);
             }
           });
 

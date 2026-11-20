@@ -859,94 +859,112 @@ export const MasterDataPage: React.FC = () => {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex border-b border-slate-200 gap-2 overflow-x-auto text-xs font-semibold scrollbar-none">
+      <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200/80 overflow-x-auto scrollbar-none gap-1 text-xs">
         <button
           onClick={() => setActiveTab('kas')}
-          className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
-            activeTab === 'kas' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'
+          className={`px-3.5 py-2 min-h-[40px] rounded-lg transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+            activeTab === 'kas'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Wallet className="w-4 h-4" />
+          <Wallet className="w-4 h-4 text-blue-600" />
           <span>Daftar Kas ({kasList.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('years')}
-          className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
-            activeTab === 'years' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'
+          className={`px-3.5 py-2 min-h-[40px] rounded-lg transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+            activeTab === 'years'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Calendar className="w-4 h-4" />
+          <Calendar className="w-4 h-4 text-indigo-600" />
           <span>Tahun Anggaran ({fiscalYears.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('families')}
-          className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
-            activeTab === 'families' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'
+          className={`px-3.5 py-2 min-h-[40px] rounded-lg transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+            activeTab === 'families'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Home className="w-4 h-4" />
+          <Home className="w-4 h-4 text-emerald-600" />
           <span>Keluarga &amp; Lingkungan ({families.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('users')}
-          className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
-            activeTab === 'users' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'
+          className={`px-3.5 py-2 min-h-[40px] rounded-lg transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+            activeTab === 'users'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <UserCheck className="w-4 h-4" />
+          <UserCheck className="w-4 h-4 text-slate-700" />
           <span>Pengguna & Pelayan Huria ({profiles.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('storage')}
-          className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
-            activeTab === 'storage' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'
+          className={`px-3.5 py-2 min-h-[40px] rounded-lg transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+            activeTab === 'storage'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Landmark className="w-4 h-4" />
+          <Landmark className="w-4 h-4 text-slate-700" />
           <span>Rekening & Brankas ({storageAccounts.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('categories')}
-          className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
-            activeTab === 'categories' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'
+          className={`px-3.5 py-2 min-h-[40px] rounded-lg transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+            activeTab === 'categories'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Tags className="w-4 h-4" />
+          <Tags className="w-4 h-4 text-amber-600" />
           <span>Kategori Anggaran ({categories.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('balances')}
-          className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
-            activeTab === 'balances' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'
+          className={`px-3.5 py-2 min-h-[40px] rounded-lg transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+            activeTab === 'balances'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Coins className="w-4 h-4" />
+          <Coins className="w-4 h-4 text-emerald-600" />
           <span>Saldo Awal Tahun ({settings.active_year})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('access')}
-          className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
-            activeTab === 'access' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'
+          className={`px-3.5 py-2 min-h-[40px] rounded-lg transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+            activeTab === 'access'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Users className="w-4 h-4" />
+          <Users className="w-4 h-4 text-blue-600" />
           <span>Penugasan Pengurus Kas</span>
         </button>
 
         <button
           onClick={() => setActiveTab('policy')}
-          className={`pb-3 px-3 transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
-            activeTab === 'policy' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'
+          className={`px-3.5 py-2 min-h-[40px] rounded-lg transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+            activeTab === 'policy'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Sliders className="w-4 h-4" />
+          <Sliders className="w-4 h-4 text-slate-700" />
           <span>Kebijakan Nota & Saldo</span>
         </button>
       </div>
@@ -967,15 +985,15 @@ export const MasterDataPage: React.FC = () => {
                   setEditingKas({
                     nama: '',
                     kode: 'KAS-',
-                    warna: '#7C9CF5',
+                    warna: '#2563EB',
                     fund_type: 'unrestricted',
                     is_active: true,
                   })
                 }
-                className="px-3.5 py-2 bg-primary hover:bg-primary/90 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                <span>+ Tambah Kas Baru</span>
+                <span>Tambah Kas Baru</span>
               </button>
             )}
           </div>

@@ -42,7 +42,7 @@ import {
   CategoryType,
   BudgetRealizationRow,
 } from '../types/database';
-import { formatRupiah, formatDateIndo } from '../lib/formatters';
+import { formatRupiah, formatDateIndo, getTodayYmd } from '../lib/formatters';
 import { exportToExcel, generateAnggaranRealisasiPDF } from '../lib/exportUtils';
 import { generateMonthlyDistribution } from '../lib/demoData';
 
@@ -129,8 +129,8 @@ export default function BudgetPage() {
 
   // Form States for Status Modal
   const [statusReturnNote, setStatusReturnNote] = useState('');
-  const [rapatDate, setRapatDate] = useState(new Date().toISOString().split('T')[0]);
-  const [rapatBeritaAcaraNo, setRapatBeritaAcaraNo] = useState('BA-RH/HKBP-HTR/I/2026');
+  const [rapatDate, setRapatDate] = useState(getTodayYmd());
+  const [rapatBeritaAcaraNo, setRapatBeritaAcaraNo] = useState(`BA-RH/HKBP-HTR/I/${activeYear || 2026}`);
   const [rapatDocName, setRapatDocName] = useState('');
 
   // Form States for Reallocation Modal
@@ -152,12 +152,18 @@ export default function BudgetPage() {
     return match || availableBudgetsForKasAndYear[0] || null;
   }, [availableBudgetsForKasAndYear, selectedVersion]);
 
-  // Keep selectedVersion in sync if currentBudget changes
+  // Keep selectedVersion & default Berita Acara year in sync
   React.useEffect(() => {
     if (currentBudget && currentBudget.version !== selectedVersion) {
       setSelectedVersion(currentBudget.version);
     }
   }, [currentBudget]);
+
+  React.useEffect(() => {
+    setRapatBeritaAcaraNo((prev) =>
+      /^BA-RH\/HKBP-HTR\/I\/\d{4}$/.test(prev) ? `BA-RH/HKBP-HTR/I/${selectedTahun}` : prev
+    );
+  }, [selectedTahun]);
 
   // Items for the current budget
   const currentItems = useMemo(() => {
@@ -299,7 +305,7 @@ export default function BudgetPage() {
     }
   };
 
-  const handleSaveItem = () => {
+  const handleSaveItem = async () => {
     if (!currentBudget) return;
     if (!itemCategoryId) {
       toast.error('Silakan pilih kategori pos anggaran.');
@@ -318,7 +324,7 @@ export default function BudgetPage() {
       return;
     }
 
-    saveBudgetItem({
+    const res = await saveBudgetItem({
       id: editingItem ? editingItem.id : undefined,
       budget_id: currentBudget.id,
       category_id: itemCategoryId,
@@ -328,14 +334,19 @@ export default function BudgetPage() {
       monthly_distribution: itemMonthly,
     });
 
+    if (!res.success) {
+      toast.error(res.error || 'Gagal menyimpan pos anggaran.');
+      return;
+    }
+
     toast.success(editingItem ? 'Pos anggaran diperbarui.' : 'Pos anggaran ditambahkan.');
     setShowItemModal(false);
   };
 
   // Create Initial Budget Draft if none exists
-  const handleCreateInitialBudget = () => {
+  const handleCreateInitialBudget = async () => {
     if (!selectedKas) return;
-    saveBudget({
+    const res = await saveBudget({
       kas_id: selectedKasId,
       tahun: selectedTahun,
       version: 1,
@@ -346,6 +357,11 @@ export default function BudgetPage() {
       is_current_active: false,
       notes: `Draf awal APBG disusun oleh ${currentUser?.full_name || 'Bendahara'}`,
     });
+    if (!res.success) {
+      toast.error(res.error || 'Gagal membuat draf APBG awal.');
+      return;
+    }
+    toast.success('Draf APBG awal berhasil dibuat.');
   };
 
   // Handle Workflow Status Changes
@@ -555,38 +571,38 @@ export default function BudgetPage() {
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center p-1 bg-gray-100/80 rounded-xl border border-gray-200 overflow-x-auto scrollbar-none gap-1 w-full sm:w-auto">
+        <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200/80 overflow-x-auto scrollbar-none gap-1 w-full sm:w-auto">
           <button
             onClick={() => setActiveTab('apbg')}
-            className={`flex items-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-0 rounded-lg text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
+            className={`flex items-center gap-2 px-3.5 py-2 min-h-[40px] rounded-lg text-xs transition-all whitespace-nowrap shrink-0 ${
               activeTab === 'apbg'
-                ? 'bg-white text-gray-900 shadow-sm font-semibold'
-                : 'text-gray-600 hover:text-gray-900'
+                ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                : 'text-slate-600 hover:text-slate-900 font-medium'
             }`}
           >
-            <FileText className="w-4 h-4 text-[#7C9CF5]" />
+            <FileText className="w-4 h-4 text-blue-600" />
             Penyusunan APBG
           </button>
           <button
             onClick={() => setActiveTab('pergeseran')}
-            className={`flex items-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-0 rounded-lg text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
+            className={`flex items-center gap-2 px-3.5 py-2 min-h-[40px] rounded-lg text-xs transition-all whitespace-nowrap shrink-0 ${
               activeTab === 'pergeseran'
-                ? 'bg-white text-gray-900 shadow-sm font-semibold'
-                : 'text-gray-600 hover:text-gray-900'
+                ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                : 'text-slate-600 hover:text-slate-900 font-medium'
             }`}
           >
-            <ArrowRightLeft className="w-4 h-4 text-[#CDB4FF]" />
+            <ArrowRightLeft className="w-4 h-4 text-indigo-600" />
             Pergeseran Pos
           </button>
           <button
             onClick={() => setActiveTab('realisasi')}
-            className={`flex items-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-0 rounded-lg text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
+            className={`flex items-center gap-2 px-3.5 py-2 min-h-[40px] rounded-lg text-xs transition-all whitespace-nowrap shrink-0 ${
               activeTab === 'realisasi'
-                ? 'bg-white text-gray-900 shadow-sm font-semibold'
-                : 'text-gray-600 hover:text-gray-900'
+                ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                : 'text-slate-600 hover:text-slate-900 font-medium'
             }`}
           >
-            <TrendingUp className="w-4 h-4 text-[#A8E6CF]" />
+            <TrendingUp className="w-4 h-4 text-emerald-600" />
             Realisasi vs Anggaran
           </button>
         </div>
@@ -609,7 +625,7 @@ export default function BudgetPage() {
                     setSelectedKasId(e.target.value);
                     setSelectedVersion(1);
                   }}
-                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 rounded-xl border border-gray-200 bg-gray-50/50 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50/70 text-sm font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 >
                   {viewableKas.map((k) => (
                     <option key={k.id} value={k.id}>
@@ -628,7 +644,7 @@ export default function BudgetPage() {
                     setSelectedTahun(Number(e.target.value));
                     setSelectedVersion(1);
                   }}
-                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 rounded-xl border border-gray-200 bg-gray-50/50 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50/70 text-sm font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 >
                   {fiscalYears && fiscalYears.length > 0 ? (
                     fiscalYears.map((fy) => (
@@ -653,7 +669,7 @@ export default function BudgetPage() {
                   <select
                     value={selectedVersion}
                     onChange={(e) => setSelectedVersion(Number(e.target.value))}
-                    className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 rounded-xl border border-gray-200 bg-gray-50/50 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                    className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50/70 text-sm font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                   >
                     {availableBudgetsForKasAndYear.map((b) => (
                       <option key={b.id} value={b.version}>
@@ -671,7 +687,7 @@ export default function BudgetPage() {
               {currentBudget && currentBudget.status === 'approved' && isKasBendahara && (
                 <button
                   onClick={handleCreateRevision}
-                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold bg-[#FFE8A3] text-amber-900 hover:bg-[#ffe082] transition-colors shadow-sm"
+                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 transition-colors"
                   title="Buat versi baru (APBG-P) yang akan dibahas di Rapat Huria"
                 >
                   <Copy className="w-4 h-4" />
@@ -699,7 +715,7 @@ export default function BudgetPage() {
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <span
                       className="w-3.5 h-3.5 rounded-full shrink-0"
-                      style={{ backgroundColor: selectedKas?.warna || '#7C9CF5' }}
+                      style={{ backgroundColor: selectedKas?.warna || '#2563EB' }}
                     />
                     <h2 className="text-lg sm:text-xl font-bold text-gray-900">{currentBudget.title}</h2>
                     {getStatusBadge(currentBudget.status)}
@@ -723,7 +739,7 @@ export default function BudgetPage() {
                       {isKasBendahara && (
                         <button
                           onClick={() => setShowStatusModal({ type: 'review', budget: currentBudget })}
-                          className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 transition-colors shadow-sm"
+                          className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-xs"
                         >
                           <Send className="w-4 h-4" />
                           Ajukan ke Ketua Kas
@@ -749,7 +765,7 @@ export default function BudgetPage() {
                               setShowStatusModal({ type: 'submit_rapat', budget: currentBudget })
                             }
                             disabled={isBudgetCreator && currentUser?.role !== 'admin'}
-                            className="inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-0 rounded-xl text-sm font-semibold bg-[#FFE8A3] text-amber-900 hover:bg-[#ffe082] transition-colors shadow-sm disabled:opacity-50"
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-0 rounded-xl text-sm font-semibold bg-amber-600 text-white hover:bg-amber-700 transition-colors shadow-xs disabled:opacity-50"
                             title={
                               isBudgetCreator && currentUser?.role !== 'admin'
                                 ? 'Penyusun draf tidak boleh meneruskan anggarannya sendiri'
@@ -794,7 +810,7 @@ export default function BudgetPage() {
                   {currentBudget.status === 'returned' && isKasBendahara && (
                     <button
                       onClick={() => setShowStatusModal({ type: 'review', budget: currentBudget })}
-                      className="inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-0 rounded-xl text-sm font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 transition-colors shadow-sm"
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[44px] sm:min-h-0 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-xs"
                     >
                       <Send className="w-4 h-4" />
                       Ajukan Ulang ke Ketua
@@ -921,7 +937,7 @@ export default function BudgetPage() {
           ) : (
             /* Empty State: No Budget Draft Yet */
             <div className="bg-white p-12 rounded-2xl border border-gray-200 text-center space-y-4">
-              <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-[#7C9CF5] mx-auto flex items-center justify-center">
+              <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 mx-auto flex items-center justify-center">
                 <Calculator className="w-8 h-8" />
               </div>
               <div className="max-w-md mx-auto">
@@ -937,7 +953,7 @@ export default function BudgetPage() {
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-2">
                   <button
                     onClick={handleCreateInitialBudget}
-                    className="min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 transition-colors shadow-sm"
+                    className="min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-xs"
                   >
                     <Plus className="w-4 h-4" />
                     Buat Draf APBG Baru
@@ -1013,7 +1029,7 @@ export default function BudgetPage() {
                         <div className="flex items-center justify-between gap-2 pt-1">
                           <button
                             onClick={() => setShowMonthlyBreakdown(item)}
-                            className="min-h-[40px] px-3 py-1.5 rounded-lg bg-indigo-50 text-xs text-[#5A7BE0] font-semibold inline-flex items-center gap-1.5"
+                            className="min-h-[40px] px-3 py-1.5 rounded-lg bg-blue-50 text-xs text-blue-700 font-semibold inline-flex items-center gap-1.5"
                           >
                             <Calendar className="w-3.5 h-3.5" />
                             Lihat Sebaran
@@ -1086,7 +1102,7 @@ export default function BudgetPage() {
                             <td className="py-3 px-4 text-center">
                               <button
                                 onClick={() => setShowMonthlyBreakdown(item)}
-                                className="inline-flex items-center gap-1 text-xs text-[#7C9CF5] hover:text-indigo-700 font-medium"
+                                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
                               >
                                 <Calendar className="w-3.5 h-3.5" />
                                 Lihat Sebaran
@@ -1181,7 +1197,7 @@ export default function BudgetPage() {
                         <div className="flex items-center justify-between gap-2 pt-1">
                           <button
                             onClick={() => setShowMonthlyBreakdown(item)}
-                            className="min-h-[40px] px-3 py-1.5 rounded-lg bg-indigo-50 text-xs text-[#5A7BE0] font-semibold inline-flex items-center gap-1.5"
+                            className="min-h-[40px] px-3 py-1.5 rounded-lg bg-blue-50 text-xs text-blue-700 font-semibold inline-flex items-center gap-1.5"
                           >
                             <Calendar className="w-3.5 h-3.5" />
                             Lihat Sebaran
@@ -1254,7 +1270,7 @@ export default function BudgetPage() {
                             <td className="py-3 px-4 text-center">
                               <button
                                 onClick={() => setShowMonthlyBreakdown(item)}
-                                className="inline-flex items-center gap-1 text-xs text-[#7C9CF5] hover:text-indigo-700 font-medium"
+                                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
                               >
                                 <Calendar className="w-3.5 h-3.5" />
                                 Lihat Sebaran
@@ -1306,8 +1322,8 @@ export default function BudgetPage() {
       {activeTab === 'pergeseran' && (
         <div className="space-y-6">
           {/* Explanation Banner */}
-          <div className="bg-[#B8C0FF]/15 border border-[#B8C0FF]/40 rounded-2xl p-5 flex items-start gap-4">
-            <ArrowRightLeft className="w-6 h-6 text-[#7C9CF5] shrink-0 mt-0.5" />
+          <div className="bg-blue-50/70 border border-blue-200 rounded-2xl p-5 flex items-start gap-4">
+            <ArrowRightLeft className="w-6 h-6 text-blue-600 shrink-0 mt-0.5" />
             <div className="space-y-1">
               <h3 className="text-base font-bold text-gray-900">
                 Aturan Pergeseran Anggaran Antar Pos
@@ -1331,7 +1347,7 @@ export default function BudgetPage() {
                 <select
                   value={selectedKasId}
                   onChange={(e) => setSelectedKasId(e.target.value)}
-                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 rounded-xl border border-gray-200 bg-gray-50/50 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50/70 text-sm font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 >
                   {viewableKas.map((k) => (
                     <option key={k.id} value={k.id}>
@@ -1346,7 +1362,7 @@ export default function BudgetPage() {
                 <select
                   value={selectedTahun}
                   onChange={(e) => setSelectedTahun(Number(e.target.value))}
-                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 rounded-xl border border-gray-200 bg-gray-50/50 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50/70 text-sm font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 >
                   {fiscalYears && fiscalYears.length > 0 ? (
                     fiscalYears.map((fy) => (
@@ -1376,7 +1392,7 @@ export default function BudgetPage() {
                     setShowReallocationModal(true);
                   }}
                   disabled={!currentBudget || currentBudget.status !== 'approved'}
-                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 transition-colors shadow-sm disabled:opacity-50"
+                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-xs disabled:opacity-50"
                 >
                   <ArrowRightLeft className="w-4 h-4" />
                   Ajukan Pergeseran Pos
@@ -1389,7 +1405,7 @@ export default function BudgetPage() {
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between">
               <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-[#7C9CF5]" />
+                <Clock className="w-4 h-4 text-blue-600" />
                 Riwayat Pergeseran Pos Anggaran ({relevantReallocations.length})
               </h3>
             </div>
@@ -1506,7 +1522,7 @@ export default function BudgetPage() {
                 <select
                   value={realisasiKasId}
                   onChange={(e) => setRealisasiKasId(e.target.value)}
-                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 rounded-xl border border-gray-200 bg-gray-50/50 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50/70 text-sm font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 >
                   {!isSeksiUser && <option value="all">Semua Kas (Konsolidasian Huria & Seksi)</option>}
                   {viewableKas.map((k) => (
@@ -1525,7 +1541,7 @@ export default function BudgetPage() {
                 <select
                   value={realisasiMonth}
                   onChange={(e) => setRealisasiMonth(Number(e.target.value))}
-                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 rounded-xl border border-gray-200 bg-gray-50/50 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50/70 text-sm font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 >
                   {monthNames.map((name, idx) => (
                     <option key={idx + 1} value={idx + 1}>
@@ -1541,7 +1557,7 @@ export default function BudgetPage() {
                 <select
                   value={selectedTahun}
                   onChange={(e) => setSelectedTahun(Number(e.target.value))}
-                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 rounded-xl border border-gray-200 bg-gray-50/50 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                  className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50/70 text-sm font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 >
                   {fiscalYears && fiscalYears.length > 0 ? (
                     fiscalYears.map((fy) => (
@@ -1571,7 +1587,7 @@ export default function BudgetPage() {
               </button>
               <button
                 onClick={handleExportRealisasiPDF}
-                className="flex-1 sm:flex-none min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 transition-colors shadow-sm"
+                className="flex-1 sm:flex-none min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-xs"
               >
                 <Download className="w-4 h-4" />
                 Cetak PDF Resmi
@@ -1680,7 +1696,7 @@ export default function BudgetPage() {
                       <div className="bg-gray-100 rounded-full h-2 overflow-hidden">
                         <div
                           className={`h-full rounded-full ${
-                            isOverBudget ? 'bg-rose-600' : isIncome ? 'bg-emerald-500' : 'bg-[#7C9CF5]'
+                            isOverBudget ? 'bg-rose-600' : isIncome ? 'bg-emerald-500' : 'bg-blue-600'
                           }`}
                           style={{ width: `${pct}%` }}
                         />
@@ -1783,7 +1799,7 @@ export default function BudgetPage() {
                                       ? 'bg-rose-600'
                                       : isIncome
                                       ? 'bg-emerald-500'
-                                      : 'bg-[#7C9CF5]'
+                                      : 'bg-blue-600'
                                   }`}
                                   style={{ width: `${pct}%` }}
                                 />
@@ -1837,7 +1853,7 @@ export default function BudgetPage() {
                 <select
                   value={itemCategoryId}
                   onChange={(e) => setItemCategoryId(e.target.value)}
-                  className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                  className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 >
                   {categories
                     .filter((c) => c.tipe === itemType && c.is_active)
@@ -1859,7 +1875,7 @@ export default function BudgetPage() {
                   placeholder="Misal: Perayaan Paskah Sekolah Minggu, Honor Pelayan"
                   value={itemDescription}
                   onChange={(e) => setItemDescription(e.target.value)}
-                  className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                  className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 />
               </div>
 
@@ -1875,7 +1891,7 @@ export default function BudgetPage() {
                   value={itemAnnualAmount || ''}
                   onChange={(e) => handleAnnualAmountChange(Number(e.target.value))}
                   placeholder="0"
-                  className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl border border-gray-200 text-sm font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                  className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200 text-sm font-semibold tabular-nums focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 />
                 {itemAnnualAmount > 0 && (
                   <p className="text-xs text-gray-500 mt-1 font-medium">
@@ -1899,7 +1915,7 @@ export default function BudgetPage() {
                           setItemMonthly(generateMonthlyDistribution(itemAnnualAmount));
                         }
                       }}
-                      className="rounded text-[#7C9CF5] focus:ring-0"
+                      className="rounded text-blue-600 focus:ring-0"
                     />
                     <span>Bagi rata 12 bulan otomatis</span>
                   </label>
@@ -1954,7 +1970,7 @@ export default function BudgetPage() {
               </button>
               <button
                 onClick={handleSaveItem}
-                className="px-5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm"
+                className="px-5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-xs"
               >
                 Simpan Pos Anggaran
               </button>
@@ -1996,9 +2012,9 @@ export default function BudgetPage() {
               ))}
             </div>
 
-            <div className="p-3 rounded-xl bg-[#7C9CF5]/10 border border-[#7C9CF5]/20 flex items-center justify-between text-xs">
-              <span className="font-semibold text-gray-700">Total Setahun:</span>
-              <span className="font-bold text-[#7C9CF5] text-sm tabular-nums">
+            <div className="p-3 rounded-xl bg-blue-50 border border-blue-200/80 flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-700">Total Setahun:</span>
+              <span className="font-bold text-blue-700 text-sm tabular-nums">
                 {formatRupiah(showMonthlyBreakdown.annual_amount)}
               </span>
             </div>
@@ -2151,7 +2167,7 @@ export default function BudgetPage() {
                     ? 'bg-rose-600 hover:bg-rose-700'
                     : showStatusModal.type === 'approve'
                     ? 'bg-emerald-600 hover:bg-emerald-700'
-                    : 'bg-[#7C9CF5] hover:bg-indigo-600'
+                    : 'bg-blue-600 hover:bg-blue-700'
                 }`}
               >
                 Konfirmasi
@@ -2187,7 +2203,7 @@ export default function BudgetPage() {
                 <select
                   value={reallocFromId}
                   onChange={(e) => setReallocFromId(e.target.value)}
-                  className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                  className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 >
                   <option value="">-- Pilih Pos Asal --</option>
                   {currentItems.map((item) => (
@@ -2207,7 +2223,7 @@ export default function BudgetPage() {
                 <select
                   value={reallocToId}
                   onChange={(e) => setReallocToId(e.target.value)}
-                  className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                  className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 >
                   <option value="">-- Pilih Pos Tujuan --</option>
                   {currentItems
@@ -2233,7 +2249,7 @@ export default function BudgetPage() {
                   value={reallocAmount || ''}
                   onChange={(e) => setReallocAmount(Number(e.target.value))}
                   placeholder="0"
-                  className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl border border-gray-200 text-sm font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                  className="w-full px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl border border-slate-200 text-sm font-semibold tabular-nums focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 />
                 {reallocFromId && (
                   <p className="text-xs text-gray-500 mt-1">
@@ -2260,7 +2276,7 @@ export default function BudgetPage() {
                   value={reallocReason}
                   onChange={(e) => setReallocReason(e.target.value)}
                   placeholder="Contoh: Kebutuhan konsumsi jemaat meningkat mendesak dialihkan dari pos ATK"
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 />
               </div>
             </div>
@@ -2274,7 +2290,7 @@ export default function BudgetPage() {
               </button>
               <button
                 onClick={handleExecuteReallocation}
-                className="px-5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl text-xs font-semibold bg-[#7C9CF5] text-white hover:bg-indigo-600 shadow-sm"
+                className="px-5 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-xl text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-xs"
               >
                 Simpan Pergeseran
               </button>

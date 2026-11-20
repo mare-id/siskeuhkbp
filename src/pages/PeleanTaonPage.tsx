@@ -533,7 +533,7 @@ export const PeleanTaonPage: React.FC = () => {
   return (
     <div className="space-y-5 w-full max-w-7xl mx-auto min-w-0">
       {/* Header & Top Actions */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
             Rekap Pelean Taon per Lingkungan
@@ -543,11 +543,22 @@ export const PeleanTaonPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
+          {canRecordPeleanTaon && (
+            <button
+              type="button"
+              onClick={() => openPayModalForFamily()}
+              className="col-span-2 sm:col-span-1 sm:order-3 min-h-[44px] sm:min-h-[40px] px-4 py-2 bg-[#0B132B] hover:bg-slate-800 text-white text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Catat Pelean Taon</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={handleExportExcel}
-            className="min-h-[44px] sm:min-h-[40px] px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors"
+            className="sm:order-1 min-h-[44px] sm:min-h-[40px] px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
             <span>Ekspor Excel</span>
@@ -556,22 +567,11 @@ export const PeleanTaonPage: React.FC = () => {
           <button
             type="button"
             onClick={handleExportPdf}
-            className="min-h-[44px] sm:min-h-[40px] px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors"
+            className="sm:order-2 min-h-[44px] sm:min-h-[40px] px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
           >
             <Printer className="w-4 h-4 text-blue-700" />
             <span>Cetak PDF</span>
           </button>
-
-          {canRecordPeleanTaon && (
-            <button
-              type="button"
-              onClick={() => openPayModalForFamily()}
-              className="min-h-[44px] sm:min-h-[40px] px-4 py-2 bg-[#0B132B] hover:bg-slate-800 text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Catat Pelean Taon</span>
-            </button>
-          )}
         </div>
       </div>
 
@@ -647,7 +647,7 @@ export const PeleanTaonPage: React.FC = () => {
       <div className="bg-white p-4 rounded-2xl border border-slate-200/90 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5">
-            <HeartHandshake className="w-4 h-4 text-primary" />
+            <HeartHandshake className="w-4 h-4 text-blue-600" />
             <span>Capaian Per Lingkungan (Klik kartu untuk filter)</span>
           </h2>
           {selectedLingkungan !== 'all' && (
@@ -802,10 +802,8 @@ export const PeleanTaonPage: React.FC = () => {
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 font-semibold text-[11px]">
-                          {row.lingkungan}
-                        </span>
+                      <td className="py-3 px-4 text-slate-700 font-medium">
+                        {row.lingkungan}
                       </td>
                       <td className="py-3 px-4 text-right font-mono font-bold tabular-nums whitespace-nowrap">
                         {displayAmount > 0 ? (
@@ -824,18 +822,18 @@ export const PeleanTaonPage: React.FC = () => {
                       </td>
                       <td className="py-3 px-4 text-center whitespace-nowrap">
                         {row.paymentStatus === 'paid' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-[10px]">
-                            <CheckCircle2 className="w-3 h-3" />
+                          <span className="inline-flex items-center gap-1 text-emerald-700 font-bold text-xs">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
                             <span>Sudah Bayar</span>
                           </span>
                         ) : row.paymentStatus === 'pending' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 font-bold text-[10px]">
-                            <Clock className="w-3 h-3" />
+                          <span className="inline-flex items-center gap-1 text-amber-700 font-bold text-xs">
+                            <Clock className="w-3.5 h-3.5" />
                             <span>Menunggu ACC</span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 font-bold text-[10px]">
-                            <span>Belum Bayar</span>
+                          <span className="text-rose-700 font-semibold text-xs">
+                            Belum Bayar
                           </span>
                         )}
                       </td>
@@ -844,7 +842,7 @@ export const PeleanTaonPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => openPayModalForFamily(row)}
-                            className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1 transition-colors ${
+                            className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer ${
                               row.paymentStatus === 'unpaid'
                                 ? 'bg-blue-600 hover:bg-blue-700 text-white'
                                 : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
@@ -876,27 +874,26 @@ export const PeleanTaonPage: React.FC = () => {
                 <div key={row.key} className="py-3.5 space-y-2 text-xs">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-mono text-[11px] text-slate-400">#{idx + 1}</span>
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-semibold text-[10px]">
-                          {row.lingkungan}
-                        </span>
+                      <div className="text-[11px] text-slate-500 font-medium">
+                        <span className="font-mono text-slate-400">#{idx + 1}</span>
+                        <span className="mx-1.5">·</span>
+                        <span>Lingkungan {row.lingkungan}</span>
                       </div>
-                      <h3 className="font-bold text-slate-900 text-sm mt-1 leading-snug">
+                      <h3 className="font-bold text-slate-900 text-sm mt-0.5 leading-snug">
                         {row.namaKeluarga}
                       </h3>
                     </div>
 
                     {row.paymentStatus === 'paid' ? (
-                      <span className="shrink-0 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-[10px]">
+                      <span className="shrink-0 text-emerald-700 font-bold text-[11px]">
                         Sudah Bayar
                       </span>
                     ) : row.paymentStatus === 'pending' ? (
-                      <span className="shrink-0 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 font-bold text-[10px]">
+                      <span className="shrink-0 text-amber-700 font-bold text-[11px]">
                         Menunggu ACC
                       </span>
                     ) : (
-                      <span className="shrink-0 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 font-bold text-[10px]">
+                      <span className="shrink-0 text-rose-700 font-semibold text-[11px]">
                         Belum Bayar
                       </span>
                     )}

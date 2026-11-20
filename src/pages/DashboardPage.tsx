@@ -39,7 +39,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { Transaction } from '../types/database';
-import { formatRupiah, formatDateIndo } from '../lib/formatters';
+import { formatRupiah, formatDateIndo, getTodayYmd, getYmdYear, getYmdMonth } from '../lib/formatters';
 import { evaluateBpskRemittanceCompliance, PPKU_BPSK_DEADLINE_DAYS } from '../lib/ppkuRules';
 import { MobileTransactionDetailModal } from '../components/transactions/MobileTransactionDetailModal';
 import { AttachmentPreviewModal } from '../components/transactions/AttachmentPreviewModal';
@@ -98,7 +98,7 @@ export const DashboardPage: React.FC = () => {
   const [detailTx, setDetailTx] = useState<Transaction | null>(null);
   const [previewAttachmentUrl, setPreviewAttachmentUrl] = useState<string | null>(null);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getTodayYmd();
 
   const myAssignedKasIds = userKasAccess.map((a) => a.kas_id);
   const isSeksiUser = !isLeader && currentUser?.role === 'pengurus_kas';
@@ -158,26 +158,34 @@ export const DashboardPage: React.FC = () => {
   const totalSaldoResmi = kasBalances.reduce((sum, k) => sum + k.saldo_resmi, 0);
   const totalSaldoProyeksi = kasBalances.reduce((sum, k) => sum + k.saldo_proyeksi, 0);
 
-  const currentYear = new Date().getFullYear();
+  const activeYear = settings.active_year || new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
-  const sentralisasiSummary = getSentralisasiSummary(currentYear);
+  const sentralisasiSummary = getSentralisasiSummary(activeYear);
   const bpskCompliance = evaluateBpskRemittanceCompliance(transactions, categories, todayStr);
 
-  const currentMonthTx = visibleTransactions.filter((tx) => {
-    const d = new Date(tx.tanggal);
-    return d.getFullYear() === currentYear && d.getMonth() + 1 === currentMonth && tx.status === 'approved';
-  });
+  const currentMonthTx = visibleTransactions.filter(
+    (tx) =>
+      getYmdYear(tx.tanggal) === activeYear &&
+      getYmdMonth(tx.tanggal) === currentMonth &&
+      tx.status === 'approved'
+  );
 
-  const currentMonthIncomeCount = currentMonthTx.filter((tx) => tx.type === 'income').length;
-  const currentMonthExpenseCount = currentMonthTx.filter((tx) => tx.type === 'expense').length;
+  const currentMonthIncomeCount = currentMonthTx.filter((tx) => tx.type === 'income' && !tx.is_reversal).length;
+  const currentMonthExpenseCount = currentMonthTx.filter((tx) => tx.type === 'expense' && !tx.is_reversal).length;
 
-  const totalBulanIniMasuk = currentMonthTx
-    .filter((tx) => tx.type === 'income')
-    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+  const totalBulanIniMasuk = currentMonthTx.reduce((sum, tx) => {
+    const amt = Number(tx.amount) || 0;
+    if (tx.type === 'income' && !tx.is_reversal) return sum + amt;
+    if (tx.is_reversal && tx.type === 'expense') return sum - amt;
+    return sum;
+  }, 0);
 
-  const totalBulanIniKeluar = currentMonthTx
-    .filter((tx) => tx.type === 'expense')
-    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+  const totalBulanIniKeluar = currentMonthTx.reduce((sum, tx) => {
+    const amt = Number(tx.amount) || 0;
+    if (tx.type === 'expense' && !tx.is_reversal) return sum + amt;
+    if (tx.is_reversal && tx.type === 'income') return sum - amt;
+    return sum;
+  }, 0);
 
   const canRecordAnyActiveKas =
     isAdmin || (canRecordTransactions && kasList.some((k) => k.is_active && canInputKas(k.id)));
@@ -196,29 +204,43 @@ export const DashboardPage: React.FC = () => {
   const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   const trendData = monthNamesShort.map((bulan, idx) => {
     const m = idx + 1;
-    const mTx = visibleTransactions.filter((tx) => {
-      const d = new Date(tx.tanggal);
-      return d.getFullYear() === currentYear && d.getMonth() + 1 === m && tx.status === 'approved';
+    const mTx = visibleTransactions.filter(
+      (tx) =>
+        getYmdYear(tx.tanggal) === activeYear &&
+        getYmdMonth(tx.tanggal) === m &&
+        tx.status === 'approved'
+    );
+    let masuk = 0;
+    let keluar = 0;
+    mTx.forEach((t) => {
+      const amt = Number(t.amount) || 0;
+      if (t.is_reversal) {
+        if (t.type === 'expense' || t.type === 'transfer_out') masuk -= amt;
+        else if (t.type === 'income' || t.type === 'transfer_in') keluar -= amt;
+      } else {
+        if (t.type === 'income' || t.type === 'transfer_in') masuk += amt;
+        else if (t.type === 'expense' || t.type === 'transfer_out') keluar += amt;
+      }
     });
-    const masuk = mTx
-      .filter((t) => t.type === 'income' || t.type === 'transfer_in')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
-    const keluar = mTx
-      .filter((t) => t.type === 'expense' || t.type === 'transfer_out')
-      .reduce((sum, t) => sum + Number(t.amount), 0);
-    return { bulan, masuk, keluar };
+    return { bulan, masuk: Math.max(0, masuk), keluar: Math.max(0, keluar) };
   });
 
-  const approvedIncomeTx = visibleTransactions.filter(
-    (tx) => (tx.type === 'income' || tx.type === 'transfer_in') && tx.status === 'approved'
+  const yearOperatingIncomeTx = visibleTransactions.filter(
+    (tx) =>
+      getYmdYear(tx.tanggal) === activeYear &&
+      tx.status === 'approved' &&
+      ((tx.type === 'income' && !tx.is_reversal) || (tx.is_reversal && tx.type === 'expense'))
   );
   const donutData = categories
     .filter((c) => c.tipe === 'income')
     .map((c) => {
-      const val = approvedIncomeTx
+      const val = yearOperatingIncomeTx
         .filter((tx) => tx.category_id === c.id)
-        .reduce((sum, tx) => sum + Number(tx.amount), 0);
-      return { name: c.nama, value: val };
+        .reduce((sum, tx) => {
+          const amt = Number(tx.amount) || 0;
+          return tx.is_reversal ? sum - amt : sum + amt;
+        }, 0);
+      return { name: c.nama, value: Math.max(0, val) };
     })
     .filter((item) => item.value > 0);
 
@@ -420,14 +442,14 @@ export const DashboardPage: React.FC = () => {
         )}
 
       {/* 4-Column Executive KPI Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="col-span-2 sm:col-span-1 card-hover bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-2.5 sm:gap-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500">Total Kas &amp; Bank</span>
             <Wallet className="w-4 h-4 text-blue-700" />
           </div>
           <div>
-            <div className="text-xl sm:text-2xl font-bold text-slate-900 font-mono tabular-nums tracking-tight break-words">
+            <div className="text-2xl font-bold text-slate-900 font-mono tabular-nums tracking-tight break-words">
               {formatRupiah(totalSaldoResmi)}
             </div>
             <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between gap-2">
@@ -441,11 +463,11 @@ export const DashboardPage: React.FC = () => {
 
         <div className="card-hover bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-2 sm:gap-3 min-w-0">
           <div className="flex items-center justify-between gap-1">
-            <span className="text-[11px] sm:text-xs font-semibold text-slate-500 leading-tight">Pemasukan Bulan Ini</span>
+            <span className="text-[11px] sm:text-xs font-semibold text-slate-500 leading-tight">Masuk Bulan Ini</span>
             <ArrowUpRight className="w-4 h-4 text-emerald-700 shrink-0" />
           </div>
           <div>
-            <div className="text-[13px] sm:text-2xl font-bold text-emerald-700 font-mono tabular-nums tracking-tight break-words">
+            <div className="text-sm sm:text-xl lg:text-2xl font-bold text-emerald-700 font-mono tabular-nums tracking-tight break-words">
               +{formatRupiah(totalBulanIniMasuk)}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
@@ -456,11 +478,11 @@ export const DashboardPage: React.FC = () => {
 
         <div className="card-hover bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200/90 flex flex-col justify-between gap-2 sm:gap-3 min-w-0">
           <div className="flex items-center justify-between gap-1">
-            <span className="text-[11px] sm:text-xs font-semibold text-slate-500 leading-tight">Pengeluaran Bulan Ini</span>
+            <span className="text-[11px] sm:text-xs font-semibold text-slate-500 leading-tight">Keluar Bulan Ini</span>
             <ArrowDownRight className="w-4 h-4 text-rose-700 shrink-0" />
           </div>
           <div>
-            <div className="text-[13px] sm:text-2xl font-bold text-rose-700 font-mono tabular-nums tracking-tight break-words">
+            <div className="text-sm sm:text-xl lg:text-2xl font-bold text-rose-700 font-mono tabular-nums tracking-tight break-words">
               -{formatRupiah(totalBulanIniKeluar)}
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
@@ -601,7 +623,7 @@ export const DashboardPage: React.FC = () => {
           <div className="px-5 py-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-sm font-bold text-slate-900">
-                Sentralisasi PPKU HKBP · {currentYear}
+                Sentralisasi PPKU HKBP · {activeYear}
               </h2>
               <p className="text-[11px] text-slate-500">
                 55% BPSK Pusat · 45% Huria · Non-Sentralisasi 100%
@@ -897,7 +919,7 @@ export const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5 min-w-0">
         <div className="lg:col-span-2 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 space-y-4 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-bold text-slate-900">Tren Arus Kas {currentYear}</h3>
+            <h3 className="text-sm font-bold text-slate-900">Tren Arus Kas {activeYear}</h3>
             <div className="flex items-center gap-4 text-xs text-slate-600">
               <span className="inline-flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-xs bg-[#1E3A8A]" />

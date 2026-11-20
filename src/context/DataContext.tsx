@@ -143,6 +143,7 @@ interface DataContextType {
 
   // Calculators
   getBaseOpeningYear: () => number;
+  getKasOpeningForYear: (kasId: string, targetYear: number, storageId?: string) => number;
   getKasBalances: () => KasBalanceSummary[];
   getStorageBalances: () => StorageBalanceSummary[];
   getSentralisasiSummary: (year?: number) => {
@@ -7466,6 +7467,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateOpeningSetup,
         loading,
         getBaseOpeningYear,
+        getKasOpeningForYear,
         getKasBalances,
         getStorageBalances,
         getSentralisasiSummary,

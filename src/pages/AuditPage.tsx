@@ -41,7 +41,7 @@ import {
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { formatRupiah, formatDateIndo } from '../lib/formatters';
+import { formatRupiah, formatDateIndo, getTodayYmd } from '../lib/formatters';
 import { generateBeritaAcaraAuditPDF } from '../lib/exportUtils';
 import {
   AuditEngagement,
@@ -66,6 +66,7 @@ export const AuditPage: React.FC = () => {
     kasList,
     storageAccounts,
     openingBalances,
+    getBaseOpeningYear,
     getKasBalances,
     getStorageBalances,
     categories,
@@ -132,7 +133,7 @@ export const AuditPage: React.FC = () => {
   // Final Opinion Modal State
   const [showFinalizeModal, setShowFinalizeModal] = useState<boolean>(false);
   const [baNo, setBaNo] = useState<string>('');
-  const [baDate, setBaDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [baDate, setBaDate] = useState<string>(getTodayYmd());
   const [dissentingNotes, setDissentingNotes] = useState<string>('');
 
   // Finding Form Modal State
@@ -190,7 +191,7 @@ export const AuditPage: React.FC = () => {
   const [newEngJenis, setNewEngJenis] = useState<'semester_1' | 'semester_2' | 'tahunan' | 'opening'>('semester_2');
   const [newEngJudul, setNewEngJudul] = useState<string>('');
   const [newEngDeskripsi, setNewEngDeskripsi] = useState<string>('');
-  const [newEngDibukaPada, setNewEngDibukaPada] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [newEngDibukaPada, setNewEngDibukaPada] = useState<string>(getTodayYmd());
   const [newEngBatasWaktu, setNewEngBatasWaktu] = useState<string>('');
   const [newEngStatus, setNewEngStatus] = useState<AuditEngagementStatus>('in_progress');
   const [isSavingEng, setIsSavingEng] = useState<boolean>(false);
@@ -273,11 +274,17 @@ export const AuditPage: React.FC = () => {
     return total;
   }, [cashDenominations]);
 
-  // Real Book Balance for selected Kas & Storage Account
+  // Real Book Balance for selected Kas & Storage Account (anchored strictly on baseOpeningYear)
   const calculatedBookBalance = useMemo(() => {
     if (!ccKasId || !ccStorageId) return 0;
+    const baseYear = getBaseOpeningYear();
     const initial = openingBalances
-      .filter((ob) => ob.kas_id === ccKasId && ob.storage_account_id === ccStorageId)
+      .filter(
+        (ob) =>
+          ob.kas_id === ccKasId &&
+          ob.storage_account_id === ccStorageId &&
+          Number(ob.tahun) === baseYear
+      )
       .reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
     let mutasi = 0;
@@ -295,7 +302,7 @@ export const AuditPage: React.FC = () => {
       });
 
     return initial + mutasi;
-  }, [openingBalances, transactions, ccKasId, ccStorageId]);
+  }, [openingBalances, transactions, ccKasId, ccStorageId, getBaseOpeningYear]);
 
   const selectedKasBookTotal = useMemo(() => {
     if (!ccKasId) return 0;
@@ -555,9 +562,18 @@ export const AuditPage: React.FC = () => {
     }
   };
 
+  const getLocalDueDate14 = () => {
+    const dt = new Date();
+    dt.setDate(dt.getDate() + 14);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
   const openNewEngagementModal = () => {
     const activeYr = settings.active_year || 2026;
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getTodayYmd();
     setEditingEngId(null);
     setNewEngTahun(activeYr);
     setNewEngJenis('semester_2');
@@ -575,7 +591,7 @@ export const AuditPage: React.FC = () => {
     setNewEngJenis(eng.jenis);
     setNewEngJudul(eng.judul);
     setNewEngDeskripsi(eng.deskripsi || '');
-    setNewEngDibukaPada(eng.dibuka_pada || new Date().toISOString().split('T')[0]);
+    setNewEngDibukaPada(eng.dibuka_pada || getTodayYmd());
     setNewEngBatasWaktu(eng.batas_waktu || `${eng.tahun}-12-31`);
     setNewEngStatus(eng.status || 'in_progress');
     setShowNewEngModal(true);
@@ -599,7 +615,7 @@ export const AuditPage: React.FC = () => {
       jenis: newEngJenis,
       judul: newEngJudul.trim() || defaultJudul,
       deskripsi: newEngDeskripsi.trim() || null,
-      dibuka_pada: newEngDibukaPada || new Date().toISOString().split('T')[0],
+      dibuka_pada: newEngDibukaPada || getTodayYmd(),
       batas_waktu: newEngBatasWaktu || `${newEngTahun}-12-31`,
       status: editingEngId ? newEngStatus : 'in_progress',
     });
@@ -745,24 +761,24 @@ export const AuditPage: React.FC = () => {
       </div>
 
       {/* Main Tabs Segmented Bar */}
-      <div className="flex items-center gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200/80 overflow-x-auto scrollbar-none">
+      <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200/80 overflow-x-auto scrollbar-none">
         <button
           onClick={() => setActiveTab('penugasan')}
-          className={`px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+          className={`px-3.5 py-2 min-h-[40px] text-xs rounded-lg flex items-center gap-2 transition-all whitespace-nowrap shrink-0 ${
             activeTab === 'penugasan'
-              ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/70'
-              : 'text-slate-600 hover:text-slate-900'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <ClipboardCheck className="w-4 h-4 text-purple-700" />
+          <ClipboardCheck className="w-4 h-4 text-purple-600" />
           <span>Daftar Penugasan ({auditEngagements.length})</span>
         </button>
         <button
           onClick={() => setActiveTab('transaksi')}
-          className={`px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+          className={`px-3.5 py-2 min-h-[40px] text-xs rounded-lg flex items-center gap-2 transition-all whitespace-nowrap shrink-0 ${
             activeTab === 'transaksi'
-              ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/70'
-              : 'text-slate-600 hover:text-slate-900'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
           <FileCheck className="w-4 h-4 text-emerald-600" />
@@ -771,34 +787,34 @@ export const AuditPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('berkala')}
-          className={`px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+          className={`px-3.5 py-2 min-h-[40px] text-xs rounded-lg flex items-center gap-2 transition-all whitespace-nowrap shrink-0 ${
             activeTab === 'berkala'
-              ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/70'
-              : 'text-slate-600 hover:text-slate-900'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Calendar className="w-4 h-4 text-primary" />
+          <Calendar className="w-4 h-4 text-blue-600" />
           <span>Pemeriksaan Berkala (Triwulan & Semester)</span>
         </button>
 
         <button
           onClick={() => setActiveTab('pemeriksaan')}
-          className={`px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+          className={`px-3.5 py-2 min-h-[40px] text-xs rounded-lg flex items-center gap-2 transition-all whitespace-nowrap shrink-0 ${
             activeTab === 'pemeriksaan'
-              ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/70'
-              : 'text-slate-600 hover:text-slate-900'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Scale className="w-4 h-4" />
+          <Scale className="w-4 h-4 text-indigo-600" />
           <span>Opini Kolegial 3 Anggota</span>
         </button>
 
         <button
           onClick={() => setActiveTab('temuan')}
-          className={`px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap relative ${
+          className={`px-3.5 py-2 min-h-[40px] text-xs rounded-lg flex items-center gap-2 transition-all whitespace-nowrap shrink-0 relative ${
             activeTab === 'temuan'
-              ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/70'
-              : 'text-slate-600 hover:text-slate-900'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
           <AlertCircle className="w-4 h-4 text-amber-600" />
@@ -807,37 +823,37 @@ export const AuditPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('opname')}
-          className={`px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+          className={`px-3.5 py-2 min-h-[40px] text-xs rounded-lg flex items-center gap-2 transition-all whitespace-nowrap shrink-0 ${
             activeTab === 'opname'
-              ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/70'
-              : 'text-slate-600 hover:text-slate-900'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Calculator className="w-4 h-4" />
+          <Calculator className="w-4 h-4 text-slate-700" />
           <span>Opname Kas Fisik</span>
         </button>
 
         <button
           onClick={() => setActiveTab('anggota')}
-          className={`px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+          className={`px-3.5 py-2 min-h-[40px] text-xs rounded-lg flex items-center gap-2 transition-all whitespace-nowrap shrink-0 ${
             activeTab === 'anggota'
-              ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/70'
-              : 'text-slate-600 hover:text-slate-900'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Users className="w-4 h-4" />
+          <Users className="w-4 h-4 text-slate-700" />
           <span>Keanggotaan & Independensi</span>
         </button>
 
         <button
           onClick={() => setActiveTab('arsip')}
-          className={`px-4 py-2.5 min-h-[44px] sm:min-h-0 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
+          className={`px-3.5 py-2 min-h-[40px] text-xs rounded-lg flex items-center gap-2 transition-all whitespace-nowrap shrink-0 ${
             activeTab === 'arsip'
-              ? 'bg-white text-indigo-900 shadow-sm border border-slate-200/70'
-              : 'text-slate-600 hover:text-slate-900'
+              ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+              : 'text-slate-600 hover:text-slate-900 font-medium'
           }`}
         >
-          <Award className="w-4 h-4" />
+          <Award className="w-4 h-4 text-amber-600" />
           <span>Arsip Berita Acara</span>
         </button>
       </div>
@@ -1401,7 +1417,7 @@ export const AuditPage: React.FC = () => {
                               setFlaggingTitle(`Temuan Transaksi: ${tx.receipt_no || tx.id}`);
                               setFlaggingDesc(tx.audit_note || `Pemeriksaan transaksi ${tx.description} senilai ${formatRupiah(tx.amount)} memerlukan kelengkapan kuitansi/nota.`);
                               setFlaggingSeverity('wajib_diperbaiki');
-                              setFlaggingDueDate(new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]);
+                              setFlaggingDueDate(getLocalDueDate14());
                             }}
                             className={`flex-1 min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors ${
                               tx.audit_status === 'flagged'
@@ -1571,7 +1587,7 @@ export const AuditPage: React.FC = () => {
                                     setFlaggingTitle(`Temuan Transaksi: ${tx.receipt_no || tx.id}`);
                                     setFlaggingDesc(tx.audit_note || `Pemeriksaan transaksi ${tx.description} senilai ${formatRupiah(tx.amount)} memerlukan kelengkapan kuitansi/nota.`);
                                     setFlaggingSeverity('wajib_diperbaiki');
-                                    setFlaggingDueDate(new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]);
+                                    setFlaggingDueDate(getLocalDueDate14());
                                   }}
                                   className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors ${
                                     tx.audit_status === 'flagged'
@@ -1931,7 +1947,7 @@ export const AuditPage: React.FC = () => {
               <select
                 value={selectedEngId}
                 onChange={(e) => setSelectedEngId(e.target.value)}
-                className="w-full text-base font-semibold text-gray-900 border border-gray-200 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#7C9CF5]/30 bg-gray-50/50"
+                className="w-full text-base font-semibold text-slate-900 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 bg-slate-50/50"
               >
                 {auditEngagements.map((eng) => (
                   <option key={eng.id} value={eng.id}>
@@ -1990,7 +2006,7 @@ export const AuditPage: React.FC = () => {
                     setBaNo(`BA-AUDIT/${currentEngagement.tahun}/${currentEngagement.jenis.toUpperCase()}/001`);
                     setShowFinalizeModal(true);
                   }}
-                  className="w-full mt-3 py-2 bg-[#7C9CF5] text-white hover:bg-[#6A8BE4] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+                  className="w-full mt-3 min-h-[44px] sm:min-h-0 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
                 >
                   <Award className="w-4 h-4" />
                   Tetapkan Opini Final (Suara Terbanyak)
@@ -2020,7 +2036,7 @@ export const AuditPage: React.FC = () => {
                     }
                     setShowReviewModal(true);
                   }}
-                  className="px-3.5 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors w-fit"
+                  className="min-h-[44px] sm:min-h-0 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors w-fit"
                 >
                   <FileText className="w-3.5 h-3.5" />
                   {myReview ? 'Perbarui Lembar Kerja Saya' : 'Isi Lembar Kerja Audit Saya'}
@@ -2131,7 +2147,7 @@ export const AuditPage: React.FC = () => {
             {isCurrentUserAuditor && (
               <button
                 onClick={() => setShowFindingModal(true)}
-                className="px-3.5 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors w-fit"
+                className="min-h-[44px] sm:min-h-0 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors w-fit"
               >
                 <Plus className="w-4 h-4" />
                 Catat Temuan Baru
@@ -2154,7 +2170,7 @@ export const AuditPage: React.FC = () => {
                 return (
                   <div
                     key={finding.id}
-                    className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:border-[#7C9CF5]/40 transition-all space-y-3"
+                    className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs hover:border-blue-300 transition-all space-y-3"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
@@ -2365,7 +2381,7 @@ export const AuditPage: React.FC = () => {
 
               <button
                 onClick={handleRecordCashCount}
-                className="w-full py-2.5 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition-colors"
+                className="w-full min-h-[44px] sm:min-h-0 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 shadow-xs transition-colors"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 Simpan Berita Acara Opname Kas Fisik
@@ -2461,7 +2477,7 @@ export const AuditPage: React.FC = () => {
             {isAdmin && activeMembers.length < 3 && (
               <button
                 onClick={() => setShowAddMemberModal(true)}
-                className="px-3.5 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors w-fit"
+                className="min-h-[44px] sm:min-h-0 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors w-fit"
               >
                 <Plus className="w-4 h-4" />
                 Tambah Anggota Audit
@@ -2652,7 +2668,7 @@ export const AuditPage: React.FC = () => {
                           });
                         }
                       }}
-                      className="px-3 py-1.5 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors"
+                      className="min-h-[44px] sm:min-h-0 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-xs transition-colors"
                     >
                       <Download className="w-3.5 h-3.5" />
                       Unduh Berita Acara PDF
@@ -2751,7 +2767,7 @@ export const AuditPage: React.FC = () => {
               </button>
               <button
                 onClick={handleSubmitMyReview}
-                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold"
               >
                 Kirim Lembar Kerja
               </button>
@@ -2816,7 +2832,7 @@ export const AuditPage: React.FC = () => {
               </button>
               <button
                 onClick={handleFinalizeOpinion}
-                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold"
               >
                 Sahkan & Terbitkan Berita Acara
               </button>
@@ -2909,7 +2925,7 @@ export const AuditPage: React.FC = () => {
               </button>
               <button
                 onClick={handleSaveFinding}
-                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold"
               >
                 Simpan Temuan
               </button>
@@ -2976,7 +2992,7 @@ export const AuditPage: React.FC = () => {
                   }
                   setSelectedFindingId(null);
                 }}
-                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold"
               >
                 Simpan Tanggapan
               </button>
@@ -3042,7 +3058,7 @@ export const AuditPage: React.FC = () => {
               </button>
               <button
                 onClick={handleAddMember}
-                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-[#7C9CF5] hover:bg-[#6A8BE4] text-white rounded-xl text-xs font-semibold"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold"
               >
                 Tetapkan Anggota
               </button>

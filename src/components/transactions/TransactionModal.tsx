@@ -85,6 +85,13 @@ const getMultiPosCategoryPriority = (cat: { nama?: string; sentralisasi_group?: 
   return 2;
 };
 
+const isKasUmumHuriaKas = (kas?: { id?: string; kode?: string; nama?: string } | null): boolean => {
+  if (!kas) return false;
+  if (kas.id === 'kas-1') return true;
+  if ((kas.kode || '').toUpperCase() === 'KAS-UMUM') return true;
+  return /kas\s*umum\s*huria/i.test(kas.nama || '');
+};
+
 const getNextSunday = (baseDateStr: string): string => {
   const d = baseDateStr ? new Date(`${baseDateStr}T00:00:00`) : new Date();
   if (Number.isNaN(d.getTime())) return '';
@@ -203,6 +210,14 @@ export const TransactionModal: React.FC<Props> = ({
     [type, incomeMode, selectedCategoryObj]
   );
 
+  const isHamauliateonSyukurSelected = useMemo(
+    () =>
+      type === 'income' &&
+      Boolean(selectedCategoryObj) &&
+      getMultiPosCategoryPriority(selectedCategoryObj!) < 2,
+    [type, selectedCategoryObj]
+  );
+
   const availableLingkunganNames = useMemo(() => {
     const map = new Map<string, string>();
     lingkunganList
@@ -245,14 +260,22 @@ export const TransactionModal: React.FC<Props> = ({
   }, [families, peleanLingkungan, peleanFamilySearch]);
 
   const inferExclusionForKas = (kId: string): SentralisasiExclusionType => {
-    if (kId === 'kas-8') return 'transitoris';
-    if (kId === 'kas-2') return 'sosial_duka';
-    if (kId === 'kas-7') return 'pembangunan_lokal';
+    const kasObj = kasList.find((k) => k.id === kId);
+    const label = `${kasObj?.kode || ''} ${kasObj?.nama || ''}`.toLowerCase();
+    if (kId === 'kas-8' || label.includes('transitoris') || label.includes('titipan')) return 'transitoris';
+    if (kId === 'kas-2' || label.includes('sosial') || label.includes('duka')) return 'sosial_duka';
+    if (kId === 'kas-7' || label.includes('pembangunan')) return 'pembangunan_lokal';
     return 'lainnya';
   };
 
-  const inferDefaultSentralisasiForKas = (kId: string): boolean => {
+  const inferDefaultSentralisasiForKas = (kId: string, onlyHuria4555 = isHamauliateonSyukurSelected): boolean => {
+    const kasObj = kasList.find((k) => k.id === kId);
+    if (onlyHuria4555) {
+      return isKasUmumHuriaKas(kasObj);
+    }
     if (kId === 'kas-2' || kId === 'kas-8' || kId === 'kas-9') return false;
+    const label = `${kasObj?.kode || ''} ${kasObj?.nama || ''}`.toLowerCase();
+    if (label.includes('sosial') || label.includes('transitoris') || label.includes('sentral')) return false;
     return true;
   };
 
@@ -445,6 +468,40 @@ export const TransactionModal: React.FC<Props> = ({
     }
   }, [isPeleanCategorySelected, isPeleanTaonMode, descriptionManuallyEdited, description]);
 
+  // For Hamauliateon/Ucapan Syukur: 45/55 only active when Kas Umum Huria is selected; all other kas default to 100%
+  useEffect(() => {
+    if (!isOpen || !isHamauliateonSyukurSelected) return;
+
+    if (incomeMode === 'single') {
+      const currentKasObj = kasList.find((k) => k.id === kasId);
+      const isHuria = isKasUmumHuriaKas(currentKasObj);
+      if (isHuria) {
+        setIsSentralisasi(true);
+      } else {
+        setIsSentralisasi(false);
+        setExclusionType(inferExclusionForKas(kasId));
+      }
+    } else if (incomeMode === 'multi') {
+      setAllocations((prev) => {
+        let changed = false;
+        const next = prev.map((row) => {
+          const rowKasObj = kasList.find((k) => k.id === row.kas_id);
+          const isHuria = isKasUmumHuriaKas(rowKasObj);
+          if (!isHuria && row.is_sentralisasi) {
+            changed = true;
+            return {
+              ...row,
+              is_sentralisasi: false,
+              exclusion_type: row.exclusion_type || inferExclusionForKas(row.kas_id),
+            };
+          }
+          return row;
+        });
+        return changed ? next : prev;
+      });
+    }
+  }, [isOpen, isHamauliateonSyukurSelected, incomeMode, kasId, kasList]);
+
   const handleCategoryChange = (newCatId: string) => {
     setCategoryId(newCatId);
     const cat = categories.find((c) => c.id === newCatId);
@@ -464,15 +521,30 @@ export const TransactionModal: React.FC<Props> = ({
     if (!descriptionManuallyEdited && /^Pelean Taon\s/i.test(description)) {
       setDescription('');
     }
+    let nextSelectedKas = kasId;
     if (!defaultKasId && cat?.default_kas_id && canInputKas(cat.default_kas_id)) {
-      setKasId(cat.default_kas_id);
-      setExclusionType(inferExclusionForKas(cat.default_kas_id));
+      nextSelectedKas = cat.default_kas_id;
+      setKasId(nextSelectedKas);
+      setExclusionType(inferExclusionForKas(nextSelectedKas));
+    }
+    if (type === 'income' && cat && getMultiPosCategoryPriority(cat) < 2) {
+      const kasObj = kasList.find((k) => k.id === nextSelectedKas);
+      const isHuria = isKasUmumHuriaKas(kasObj);
+      setIsSentralisasi(isHuria);
+      if (!isHuria) {
+        setExclusionType(inferExclusionForKas(nextSelectedKas));
+      }
     }
   };
 
   const handleKasChange = (newKasId: string) => {
     setKasId(newKasId);
     setExclusionType(inferExclusionForKas(newKasId));
+    if (isHamauliateonSyukurSelected) {
+      const nextKasObj = kasList.find((k) => k.id === newKasId);
+      setIsSentralisasi(isKasUmumHuriaKas(nextKasObj));
+      return;
+    }
     if (newKasId === 'kas-2' || newKasId === 'kas-8') {
       setIsSentralisasi(false);
     }
@@ -499,7 +571,11 @@ export const TransactionModal: React.FC<Props> = ({
       totalGross += amt;
       if (amt <= 0 || !row.kas_id) return;
 
-      if (row.is_sentralisasi && sentralisasiKas && row.kas_id !== sentralisasiKas.id) {
+      const rowKasObj = kasList.find((k) => k.id === row.kas_id);
+      const canRow4555 = !isHamauliateonSyukurSelected || isKasUmumHuriaKas(rowKasObj);
+      const effectiveRowSentral = canRow4555 ? row.is_sentralisasi : false;
+
+      if (effectiveRowSentral && sentralisasiKas && row.kas_id !== sentralisasiKas.id) {
         const { bpskAmount, huriaAmount } = splitSentralisasiAmount(amt, true);
         totalSentralisasiPool += bpskAmount;
         addInflow(row.kas_id, huriaAmount);
@@ -514,7 +590,7 @@ export const TransactionModal: React.FC<Props> = ({
       totalSentralisasiPool,
       inflows: Object.entries(inflowsByKas).map(([id, data]) => ({ kasId: id, ...data })),
     };
-  }, [allocations, kasList, sentralisasiKas]);
+  }, [allocations, kasList, sentralisasiKas, isHamauliateonSyukurSelected]);
 
   if (!isOpen) return null;
 
@@ -522,7 +598,9 @@ export const TransactionModal: React.FC<Props> = ({
   const isReceiptMandatory = type === 'expense' && rawAmount >= settings.receipt_required_threshold;
   const selectedKas = kasList.find((k) => k.id === kasId);
   const selectedStorage = storageAccounts.find((s) => s.id === storageAccountId);
-  const singleSplit = splitSentralisasiAmount(rawAmount, type === 'income' ? isSentralisasi : false);
+  const singleCanUse4555 = !isHamauliateonSyukurSelected || isKasUmumHuriaKas(selectedKas);
+  const effectiveSingleIsSentralisasi = type === 'income' ? (singleCanUse4555 ? isSentralisasi : false) : false;
+  const singleSplit = splitSentralisasiAmount(rawAmount, effectiveSingleIsSentralisasi);
   const activePeleanMode = isPeleanCategorySelected && isPeleanTaonMode;
 
   const resolvedPeleanFamilyDisplay = activePeleanMode
@@ -747,12 +825,14 @@ export const TransactionModal: React.FC<Props> = ({
           const cleanSubDesc = isTransitorisKas(targetKas)
             ? r.sub_description.trim() || undefined
             : undefined;
+          const rowAllows4555 = !isHamauliateonSyukurSelected || isKasUmumHuriaKas(targetKas);
+          const effectiveSentral = rowAllows4555 ? r.is_sentralisasi : false;
           return {
             kas_id: r.kas_id,
             amount: parseNum(r.amountInput),
-            is_sentralisasi: r.is_sentralisasi,
+            is_sentralisasi: effectiveSentral,
             sub_description: cleanSubDesc,
-            exclusion_type: r.is_sentralisasi ? null : r.exclusion_type || inferExclusionForKas(r.kas_id),
+            exclusion_type: effectiveSentral ? null : r.exclusion_type || inferExclusionForKas(r.kas_id),
           };
         }),
       });
@@ -849,7 +929,10 @@ export const TransactionModal: React.FC<Props> = ({
       }
     }
 
-    const useSentralisasi = type === 'income' ? (activePeleanMode ? true : isSentralisasi) : false;
+    const resolvedKasObj = kasList.find((k) => k.id === resolvedKasId);
+    const singleAllows4555 = !isHamauliateonSyukurSelected || isKasUmumHuriaKas(resolvedKasObj);
+    const useSentralisasi =
+      type === 'income' ? (activePeleanMode ? true : singleAllows4555 ? isSentralisasi : false) : false;
     const { bpskAmount, huriaAmount } = splitSentralisasiAmount(rawAmount, useSentralisasi);
 
     const result = await addTransaction({
@@ -1085,75 +1168,97 @@ export const TransactionModal: React.FC<Props> = ({
     </div>
   );
 
-  const renderSentralisasiSelector = () => (
-    <div className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/80 space-y-2.5 text-xs">
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-semibold text-slate-800">Status Sentralisasi Transaksi</span>
-        <span className="text-[10px] font-medium text-slate-500">Aturan PPKU HKBP</span>
-      </div>
+  const renderSentralisasiSelector = () => {
+    const singleIsHuria = isKasUmumHuriaKas(selectedKas);
+    const canSingleSelect4555 = !isHamauliateonSyukurSelected || singleIsHuria;
+    const effectiveSingleSentral = canSingleSelect4555 ? isSentralisasi : false;
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-        <button
-          type="button"
-          onClick={() => setIsSentralisasi(true)}
-          className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start justify-between gap-2 min-h-[58px] ${
-            isSentralisasi
-              ? 'bg-white border-blue-600 text-blue-950 ring-2 ring-blue-600/15 shadow-2xs'
-              : 'bg-white/70 border-slate-200 text-slate-600 hover:bg-white'
-          }`}
-        >
-          <div className="min-w-0">
-            <div className="text-xs font-bold">Sentralisasi (45/55)</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">45% Kas · 55% BPSK</div>
-          </div>
-          <span
-            className={`w-4 h-4 rounded-full border shrink-0 mt-0.5 flex items-center justify-center ${
-              isSentralisasi ? 'border-blue-600 bg-blue-600' : 'border-slate-300 bg-white'
-            }`}
-          >
-            {isSentralisasi && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setIsSentralisasi(false);
-            setExclusionType(inferExclusionForKas(kasId));
-          }}
-          className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start justify-between gap-2 min-h-[58px] ${
-            !isSentralisasi
-              ? 'bg-white border-emerald-600 text-emerald-950 ring-2 ring-emerald-600/15 shadow-2xs'
-              : 'bg-white/70 border-slate-200 text-slate-600 hover:bg-white'
-          }`}
-        >
-          <div className="min-w-0">
-            <div className="text-xs font-bold">Non-Sentralisasi (100%)</div>
-            <div className="text-[11px] text-slate-500 mt-0.5 truncate">
-              100% ke {selectedKas?.nama || 'Kas'}
-            </div>
-          </div>
-          <span
-            className={`w-4 h-4 rounded-full border shrink-0 mt-0.5 flex items-center justify-center ${
-              !isSentralisasi ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 bg-white'
-            }`}
-          >
-            {!isSentralisasi && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
-          </span>
-        </button>
-      </div>
-
-      {isSentralisasi ? (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-[11px] tabular-nums">
-          <span className="text-slate-600">
-            {selectedKas?.nama || 'Kas'} (45%):{' '}
-            <strong className="text-slate-900 font-mono">{formatRupiah(singleSplit.huriaAmount)}</strong>
-          </span>
-          <span className="text-blue-700">
-            Sentralisasi (55%): <strong className="font-mono">{formatRupiah(singleSplit.bpskAmount)}</strong>
+    return (
+      <div className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/80 space-y-2.5 text-xs">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-semibold text-slate-800">Status Sentralisasi Transaksi</span>
+          <span className="text-[10px] font-medium text-slate-500">
+            {isHamauliateonSyukurSelected && !singleIsHuria
+              ? 'Non-Huria otomatis 100%'
+              : 'Aturan PPKU HKBP'}
           </span>
         </div>
-      ) : (
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <button
+            type="button"
+            disabled={!canSingleSelect4555}
+            onClick={() => {
+              if (!canSingleSelect4555) return;
+              setIsSentralisasi(true);
+            }}
+            title={
+              !canSingleSelect4555
+                ? 'Sentralisasi 45/55 hanya aktif untuk Kas Umum Huria'
+                : undefined
+            }
+            className={`p-3 rounded-xl border text-left transition-all flex items-start justify-between gap-2 min-h-[58px] ${
+              !canSingleSelect4555
+                ? 'bg-slate-100/80 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed'
+                : effectiveSingleSentral
+                ? 'bg-white border-blue-600 text-blue-950 ring-2 ring-blue-600/15 shadow-2xs cursor-pointer'
+                : 'bg-white/70 border-slate-200 text-slate-600 hover:bg-white cursor-pointer'
+            }`}
+          >
+            <div className="min-w-0">
+              <div className="text-xs font-bold">Sentralisasi (45/55)</div>
+              <div className="text-[11px] text-slate-500 mt-0.5">
+                {!canSingleSelect4555 ? 'Khusus Kas Umum Huria' : '45% Kas · 55% BPSK'}
+              </div>
+            </div>
+            <span
+              className={`w-4 h-4 rounded-full border shrink-0 mt-0.5 flex items-center justify-center ${
+                effectiveSingleSentral ? 'border-blue-600 bg-blue-600' : 'border-slate-300 bg-white'
+              }`}
+            >
+              {effectiveSingleSentral && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setIsSentralisasi(false);
+              setExclusionType(inferExclusionForKas(kasId));
+            }}
+            className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start justify-between gap-2 min-h-[58px] ${
+              !effectiveSingleSentral
+                ? 'bg-white border-emerald-600 text-emerald-950 ring-2 ring-emerald-600/15 shadow-2xs'
+                : 'bg-white/70 border-slate-200 text-slate-600 hover:bg-white'
+            }`}
+          >
+            <div className="min-w-0">
+              <div className="text-xs font-bold">Non-Sentralisasi (100%)</div>
+              <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+                100% ke {selectedKas?.nama || 'Kas'}
+              </div>
+            </div>
+            <span
+              className={`w-4 h-4 rounded-full border shrink-0 mt-0.5 flex items-center justify-center ${
+                !effectiveSingleSentral ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 bg-white'
+              }`}
+            >
+              {!effectiveSingleSentral && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+            </span>
+          </button>
+        </div>
+
+        {effectiveSingleSentral ? (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-[11px] tabular-nums">
+            <span className="text-slate-600">
+              {selectedKas?.nama || 'Kas'} (45%):{' '}
+              <strong className="text-slate-900 font-mono">{formatRupiah(singleSplit.huriaAmount)}</strong>
+            </span>
+            <span className="text-blue-700">
+              Sentralisasi (55%): <strong className="font-mono">{formatRupiah(singleSplit.bpskAmount)}</strong>
+            </span>
+          </div>
+        ) : (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-0.5">
           <select
             value={exclusionType}
@@ -1172,7 +1277,8 @@ export const TransactionModal: React.FC<Props> = ({
         </div>
       )}
     </div>
-  );
+    );
+  };
 
   const renderMultiPosSection = () => (
     <div className="p-3 sm:p-3.5 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-2.5 overflow-x-hidden">
@@ -1191,10 +1297,13 @@ export const TransactionModal: React.FC<Props> = ({
       <div className="space-y-2.5">
         {allocations.map((row, idx) => {
           const rowAmt = parseNum(row.amountInput);
-          const rowSplit = splitSentralisasiAmount(rowAmt, row.is_sentralisasi);
           const selectedRowKas = kasList.find((k) => k.id === row.kas_id);
           const rowKasName = selectedRowKas?.nama || 'Kas';
           const rowIsTransitoris = isTransitorisKas(selectedRowKas);
+          const rowIsHuria = isKasUmumHuriaKas(selectedRowKas);
+          const canRowSelect4555 = !isHamauliateonSyukurSelected || rowIsHuria;
+          const effectiveRowSentralisasi = canRowSelect4555 ? row.is_sentralisasi : false;
+          const rowSplit = splitSentralisasiAmount(rowAmt, effectiveRowSentralisasi);
 
           return (
             <div
@@ -1211,17 +1320,26 @@ export const TransactionModal: React.FC<Props> = ({
                   >
                     <button
                       type="button"
-                      onClick={() =>
+                      disabled={!canRowSelect4555}
+                      onClick={() => {
+                        if (!canRowSelect4555) return;
                         setAllocations((prev) =>
                           prev.map((r) =>
                             r.rowId === row.rowId ? { ...r, is_sentralisasi: true } : r
                           )
-                        )
+                        );
+                      }}
+                      title={
+                        !canRowSelect4555
+                          ? 'Pilihan 45/55 hanya aktif untuk Kas Umum Huria'
+                          : undefined
                       }
-                      className={`px-2.5 py-1.5 min-h-[34px] sm:min-h-[30px] rounded-md text-[11px] font-semibold cursor-pointer transition-all whitespace-nowrap ${
-                        row.is_sentralisasi
-                          ? 'bg-blue-600 text-white shadow-2xs'
-                          : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
+                      className={`px-2.5 py-1.5 min-h-[34px] sm:min-h-[30px] rounded-md text-[11px] font-semibold transition-all whitespace-nowrap ${
+                        !canRowSelect4555
+                          ? 'text-slate-400 opacity-45 cursor-not-allowed'
+                          : effectiveRowSentralisasi
+                          ? 'bg-blue-600 text-white shadow-2xs cursor-pointer'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-white/70 cursor-pointer'
                       }`}
                     >
                       45/55
@@ -1242,7 +1360,7 @@ export const TransactionModal: React.FC<Props> = ({
                         )
                       }
                       className={`px-2.5 py-1.5 min-h-[34px] sm:min-h-[30px] rounded-md text-[11px] font-semibold cursor-pointer transition-all whitespace-nowrap ${
-                        !row.is_sentralisasi
+                        !effectiveRowSentralisasi
                           ? 'bg-emerald-600 text-white shadow-2xs'
                           : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
                       }`}
@@ -1274,6 +1392,9 @@ export const TransactionModal: React.FC<Props> = ({
                     const nextKas = e.target.value;
                     const nextKasObj = kasList.find((k) => k.id === nextKas);
                     const nextIsTrans = isTransitorisKas(nextKasObj);
+                    const nextSentral = isHamauliateonSyukurSelected
+                      ? isKasUmumHuriaKas(nextKasObj)
+                      : inferDefaultSentralisasiForKas(nextKas);
                     setAllocations((prev) =>
                       prev.map((r) =>
                         r.rowId === row.rowId
@@ -1281,7 +1402,7 @@ export const TransactionModal: React.FC<Props> = ({
                               ...r,
                               kas_id: nextKas,
                               sub_description: nextIsTrans ? r.sub_description : '',
-                              is_sentralisasi: inferDefaultSentralisasiForKas(nextKas),
+                              is_sentralisasi: nextSentral,
                               exclusion_type: inferExclusionForKas(nextKas),
                             }
                           : r
@@ -1342,7 +1463,7 @@ export const TransactionModal: React.FC<Props> = ({
               {rowAmt > 0 && (
                 <div className="text-[11px] text-slate-600 flex items-center gap-1 tabular-nums">
                   <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
-                  {row.is_sentralisasi && sentralisasiKas && row.kas_id !== sentralisasiKas.id ? (
+                  {effectiveRowSentralisasi && sentralisasiKas && row.kas_id !== sentralisasiKas.id ? (
                     <span>
                       {rowKasName}: <strong className="font-mono">{formatRupiah(rowSplit.huriaAmount)}</strong> · Sentralisasi:{' '}
                       <strong className="font-mono text-blue-700">{formatRupiah(rowSplit.bpskAmount)}</strong>

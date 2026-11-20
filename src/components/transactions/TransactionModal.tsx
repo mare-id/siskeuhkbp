@@ -171,6 +171,7 @@ export const TransactionModal: React.FC<Props> = ({
   const [peleanManualFamilyName, setPeleanManualFamilyName] = useState<string>('');
   const [peleanSaveManualToMaster, setPeleanSaveManualToMaster] = useState<boolean>(true);
   const [descriptionManuallyEdited, setDescriptionManuallyEdited] = useState<boolean>(false);
+  const [autoSwitchedToMultiPos, setAutoSwitchedToMultiPos] = useState<boolean>(false);
 
   // Multi-pos income rows (e.g., Ucapan Syukur)
   const [allocations, setAllocations] = useState<AllocationDraftRow[]>([]);
@@ -292,6 +293,7 @@ export const TransactionModal: React.FC<Props> = ({
       setAttachmentUrl(null);
       setTanggal(todayStr);
       setDescriptionManuallyEdited(false);
+      setAutoSwitchedToMultiPos(false);
       setPeleanFamilySearch('');
 
       if (storageAccounts.length > 0) {
@@ -406,6 +408,7 @@ export const TransactionModal: React.FC<Props> = ({
   }, [type, displayedCategories, isOpen, defaultPeleanTaon]);
 
   const handleSelectIncomeMode = (nextMode: 'single' | 'multi') => {
+    setAutoSwitchedToMultiPos(false);
     setIncomeMode(nextMode);
     if (nextMode === 'multi') {
       const incomeSorted = categories
@@ -414,6 +417,16 @@ export const TransactionModal: React.FC<Props> = ({
       const topSyukur = incomeSorted.find((c) => getMultiPosCategoryPriority(c) < 2) || incomeSorted[0];
       if (topSyukur) {
         setCategoryId(topSyukur.id);
+      }
+    } else {
+      const currentCat = categories.find((c) => c.id === categoryId);
+      if (currentCat && getMultiPosCategoryPriority(currentCat) < 2) {
+        const firstNonSyukur = categories.find(
+          (c) => c.tipe === 'income' && c.is_active && getMultiPosCategoryPriority(c) >= 2
+        );
+        if (firstNonSyukur) {
+          setCategoryId(firstNonSyukur.id);
+        }
       }
     }
   };
@@ -528,12 +541,60 @@ export const TransactionModal: React.FC<Props> = ({
       setExclusionType(inferExclusionForKas(nextSelectedKas));
     }
     if (type === 'income' && cat && getMultiPosCategoryPriority(cat) < 2) {
+      if (incomeMode === 'single') {
+        setIncomeMode('multi');
+        setAutoSwitchedToMultiPos(true);
+        setError('');
+        setAllocations((prev) => {
+          const fallbackKasId =
+            (selectableKas.find((k) => k.id !== 'kas-9') || selectableKas[0])?.id || '';
+          const targetKasId = nextSelectedKas || kasUmumHuria?.id || fallbackKasId;
+          const carriedAmount = rawAmount > 0 ? String(rawAmount) : '';
+          if (prev.length === 0) {
+            const targetKasObj = kasList.find((k) => k.id === targetKasId);
+            const can4555 = isKasUmumHuriaKas(targetKasObj);
+            return [
+              {
+                rowId: `row-${Date.now()}-1`,
+                kas_id: targetKasId,
+                sub_description: '',
+                amountInput: carriedAmount,
+                is_sentralisasi: can4555,
+                exclusion_type: can4555 ? null : inferExclusionForKas(targetKasId),
+              },
+            ];
+          }
+          if (prev.length === 1) {
+            const existing = prev[0];
+            const existingHasAmt = parseNum(existing.amountInput) > 0;
+            const resolvedRowKasId = existingHasAmt
+              ? existing.kas_id
+              : targetKasId || existing.kas_id;
+            const resolvedRowKasObj = kasList.find((k) => k.id === resolvedRowKasId);
+            const rowCan4555 = isKasUmumHuriaKas(resolvedRowKasObj);
+            return [
+              {
+                ...existing,
+                kas_id: resolvedRowKasId,
+                amountInput: existingHasAmt
+                  ? existing.amountInput
+                  : carriedAmount || existing.amountInput,
+                is_sentralisasi: rowCan4555,
+                exclusion_type: rowCan4555 ? null : inferExclusionForKas(resolvedRowKasId),
+              },
+            ];
+          }
+          return prev;
+        });
+      }
       const kasObj = kasList.find((k) => k.id === nextSelectedKas);
       const isHuria = isKasUmumHuriaKas(kasObj);
       setIsSentralisasi(isHuria);
       if (!isHuria) {
         setExclusionType(inferExclusionForKas(nextSelectedKas));
       }
+    } else {
+      setAutoSwitchedToMultiPos(false);
     }
   };
 
@@ -1643,7 +1704,10 @@ export const TransactionModal: React.FC<Props> = ({
                   <div className="grid grid-cols-2 gap-2.5">
                     <button
                       type="button"
-                      onClick={() => setType('income')}
+                      onClick={() => {
+                        setAutoSwitchedToMultiPos(false);
+                        setType('income');
+                      }}
                       className={`p-3.5 min-h-[82px] rounded-2xl border-2 text-left transition-all flex flex-col justify-between cursor-pointer ${
                         type === 'income'
                           ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-500/30 shadow-md'
@@ -1669,7 +1733,10 @@ export const TransactionModal: React.FC<Props> = ({
 
                     <button
                       type="button"
-                      onClick={() => setType('expense')}
+                      onClick={() => {
+                        setAutoSwitchedToMultiPos(false);
+                        setType('expense');
+                      }}
                       className={`p-3.5 min-h-[82px] rounded-2xl border-2 text-left transition-all flex flex-col justify-between cursor-pointer ${
                         type === 'expense'
                           ? 'bg-rose-600 text-white border-rose-700 ring-2 ring-rose-500/30 shadow-md'
@@ -1887,8 +1954,22 @@ export const TransactionModal: React.FC<Props> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200 text-xs text-emerald-950">
-                    <strong>Mode Multi Pos Aktif:</strong> Nominal akan dihitung otomatis dari setiap pos kas yang Anda isi pada langkah berikutnya (Langkah 3).
+                  <div
+                    className={`p-3.5 rounded-2xl border text-xs ${
+                      autoSwitchedToMultiPos
+                        ? 'bg-violet-50 border-violet-200 text-violet-950'
+                        : 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                    }`}
+                  >
+                    {autoSwitchedToMultiPos ? (
+                      <>
+                        <strong>Otomatis Dialihkan ke Mode Multi Pos:</strong> Kategori Ucapan Syukur menggunakan mode Multi Pos agar pembagian ke beberapa pos kas lebih akurat. Rincian nominal diisi pada langkah berikutnya (Langkah 3).
+                      </>
+                    ) : (
+                      <>
+                        <strong>Mode Multi Pos Aktif:</strong> Nominal akan dihitung otomatis dari setiap pos kas yang Anda isi pada langkah berikutnya (Langkah 3).
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -2143,7 +2224,10 @@ export const TransactionModal: React.FC<Props> = ({
           <div className="grid grid-cols-2 gap-2.5">
             <button
               type="button"
-              onClick={() => setType('income')}
+              onClick={() => {
+                setAutoSwitchedToMultiPos(false);
+                setType('income');
+              }}
               className={`h-11 px-3 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 border-2 ${
                 type === 'income'
                   ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-500/30 shadow-md'
@@ -2156,7 +2240,10 @@ export const TransactionModal: React.FC<Props> = ({
             </button>
             <button
               type="button"
-              onClick={() => setType('expense')}
+              onClick={() => {
+                setAutoSwitchedToMultiPos(false);
+                setType('expense');
+              }}
               className={`h-11 px-3 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 border-2 ${
                 type === 'expense'
                   ? 'bg-rose-600 text-white border-rose-700 ring-2 ring-rose-500/30 shadow-md'
@@ -2427,6 +2514,12 @@ export const TransactionModal: React.FC<Props> = ({
           {isPeleanCategorySelected && renderPeleanTaonSection()}
 
           {type === 'income' && incomeMode === 'single' && !activePeleanMode && renderSentralisasiSelector()}
+
+          {type === 'income' && incomeMode === 'multi' && autoSwitchedToMultiPos && (
+            <div className="p-3 rounded-xl bg-violet-50 border border-violet-200 text-xs text-violet-950">
+              <strong>Otomatis Dialihkan ke Mode Multi Pos:</strong> Kategori Ucapan Syukur menggunakan mode Multi Pos agar pembagian ke beberapa pos kas lebih akurat.
+            </div>
+          )}
 
           {type === 'income' && incomeMode === 'multi' && renderMultiPosSection()}
 

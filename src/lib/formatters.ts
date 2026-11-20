@@ -121,3 +121,23 @@ export function getTodayYmd(): string {
   return `${y}-${m}-${d}`;
 }
 
+export function sortStorageAccountsPreferred<
+  T extends { id?: string; nama?: string; tipe?: string }
+>(accounts: T[]): T[] {
+  const getPriority = (acc: T): number => {
+    const nama = (acc.nama || '').toLowerCase();
+    const isTunaiHuria =
+      acc.id === 'stor-1' ||
+      ((acc.tipe === 'cash' || nama.includes('tunai') || nama.includes('brankas')) &&
+        nama.includes('huria'));
+    if (isTunaiHuria) return 0;
+    if (acc.tipe === 'cash' || nama.includes('tunai') || nama.includes('brankas')) return 1;
+    return 2;
+  };
+
+  return [...accounts].sort((a, b) => {
+    const diff = getPriority(a) - getPriority(b);
+    if (diff !== 0) return diff;
+    return (a.nama || '').localeCompare(b.nama || '', 'id');
+  });
+}

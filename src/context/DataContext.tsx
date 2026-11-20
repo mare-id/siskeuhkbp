@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import {
   AppSettings,
   AuditLog,
@@ -124,7 +124,13 @@ import {
   syncDelete,
   syncResetZeroDataInSupabase,
 } from '../lib/supabaseSync';
-import { formatNamaKeluarga, getYmdYear, getYmdMonth, getTodayYmd } from '../lib/formatters';
+import {
+  formatNamaKeluarga,
+  getYmdYear,
+  getYmdMonth,
+  getTodayYmd,
+  sortStorageAccountsPreferred,
+} from '../lib/formatters';
 import { useAuth } from './AuthContext';
 
 interface DataContextType {
@@ -454,6 +460,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [storageAccounts, setStorageAccounts] = useState<StorageAccount[]>(() =>
     readLocalOrDefault('siku_storage_accounts', isSupabaseConfigured ? [] : DEMO_STORAGE_ACCOUNTS)
+  );
+
+  const sortedStorageAccounts = useMemo(
+    () => sortStorageAccountsPreferred(storageAccounts),
+    [storageAccounts]
   );
 
   const [categories, setCategories] = useState<Category[]>(() => {
@@ -7435,7 +7446,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <DataContext.Provider
       value={{
         kasList,
-        storageAccounts,
+        storageAccounts: sortedStorageAccounts,
         categories,
         transactions,
         openingBalances,

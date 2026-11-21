@@ -975,6 +975,10 @@ export interface ParsedSingleTransactionItem {
   receipt_no?: string;
   description: string;
   attachment_url?: string | null;
+  draft_id?: string;
+  drive_file_id?: string | null;
+  drive_file_name?: string | null;
+  drive_mime_type?: string | null;
   status: TransactionStatus;
   // Pelean Taon metadata
   is_pelean_taon: boolean;
@@ -1659,6 +1663,10 @@ export async function parseTransactionExcelFile(
           receipt_no: receiptNo || undefined,
           description: finalDescription,
           attachment_url: attachmentUrl || null,
+          draft_id: `tx-imp-${Date.now()}-${excelRowNum}-${Math.random().toString(36).slice(2, 5)}`,
+          drive_file_id: null,
+          drive_file_name: null,
+          drive_mime_type: null,
           status: parsedStatus,
           is_pelean_taon: isPeleanTaon,
           pelean_taon_year: resolvedPeleanYear,
@@ -2016,7 +2024,10 @@ export async function parseTransactionExcelFile(
 
   items.forEach((item) => {
     const hasMandatoryReceiptMissing =
-      item.kind === 'single' && item.requires_receipt_upload && !item.attachment_url;
+      item.kind === 'single' &&
+      item.requires_receipt_upload &&
+      !item.attachment_url &&
+      !item.drive_file_id;
     const isErr = item.errors.length > 0 || hasMandatoryReceiptMissing;
     if (isErr) {
       errorItems += 1;

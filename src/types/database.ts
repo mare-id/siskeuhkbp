@@ -296,6 +296,10 @@ export interface Transaction {
   description: string;
   receipt_no?: string | null;
   attachment_url?: string | null;
+  drive_file_id?: string | null;
+  drive_file_name?: string | null;
+  drive_mime_type?: string | null;
+  drive_link?: string | null;
   status: TransactionStatus;
   
   // PPKU Sentralisasi Keuangan HKBP (55% Kas Sentralisasi BPSK / 45% Kas Tujuan Huria)

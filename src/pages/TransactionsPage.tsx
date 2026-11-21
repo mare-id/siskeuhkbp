@@ -34,6 +34,8 @@ import { TransactionModal } from '../components/transactions/TransactionModal';
 import { TransferModal } from '../components/transactions/TransferModal';
 import { TransactionImportModal } from '../components/transactions/TransactionImportModal';
 import { AttachmentPreviewModal } from '../components/transactions/AttachmentPreviewModal';
+import { ReceiptViewButton } from '../components/transactions/ReceiptViewButton';
+import { canUserViewTransactionReceipt, hasTransactionReceipt } from '../lib/receiptAccess';
 import { ReversalModal } from '../components/transactions/ReversalModal';
 import { AdminEditTransactionModal } from '../components/transactions/AdminEditTransactionModal';
 import { MobileTransactionDetailModal } from '../components/transactions/MobileTransactionDetailModal';
@@ -951,26 +953,30 @@ export const TransactionsPage: React.FC = () => {
 
                         <td className="py-3 px-4 max-w-sm align-top">
                           <div className="font-medium text-slate-900 line-clamp-2">{tx.description}</div>
-                          {(tx.attachment_url || tx.is_reversal || tx.reject_note) && (
-                            <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px]">
-                              {tx.attachment_url && (
-                                <button
-                                  type="button"
-                                  onClick={() => setPreviewAttachmentUrl(tx.attachment_url!)}
-                                  className="inline-flex items-center gap-1 font-medium text-blue-700 hover:underline"
-                                >
-                                  <Paperclip className="w-3 h-3" />
-                                  <span>Lihat Bukti</span>
-                                </button>
-                              )}
-                              {tx.is_reversal && <span className="text-amber-700 font-medium">Koreksi</span>}
-                              {tx.reject_note && (
-                                <span className="text-rose-600 truncate max-w-[200px]" title={tx.reject_note}>
-                                  Alasan: {tx.reject_note}
-                                </span>
-                              )}
-                            </div>
-                          )}
+                          {(() => {
+                            const showReceipt =
+                              hasTransactionReceipt(tx) && canUserViewTransactionReceipt(currentUser, tx);
+                            if (!showReceipt && !tx.is_reversal && !tx.reject_note) return null;
+                            return (
+                              <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px]">
+                                {showReceipt && (
+                                  <ReceiptViewButton
+                                    tx={tx}
+                                    currentUser={currentUser}
+                                    onPreviewImage={(url) => setPreviewAttachmentUrl(url)}
+                                    label="Lihat Bukti"
+                                    className="inline-flex items-center gap-1 font-medium text-blue-700 hover:underline cursor-pointer"
+                                  />
+                                )}
+                                {tx.is_reversal && <span className="text-amber-700 font-medium">Koreksi</span>}
+                                {tx.reject_note && (
+                                  <span className="text-rose-600 truncate max-w-[200px]" title={tx.reject_note}>
+                                    Alasan: {tx.reject_note}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         <td
@@ -1137,16 +1143,13 @@ export const TransactionsPage: React.FC = () => {
 
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
                       <div className="flex items-center gap-2">
-                        {tx.attachment_url && (
-                          <button
-                            type="button"
-                            onClick={() => setPreviewAttachmentUrl(tx.attachment_url!)}
-                            className="min-h-[44px] sm:min-h-[36px] px-2.5 text-xs font-medium text-blue-700 bg-blue-50/70 border border-blue-100 rounded-lg inline-flex items-center gap-1"
-                          >
-                            <Paperclip className="w-3.5 h-3.5" />
-                            <span>Bukti</span>
-                          </button>
-                        )}
+                        <ReceiptViewButton
+                          tx={tx}
+                          currentUser={currentUser}
+                          onPreviewImage={(url) => setPreviewAttachmentUrl(url)}
+                          label="Bukti"
+                          className="min-h-[44px] sm:min-h-[36px] px-2.5 text-xs font-medium text-blue-700 bg-blue-50/70 border border-blue-100 rounded-lg inline-flex items-center gap-1 cursor-pointer"
+                        />
                       </div>
 
                       <div className="flex flex-wrap items-center justify-end gap-1.5">

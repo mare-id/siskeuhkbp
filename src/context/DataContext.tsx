@@ -170,7 +170,7 @@ interface DataContextType {
 
   // Actions
   addTransaction: (
-    tx: Omit<Transaction, 'id' | 'created_at' | 'updated_at' | 'is_reversal'>,
+    tx: Omit<Transaction, 'id' | 'created_at' | 'updated_at' | 'is_reversal'> & { id?: string },
     options?: { batchBalanceDeltas?: Record<string, number> }
   ) => Promise<{ success: boolean; error?: string }>;
   addCompoundIncomeTransactions: (params: {
@@ -181,6 +181,9 @@ interface DataContextType {
     description: string;
     receipt_no?: string;
     attachment_url?: string | null;
+    drive_file_id?: string | null;
+    drive_file_name?: string | null;
+    drive_mime_type?: string | null;
     status: TransactionStatus;
     allocations: CompoundIncomeAllocationItem[];
   }) => Promise<{ success: boolean; error?: string; createdCount?: number }>;
@@ -199,6 +202,9 @@ interface DataContextType {
       description: string;
       receiptNo?: string;
       attachmentUrl?: string;
+      driveFileId?: string | null;
+      driveFileName?: string | null;
+      driveMimeType?: string | null;
     },
     options?: { batchBalanceDeltas?: Record<string, number> }
   ) => Promise<{ success: boolean; error?: string }>;
@@ -1255,7 +1261,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addTransaction = async (
-    txInput: Omit<Transaction, 'id' | 'created_at' | 'updated_at' | 'is_reversal'>,
+    txInput: Omit<Transaction, 'id' | 'created_at' | 'updated_at' | 'is_reversal'> & { id?: string },
     options?: { batchBalanceDeltas?: Record<string, number> }
   ): Promise<{ success: boolean; error?: string }> => {
     const year = getYmdYear(txInput.tanggal);
@@ -1298,7 +1304,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (
       txInput.type === 'expense' &&
       txInput.amount >= settings.receipt_required_threshold &&
-      !txInput.attachment_url
+      !txInput.attachment_url &&
+      !txInput.drive_file_id
     ) {
       return {
         success: false,
@@ -1418,7 +1425,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const newTx: Transaction = {
         ...txInput,
-        id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        id: txInput.id || `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         is_reversal: false,
         is_sentralisasi: isSentralisasi,
         sentralisasi_role: isSentralisasi ? 'bpsk_share' : 'non_sentralisasi',
@@ -1443,7 +1450,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Expense or other transaction types
     const newTx: Transaction = {
       ...txInput,
-      id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      id: txInput.id || `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       is_reversal: false,
       is_sentralisasi: false,
       created_by: currentUser?.id || 'system',
@@ -1468,10 +1475,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     description: string;
     receipt_no?: string;
     attachment_url?: string | null;
+    drive_file_id?: string | null;
+    drive_file_name?: string | null;
+    drive_mime_type?: string | null;
     status: TransactionStatus;
     allocations: CompoundIncomeAllocationItem[];
   }): Promise<{ success: boolean; error?: string; createdCount?: number }> => {
-    const { tanggal, tanggal_warta, storage_account_id, category_id, description, receipt_no, attachment_url, status, allocations } = params;
+    const {
+      tanggal,
+      tanggal_warta,
+      storage_account_id,
+      category_id,
+      description,
+      receipt_no,
+      attachment_url,
+      drive_file_id,
+      drive_file_name,
+      drive_mime_type,
+      status,
+      allocations,
+    } = params;
 
     if (!allocations || allocations.length === 0) {
       return { success: false, error: 'Tambahkan minimal 1 baris alokasi kas tujuan.' };
@@ -1555,6 +1578,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             description: `${baseDesc} [45% Bagian Lokal -> ${targetKasNama}]`,
             receipt_no: rowReceipt,
             attachment_url: attachment_url || null,
+            drive_file_id: drive_file_id || null,
+            drive_file_name: drive_file_name || null,
+            drive_mime_type: drive_mime_type || null,
             status,
             is_reversal: false,
             is_sentralisasi: true,
@@ -1584,6 +1610,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             description: `${baseDesc} [55% Otomatis Sentralisasi dari ${targetKasNama}]`,
             receipt_no: rowReceipt,
             attachment_url: attachment_url || null,
+            drive_file_id: drive_file_id || null,
+            drive_file_name: drive_file_name || null,
+            drive_mime_type: drive_mime_type || null,
             status,
             is_reversal: false,
             is_sentralisasi: true,
@@ -1621,6 +1650,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             : `${baseDesc} [100% ${exclusionType === 'transitoris' ? 'Transitoris' : 'Non-Sentralisasi'} -> ${targetKasNama}]`,
           receipt_no: rowReceipt,
           attachment_url: attachment_url || null,
+          drive_file_id: drive_file_id || null,
+          drive_file_name: drive_file_name || null,
+          drive_mime_type: drive_mime_type || null,
           status,
           is_reversal: false,
           is_sentralisasi: isSent,
@@ -2077,6 +2109,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       description: string;
       receiptNo?: string;
       attachmentUrl?: string;
+      driveFileId?: string | null;
+      driveFileName?: string | null;
+      driveMimeType?: string | null;
     },
     options?: { batchBalanceDeltas?: Record<string, number> }
   ): Promise<{ success: boolean; error?: string }> => {
@@ -2090,6 +2125,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       description,
       receiptNo,
       attachmentUrl,
+      driveFileId,
+      driveFileName,
+      driveMimeType,
     } = params;
 
     if (amount <= 0) return { success: false, error: 'Nominal transfer harus lebih dari 0.' };
@@ -2162,6 +2200,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       description: `${description} (Transfer Keluar)`,
       receipt_no: receiptNo ? `${receiptNo}-OUT` : undefined,
       attachment_url: attachmentUrl,
+      drive_file_id: driveFileId || null,
+      drive_file_name: driveFileName || null,
+      drive_mime_type: driveMimeType || null,
       status: initialStatus,
       transfer_id: transferId,
       transfer_target_kas_id: targetKasId,
@@ -2182,6 +2223,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       description: `${description} (Transfer Masuk)`,
       receipt_no: receiptNo ? `${receiptNo}-IN` : undefined,
       attachment_url: attachmentUrl,
+      drive_file_id: driveFileId || null,
+      drive_file_name: driveFileName || null,
+      drive_mime_type: driveMimeType || null,
       status: initialStatus,
       transfer_id: transferId,
       transfer_target_kas_id: sourceKasId,

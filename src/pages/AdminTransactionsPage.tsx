@@ -20,11 +20,13 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Transaction } from '../types/database';
 import { formatDateIndo, formatRupiah } from '../lib/formatters';
 import { AdminEditTransactionModal } from '../components/transactions/AdminEditTransactionModal';
 import { AttachmentPreviewModal } from '../components/transactions/AttachmentPreviewModal';
+import { ReceiptViewButton } from '../components/transactions/ReceiptViewButton';
 import { MobileTransactionDetailModal } from '../components/transactions/MobileTransactionDetailModal';
 import { ConfirmActionModal, ConfirmSummaryRow } from '../components/common/ConfirmActionModal';
 
@@ -39,6 +41,7 @@ const STATUS_BADGE: Record<Transaction['status'], { label: string; cls: string }
 
 export const AdminTransactionsPage: React.FC = () => {
   const { kasList, storageAccounts, categories, transactions, deleteTransaction } = useData();
+  const { currentUser } = useAuth();
   const { toast } = useToast();
 
   // Filter states
@@ -427,16 +430,13 @@ export const AdminTransactionsPage: React.FC = () => {
                           <span>
                             {cat?.nama || (tx.type.includes('transfer') ? 'Transfer Antar Kas' : 'Tanpa Kategori')}
                           </span>
-                          {tx.attachment_url && (
-                            <button
-                              type="button"
-                              onClick={() => setPreviewAttachmentUrl(tx.attachment_url!)}
-                              className="inline-flex items-center gap-1 text-blue-700 hover:underline font-medium"
-                            >
-                              <Paperclip className="w-3 h-3" />
-                              <span>Lihat Bukti</span>
-                            </button>
-                          )}
+                          <ReceiptViewButton
+                            tx={tx}
+                            currentUser={currentUser}
+                            onPreviewImage={(url) => setPreviewAttachmentUrl(url)}
+                            label="Lihat Bukti"
+                            className="inline-flex items-center gap-1 text-blue-700 hover:underline font-medium cursor-pointer"
+                          />
                         </div>
                       </td>
 
@@ -546,16 +546,13 @@ export const AdminTransactionsPage: React.FC = () => {
 
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                     <div>
-                      {tx.attachment_url && (
-                        <button
-                          type="button"
-                          onClick={() => setPreviewAttachmentUrl(tx.attachment_url!)}
-                          className="px-2.5 py-1.5 min-h-[44px] sm:min-h-0 rounded-lg bg-slate-50 text-blue-700 border border-slate-200 font-semibold inline-flex items-center gap-1"
-                        >
-                          <Paperclip className="w-3.5 h-3.5" />
-                          <span>Bukti</span>
-                        </button>
-                      )}
+                      <ReceiptViewButton
+                        tx={tx}
+                        currentUser={currentUser}
+                        onPreviewImage={(url) => setPreviewAttachmentUrl(url)}
+                        label="Bukti"
+                        className="px-2.5 py-1.5 min-h-[44px] sm:min-h-0 rounded-lg bg-slate-50 text-blue-700 border border-slate-200 font-semibold inline-flex items-center gap-1 cursor-pointer"
+                      />
                     </div>
                     <div className="flex items-center gap-2">
                       <button

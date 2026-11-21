@@ -23,10 +23,16 @@ import {
   Check,
   TrendingUp,
   TrendingDown,
+  FileText,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
-import { uploadReceiptFile } from '../../lib/supabase';
+import {
+  createUploadNonce,
+  prepareAndUploadReceiptToDrive,
+} from '../../lib/receiptUpload';
 import { formatRupiah, formatNamaKeluarga, getTodayYmd, getYmdYear, getYmdMonth } from '../../lib/formatters';
 import { getPpkuProcurementRule, splitSentralisasiAmount } from '../../lib/ppkuRules';
 import { SentralisasiExclusionType } from '../../types/database';
@@ -152,10 +158,35 @@ export const TransactionModal: React.FC<Props> = ({
   const [description, setDescription] = useState<string>('');
   const [receiptNo, setReceiptNo] = useState<string>('');
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
+  const [draftTxId, setDraftTxId] = useState<string>('');
+  const [driveFileId, setDriveFileId] = useState<string | null>(null);
+  const [driveFileName, setDriveFileName] = useState<string | null>(null);
+  const [driveMimeType, setDriveMimeType] = useState<string | null>(null);
+  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
+  const [receiptIsPdf, setReceiptIsPdf] = useState<boolean>(false);
   const [uploading, setUploading] = useState<boolean>(false);
+  const [uploadError, setUploadError] = useState<string>('');
+  const [failedUploadState, setFailedUploadState] = useState<{
+    file: File;
+    nonce: string;
+    isPrepared: boolean;
+  } | null>(null);
   const [error, setError] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const formBodyRef = useRef<HTMLDivElement>(null);
+  const previewUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    previewUrlRef.current = localPreviewUrl;
+  }, [localPreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+    };
+  }, []);
 
   // Per-transaction Sentralisasi status (decided during transaction recording)
   const [isSentralisasi, setIsSentralisasi] = useState<boolean>(true);
@@ -286,11 +317,22 @@ export const TransactionModal: React.FC<Props> = ({
         formBodyRef.current.scrollTop = 0;
       }
       const todayStr = getTodayYmd();
+      setDraftTxId(`tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`);
       setWizardStep(1);
       setError('');
       setAmountInput('');
       setReceiptNo('');
       setAttachmentUrl(null);
+      setDriveFileId(null);
+      setDriveFileName(null);
+      setDriveMimeType(null);
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+      setLocalPreviewUrl(null);
+      setReceiptIsPdf(false);
+      setUploadError('');
+      setFailedUploadState(null);
       setTanggal(todayStr);
       setDescriptionManuallyEdited(false);
       setAutoSwitchedToMultiPos(false);
@@ -670,20 +712,81 @@ export const TransactionModal: React.FC<Props> = ({
       : formatNamaKeluarga(families.find((f) => f.id === peleanFamilyId)?.nama_keluarga || '')
     : '';
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const hasAttachedReceipt = Boolean(driveFileId || attachmentUrl);
 
+  const runReceiptUpload = async (file: File, nonce: string, isPrepared = false) => {
     setUploading(true);
     setError('');
+    setUploadError('');
 
-    const res = await uploadReceiptFile(file);
-    if (res.error) {
-      setError(`Gagal mengunggah nota: ${res.error.message}`);
-    } else if (res.url) {
-      setAttachmentUrl(res.url);
+    const effectiveKasId =
+      type === 'income' && incomeMode === 'multi'
+        ? allocations[0]?.kas_id || selectableKas[0]?.id || kasId
+        : activePeleanMode
+        ? kasUmumHuria?.id || 'kas-1'
+        : kasId || selectableKas[0]?.id;
+
+    const res = await prepareAndUploadReceiptToDrive({
+      file,
+      transactionId: draftTxId || `tx-${Date.now()}`,
+      tanggal: tanggal || getTodayYmd(),
+      kasId: effectiveKasId,
+      previousDriveFileId: driveFileId,
+      uploadNonce: nonce,
+      isAlreadyPrepared: isPrepared,
+    });
+
+    if (!res.success || !res.driveFileId) {
+      const errMsg = res.error || 'Gagal mengunggah nota ke Google Drive. Silakan coba lagi.';
+      setUploadError(errMsg);
+      setFailedUploadState({
+        file: res.preparedFile || file,
+        nonce,
+        isPrepared: Boolean(res.preparedFile),
+      });
+    } else {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+      setDriveFileId(res.driveFileId);
+      setDriveFileName(res.fileName || file.name);
+      setDriveMimeType(res.mimeType || null);
+      setReceiptIsPdf(Boolean(res.isPdf));
+      setLocalPreviewUrl(res.previewObjectUrl || null);
+      setUploadError('');
+      setFailedUploadState(null);
     }
     setUploading(false);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    await runReceiptUpload(file, createUploadNonce(), false);
+  };
+
+  const handleRetryReceiptUpload = async () => {
+    if (!failedUploadState || uploading) return;
+    await runReceiptUpload(
+      failedUploadState.file,
+      failedUploadState.nonce,
+      failedUploadState.isPrepared
+    );
+  };
+
+  const handleRemoveReceipt = () => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+    }
+    setAttachmentUrl(null);
+    setDriveFileId(null);
+    setDriveFileName(null);
+    setDriveMimeType(null);
+    setLocalPreviewUrl(null);
+    setReceiptIsPdf(false);
+    setUploadError('');
+    setFailedUploadState(null);
   };
 
   const handleAddAllocationRow = () => {
@@ -880,6 +983,9 @@ export const TransactionModal: React.FC<Props> = ({
         description: description.trim(),
         receipt_no: receiptNo.trim() || undefined,
         attachment_url: attachmentUrl,
+        drive_file_id: driveFileId,
+        drive_file_name: driveFileName,
+        drive_mime_type: driveMimeType,
         status: submitDirectly ? 'submitted' : 'draft',
         allocations: allocations.map((r) => {
           const targetKas = kasList.find((k) => k.id === r.kas_id);
@@ -962,7 +1068,7 @@ export const TransactionModal: React.FC<Props> = ({
       return;
     }
 
-    if (isReceiptMandatory && !attachmentUrl) {
+    if (isReceiptMandatory && !hasAttachedReceipt) {
       setError(
         `Pengeluaran >= ${formatRupiah(settings.receipt_required_threshold)} wajib melampirkan foto nota.`
       );
@@ -997,6 +1103,7 @@ export const TransactionModal: React.FC<Props> = ({
     const { bpskAmount, huriaAmount } = splitSentralisasiAmount(rawAmount, useSentralisasi);
 
     const result = await addTransaction({
+      id: draftTxId || undefined,
       tanggal,
       tanggal_warta: tanggalWarta || null,
       kas_id: resolvedKasId,
@@ -1007,6 +1114,9 @@ export const TransactionModal: React.FC<Props> = ({
       description: description.trim(),
       receipt_no: receiptNo.trim() || undefined,
       attachment_url: attachmentUrl,
+      drive_file_id: driveFileId,
+      drive_file_name: driveFileName,
+      drive_mime_type: driveMimeType,
       status: submitDirectly ? 'submitted' : 'draft',
       is_sentralisasi: type === 'income' ? useSentralisasi : false,
       bpsk_rate: type === 'income' ? (useSentralisasi ? 0.55 : 0) : undefined,
@@ -1569,7 +1679,10 @@ export const TransactionModal: React.FC<Props> = ({
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2 text-xs text-slate-700">
           <Camera className="w-4 h-4 text-slate-500 shrink-0" />
-          <span className="font-semibold">Foto Nota / Bukti Transaksi</span>
+          <div>
+            <span className="font-semibold">Foto Nota / Bukti Transaksi</span>
+            <span className="block text-[10px] text-slate-500">JPG, PNG, atau PDF · Maks. 4 MB (foto dikompres otomatis)</span>
+          </div>
           {isReceiptMandatory && (
             <span className="text-[10px] text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md font-bold">
               Wajib (&ge; {formatRupiah(settings.receipt_required_threshold)})
@@ -1577,28 +1690,42 @@ export const TransactionModal: React.FC<Props> = ({
           )}
         </div>
 
-        {attachmentUrl ? (
-          <div className="flex items-center gap-2.5">
+        {hasAttachedReceipt ? (
+          <div className="flex items-center gap-2">
             <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
               <CheckCircle className="w-3.5 h-3.5" />
-              Terlampir
+              Tersimpan
             </span>
+            <label className="cursor-pointer text-xs text-blue-600 hover:underline font-semibold px-1.5 py-1">
+              <span>{uploading ? 'Mengunggah...' : 'Ganti'}</span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf"
+                onChange={handleFileUpload}
+                className="hidden"
+                disabled={uploading}
+              />
+            </label>
             <button
               type="button"
-              onClick={() => setAttachmentUrl(null)}
-              className="text-xs text-rose-600 hover:underline font-semibold cursor-pointer px-2 py-1"
+              onClick={handleRemoveReceipt}
+              disabled={uploading}
+              className="text-xs text-rose-600 hover:underline font-semibold cursor-pointer px-1.5 py-1 disabled:opacity-50"
             >
               Hapus
             </button>
           </div>
         ) : (
           <label className="cursor-pointer inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] sm:min-h-[38px] bg-white border border-slate-200 text-slate-800 text-xs font-semibold rounded-xl hover:bg-slate-50 shadow-2xs transition-colors">
-            <Upload className="w-4 h-4 text-blue-600" />
-            <span>{uploading ? 'Mengunggah...' : 'Ambil Foto / Pilih File'}</span>
+            {uploading ? (
+              <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+            ) : (
+              <Upload className="w-4 h-4 text-blue-600" />
+            )}
+            <span>{uploading ? 'Mengunggah ke Drive...' : 'Pilih Foto / File PDF'}</span>
             <input
               type="file"
-              accept="image/*"
-              capture="environment"
+              accept="image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf"
               onChange={handleFileUpload}
               className="hidden"
               disabled={uploading}
@@ -1607,14 +1734,46 @@ export const TransactionModal: React.FC<Props> = ({
         )}
       </div>
 
-      {attachmentUrl && (
-        <div className="rounded-xl overflow-hidden border border-slate-200 bg-white max-h-40 flex items-center justify-center">
-          <img
-            src={attachmentUrl}
-            alt="Preview Nota"
-            className="max-h-40 w-auto object-contain"
-          />
+      {uploadError && (
+        <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-start justify-between gap-2 flex-wrap">
+          <div className="flex items-start gap-2 flex-1 min-w-0">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{uploadError}</span>
+          </div>
+          {failedUploadState && (
+            <button
+              type="button"
+              onClick={handleRetryReceiptUpload}
+              disabled={uploading}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-rose-300 text-rose-700 hover:bg-rose-100 font-semibold text-[11px] shrink-0 cursor-pointer"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>Coba lagi</span>
+            </button>
+          )}
         </div>
+      )}
+
+      {hasAttachedReceipt && (
+        receiptIsPdf ? (
+          <div className="flex items-center gap-2.5 p-2.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-700">
+            <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+              <FileText className="w-4 h-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-slate-900 truncate">{driveFileName || 'Bukti_PDF.pdf'}</div>
+              <div className="text-[11px] text-slate-500">Dokumen PDF tersimpan privat di Google Drive</div>
+            </div>
+          </div>
+        ) : (localPreviewUrl || attachmentUrl) ? (
+          <div className="rounded-xl overflow-hidden border border-slate-200 bg-white max-h-40 flex items-center justify-center">
+            <img
+              src={localPreviewUrl || attachmentUrl || ''}
+              alt="Preview Nota"
+              className="max-h-40 w-auto object-contain"
+            />
+          </div>
+        ) : null
       )}
     </div>
   );
@@ -2167,7 +2326,7 @@ export const TransactionModal: React.FC<Props> = ({
               <div className="flex items-center gap-2 flex-1 justify-end">
                 <button
                   type="button"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || uploading}
                   onClick={() => handleSave(false)}
                   className="min-h-[48px] px-3.5 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 border border-amber-600 disabled:opacity-60 rounded-xl shadow-xs transition-colors"
                 >
@@ -2175,7 +2334,7 @@ export const TransactionModal: React.FC<Props> = ({
                 </button>
                 <button
                   type="button"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || uploading}
                   onClick={() => handleSave(true)}
                   className="min-h-[48px] px-5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 border border-blue-700 disabled:opacity-60 rounded-xl shadow-sm transition-colors"
                 >
@@ -2571,7 +2730,7 @@ export const TransactionModal: React.FC<Props> = ({
           <div className="flex items-center gap-2.5">
             <button
               type="button"
-              disabled={isSubmitting}
+              disabled={isSubmitting || uploading}
               onClick={() => handleSave(false)}
               className="h-10 px-4 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 border border-amber-600 disabled:opacity-60 rounded-xl shadow-xs transition-colors cursor-pointer"
             >
@@ -2579,7 +2738,7 @@ export const TransactionModal: React.FC<Props> = ({
             </button>
             <button
               type="button"
-              disabled={isSubmitting}
+              disabled={isSubmitting || uploading}
               onClick={() => handleSave(true)}
               className="h-10 px-5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 border border-blue-700 disabled:opacity-60 rounded-xl shadow-sm transition-colors cursor-pointer"
             >

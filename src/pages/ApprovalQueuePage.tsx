@@ -19,6 +19,8 @@ import { useToast } from '../context/ToastContext';
 import { Transaction } from '../types/database';
 import { formatRupiah, formatDateIndo } from '../lib/formatters';
 import { AttachmentPreviewModal } from '../components/transactions/AttachmentPreviewModal';
+import { ReceiptViewButton } from '../components/transactions/ReceiptViewButton';
+import { canUserViewTransactionReceipt, hasTransactionReceipt } from '../lib/receiptAccess';
 import { RejectModal } from '../components/transactions/RejectModal';
 import { getPpkuProcurementRule, PPKU_BPSK_DEADLINE_DAYS } from '../lib/ppkuRules';
 
@@ -286,7 +288,7 @@ export const ApprovalQueuePage: React.FC = () => {
                             <span className={`font-semibold px-2 py-0.5 rounded-md border ${procRule.badgeClass}`}>
                               {procRule.label} · {procRule.pasalRef}
                             </span>
-                            {!tx.attachment_url && (
+                            {!hasTransactionReceipt(tx) && (
                               <span className="text-amber-700 font-semibold">
                                 · Pasal 18(3): Wajib Kuitansi Sah
                               </span>
@@ -317,18 +319,15 @@ export const ApprovalQueuePage: React.FC = () => {
                         </div>
                       )}
 
-                      {(tx.attachment_url || isCreator) && (
+                      {( (hasTransactionReceipt(tx) && canUserViewTransactionReceipt(currentUser, tx)) || isCreator) && (
                         <div className="flex flex-wrap items-center gap-3 pt-0.5">
-                          {tx.attachment_url && (
-                            <button
-                              type="button"
-                              onClick={() => setPreviewAttachmentUrl(tx.attachment_url!)}
-                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:underline cursor-pointer"
-                            >
-                              <Paperclip className="w-3.5 h-3.5" />
-                              <span>Lihat Foto Nota</span>
-                            </button>
-                          )}
+                          <ReceiptViewButton
+                            tx={tx}
+                            currentUser={currentUser}
+                            onPreviewImage={(url) => setPreviewAttachmentUrl(url)}
+                            label="Lihat Foto Nota"
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:underline cursor-pointer"
+                          />
 
                           {isCreator && (
                             <span className="text-[11px] text-amber-700 font-medium">

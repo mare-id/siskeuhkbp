@@ -3,11 +3,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
-import { ArrowRightLeft, X, AlertCircle, Info, Upload, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  ArrowRightLeft,
+  X,
+  AlertCircle,
+  Info,
+  Upload,
+  CheckCircle,
+  FileText,
+  Loader2,
+  RefreshCw,
+} from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
-import { uploadReceiptFile } from '../../lib/supabase';
+import {
+  createUploadNonce,
+  prepareAndUploadReceiptToDrive,
+} from '../../lib/receiptUpload';
 import { formatRupiah, getTodayYmd, getYmdYear, getYmdMonth } from '../../lib/formatters';
 
 interface Props {
@@ -29,19 +42,55 @@ export const TransferModal: React.FC<Props> = ({ isOpen, onClose, defaultSourceK
   const [description, setDescription] = useState<string>('');
   const [receiptNo, setReceiptNo] = useState<string>('');
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
+  const [draftTxId, setDraftTxId] = useState<string>('');
+  const [driveFileId, setDriveFileId] = useState<string | null>(null);
+  const [driveFileName, setDriveFileName] = useState<string | null>(null);
+  const [driveMimeType, setDriveMimeType] = useState<string | null>(null);
+  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
+  const [receiptIsPdf, setReceiptIsPdf] = useState<boolean>(false);
   const [uploading, setUploading] = useState<boolean>(false);
+  const [uploadError, setUploadError] = useState<string>('');
+  const [failedUploadState, setFailedUploadState] = useState<{
+    file: File;
+    nonce: string;
+    isPrepared: boolean;
+  } | null>(null);
   const [error, setError] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const previewUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    previewUrlRef.current = localPreviewUrl;
+  }, [localPreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+    };
+  }, []);
 
   const availableSourceKas = kasList.filter((k) => k.is_active && canInputKas(k.id));
 
   useEffect(() => {
     if (isOpen) {
+      setDraftTxId(`tf-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`);
       setError('');
       setAmountInput('');
       setDescription('');
       setReceiptNo('');
       setAttachmentUrl(null);
+      setDriveFileId(null);
+      setDriveFileName(null);
+      setDriveMimeType(null);
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+      setLocalPreviewUrl(null);
+      setReceiptIsPdf(false);
+      setUploadError('');
+      setFailedUploadState(null);
       setTanggal(getTodayYmd());
 
       if (defaultSourceKasId && canInputKas(defaultSourceKasId)) {
@@ -66,21 +115,74 @@ export const TransferModal: React.FC<Props> = ({ isOpen, onClose, defaultSourceK
 
   const rawAmount = parseFloat(amountInput.replace(/[^0-9]/g, '')) || 0;
   const isSameKas = sourceKasId === targetKasId;
+  const hasAttachedReceipt = Boolean(driveFileId || attachmentUrl);
+
+  const runReceiptUpload = async (file: File, nonce: string, isPrepared = false) => {
+    setUploading(true);
+    setError('');
+    setUploadError('');
+
+    const res = await prepareAndUploadReceiptToDrive({
+      file,
+      transactionId: draftTxId || `tf-${Date.now()}`,
+      tanggal: tanggal || getTodayYmd(),
+      kasId: sourceKasId || availableSourceKas[0]?.id,
+      previousDriveFileId: driveFileId,
+      uploadNonce: nonce,
+      isAlreadyPrepared: isPrepared,
+    });
+
+    if (!res.success || !res.driveFileId) {
+      const errMsg = res.error || 'Gagal mengunggah slip transfer ke Google Drive. Silakan coba lagi.';
+      setUploadError(errMsg);
+      setFailedUploadState({
+        file: res.preparedFile || file,
+        nonce,
+        isPrepared: Boolean(res.preparedFile),
+      });
+    } else {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+      setDriveFileId(res.driveFileId);
+      setDriveFileName(res.fileName || file.name);
+      setDriveMimeType(res.mimeType || null);
+      setReceiptIsPdf(Boolean(res.isPdf));
+      setLocalPreviewUrl(res.previewObjectUrl || null);
+      setUploadError('');
+      setFailedUploadState(null);
+    }
+    setUploading(false);
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
+    await runReceiptUpload(file, createUploadNonce(), false);
+  };
 
-    setUploading(true);
-    setError('');
+  const handleRetryReceiptUpload = async () => {
+    if (!failedUploadState || uploading) return;
+    await runReceiptUpload(
+      failedUploadState.file,
+      failedUploadState.nonce,
+      failedUploadState.isPrepared
+    );
+  };
 
-    const res = await uploadReceiptFile(file);
-    if (res.error) {
-      setError(`Gagal mengunggah foto bukti: ${res.error.message}`);
-    } else if (res.url) {
-      setAttachmentUrl(res.url);
+  const handleRemoveReceipt = () => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
     }
-    setUploading(false);
+    setAttachmentUrl(null);
+    setDriveFileId(null);
+    setDriveFileName(null);
+    setDriveMimeType(null);
+    setLocalPreviewUrl(null);
+    setReceiptIsPdf(false);
+    setUploadError('');
+    setFailedUploadState(null);
   };
 
   const handleTransfer = async (e: React.FormEvent) => {
@@ -125,6 +227,9 @@ export const TransferModal: React.FC<Props> = ({ isOpen, onClose, defaultSourceK
       description: description.trim(),
       receiptNo: receiptNo.trim() || undefined,
       attachmentUrl: attachmentUrl || undefined,
+      driveFileId,
+      driveFileName,
+      driveMimeType,
     });
 
     setIsSubmitting(false);
@@ -327,30 +432,97 @@ export const TransferModal: React.FC<Props> = ({ isOpen, onClose, defaultSourceK
           </div>
 
           {/* Optional Slip Photo */}
-          <div className="p-3 rounded-xl border border-dashed border-slate-300 bg-slate-50">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-semibold text-slate-700">Foto Slip Setoran / Bukti Transfer</span>
-              {attachmentUrl && (
-                <button
-                  type="button"
-                  onClick={() => setAttachmentUrl(null)}
-                  className="text-xs text-rose-500 hover:text-rose-700"
-                >
-                  Hapus
-                </button>
+          <div className="p-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 space-y-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <span className="text-xs font-semibold text-slate-700 block">Foto Slip Setoran / Bukti Transfer</span>
+                <span className="text-[10px] text-slate-500">JPG, PNG, atau PDF · Maks. 4 MB</span>
+              </div>
+              {hasAttachedReceipt && (
+                <div className="flex items-center gap-2">
+                  <label className="cursor-pointer text-xs text-blue-600 hover:underline font-semibold">
+                    <span>{uploading ? 'Mengunggah...' : 'Ganti'}</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      disabled={uploading}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleRemoveReceipt}
+                    disabled={uploading}
+                    className="text-xs text-rose-500 hover:text-rose-700 font-semibold"
+                  >
+                    Hapus
+                  </button>
+                </div>
               )}
             </div>
-            {attachmentUrl ? (
-              <div className="flex items-center gap-2 text-xs text-emerald-700">
-                <CheckCircle className="w-4 h-4" />
-                <span>Foto slip transfer tersimpan</span>
+
+            {hasAttachedReceipt ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-xs text-emerald-700 font-medium">
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                  <span>
+                    {receiptIsPdf
+                      ? `Dokumen PDF tersimpan (${driveFileName || 'slip.pdf'})`
+                      : 'Foto slip transfer tersimpan privat di Google Drive'}
+                  </span>
+                </div>
+                {receiptIsPdf ? (
+                  <div className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-700">
+                    <FileText className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span className="truncate font-medium">{driveFileName || 'Slip_Transfer.pdf'}</span>
+                  </div>
+                ) : (localPreviewUrl || attachmentUrl) ? (
+                  <div className="rounded-lg overflow-hidden border border-slate-200 bg-white max-h-32 flex items-center justify-center">
+                    <img
+                      src={localPreviewUrl || attachmentUrl || ''}
+                      alt="Preview Slip Transfer"
+                      className="max-h-32 w-auto object-contain"
+                    />
+                  </div>
+                ) : null}
               </div>
             ) : (
               <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 text-xs font-medium rounded-xl hover:bg-slate-50 shadow-2xs">
-                <Upload className="w-3.5 h-3.5 text-slate-500" />
-                <span>Unggah Slip</span>
-                <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+                {uploading ? (
+                  <Loader2 className="w-3.5 h-3.5 text-indigo-600 animate-spin" />
+                ) : (
+                  <Upload className="w-3.5 h-3.5 text-slate-500" />
+                )}
+                <span>{uploading ? 'Mengunggah ke Drive...' : 'Unggah Slip (Foto / PDF)'}</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  disabled={uploading}
+                />
               </label>
+            )}
+
+            {uploadError && (
+              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-start justify-between gap-2 flex-wrap">
+                <div className="flex items-start gap-2 flex-1 min-w-0">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{uploadError}</span>
+                </div>
+                {failedUploadState && (
+                  <button
+                    type="button"
+                    onClick={handleRetryReceiptUpload}
+                    disabled={uploading}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-rose-300 text-rose-700 hover:bg-rose-100 font-semibold text-[11px] shrink-0 cursor-pointer"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Coba lagi</span>
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -366,10 +538,10 @@ export const TransferModal: React.FC<Props> = ({ isOpen, onClose, defaultSourceK
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="px-5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-xs"
+              disabled={isSubmitting || uploading}
+              className="px-5 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 rounded-xl transition-colors shadow-xs"
             >
-              Ajukan Transfer Dana
+              {isSubmitting ? 'Mengajukan...' : 'Ajukan Transfer Dana'}
             </button>
           </div>
         </form>

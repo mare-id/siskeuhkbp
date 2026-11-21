@@ -18,8 +18,17 @@ import {
   ShieldCheck,
   AlertTriangle,
   ReceiptText,
+  FileText,
+  ExternalLink,
 } from 'lucide-react';
 import { Transaction } from '../../types/database';
+import { useAuth } from '../../context/AuthContext';
+import {
+  canUserViewTransactionReceipt,
+  getTransactionReceiptUrl,
+  hasTransactionReceipt,
+  isTransactionReceiptPdf,
+} from '../../lib/receiptAccess';
 import { formatDateIndo, formatRupiah } from '../../lib/formatters';
 
 interface Props {
@@ -65,6 +74,7 @@ export const MobileTransactionDetailModal: React.FC<Props> = ({
   onRecallDraft,
   onReversal,
 }) => {
+  const { currentUser } = useAuth();
   if (!isOpen || !transaction) return null;
 
   const isInc = transaction.type === 'income' || transaction.type === 'transfer_in';
@@ -267,20 +277,43 @@ export const MobileTransactionDetailModal: React.FC<Props> = ({
             </div>
           )}
 
-          {transaction.attachment_url && onPreviewAttachment && (
-            <button
-              type="button"
-              onClick={() => {
-                const url = transaction.attachment_url!;
-                onClose();
-                onPreviewAttachment(url);
-              }}
-              className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 font-semibold flex items-center justify-center gap-2 transition-colors"
-            >
-              <Paperclip className="w-4 h-4" />
-              <span>Lihat Lampiran Nota / Kuitansi</span>
-            </button>
-          )}
+          {(() => {
+            if (!hasTransactionReceipt(transaction) || !canUserViewTransactionReceipt(currentUser, transaction)) {
+              return null;
+            }
+            const receiptUrl = getTransactionReceiptUrl(transaction);
+            if (!receiptUrl) return null;
+
+            if (isTransactionReceiptPdf(transaction)) {
+              return (
+                <a
+                  href={receiptUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 font-semibold flex items-center justify-center gap-2 transition-colors"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Buka Dokumen PDF Bukti / Nota</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              );
+            }
+
+            if (!onPreviewAttachment) return null;
+            return (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onPreviewAttachment(receiptUrl);
+                }}
+                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 font-semibold flex items-center justify-center gap-2 transition-colors"
+              >
+                <Paperclip className="w-4 h-4" />
+                <span>Lihat Lampiran Nota / Kuitansi</span>
+              </button>
+            );
+          })()}
         </div>
 
         {/* Sticky Footer Actions */}

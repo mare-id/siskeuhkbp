@@ -8,6 +8,7 @@ import { Profile, UserKasAccess } from '../types/database';
 import { DEMO_PROFILES, DEMO_USER_KAS_ACCESS } from '../lib/demoData';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { hashUserPassword, verifyUserPassword } from '../lib/passwordUtils';
+import { clearInMemoryReceiptToken, setInMemoryReceiptToken } from '../lib/receiptSession';
 
 interface AuthContextType {
   currentUser: Profile | null;
@@ -249,6 +250,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return stored ? JSON.parse(stored) : DEMO_USER_KAS_ACCESS;
   };
 
+  const syncServerReceiptSession = async (email: string, password: string) => {
+    try {
+      const res = await fetch('/api/auth-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email, password }),
+      });
+      if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
+        const data = (await res.json()) as { ok?: boolean; token?: string };
+        if (data?.ok && data.token) {
+          setInMemoryReceiptToken(data.token);
+        }
+      }
+    } catch {
+      // Abaikan diam-diam bila berjalan di preview lokal tanpa endpoint /api
+    }
+  };
+
   const loginWithEmail = async (email: string, password: string): Promise<{ error: Error | null }> => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail || !password) {
@@ -284,6 +304,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             persistAuthenticatedUserId(matched.id);
             setCurrentUser(matched);
             setUserKasAccess(cloudAccess.filter((a) => a.user_id === matched.id));
+            await syncServerReceiptSession(normalizedEmail, password);
             return { error: null };
           }
 
@@ -296,6 +317,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             persistAuthenticatedUserId(matched.id);
             setCurrentUser(matched);
             setUserKasAccess(cloudAccess.filter((a) => a.user_id === matched.id));
+            await syncServerReceiptSession(normalizedEmail, password);
             return { error: null };
           }
 
@@ -322,6 +344,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             persistAuthenticatedUserId(authMatched.id);
             setCurrentUser(authMatched);
             setUserKasAccess(cloudAccess.filter((a) => a.user_id === authMatched.id));
+            await syncServerReceiptSession(normalizedEmail, password);
             return { error: null };
           }
         }
@@ -353,6 +376,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
+    clearInMemoryReceiptToken();
+    try {
+      await fetch('/api/auth-logout', { method: 'POST', credentials: 'include' });
+    } catch {
+      // Abaikan jika endpoint tidak tersedia di mode lokal
+    }
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.auth.signOut();

@@ -18,11 +18,15 @@ import {
   Camera,
   RotateCcw,
   Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { uploadReceiptFile } from '../../lib/supabase';
+import {
+  createUploadNonce,
+  prepareAndUploadReceiptToDrive,
+} from '../../lib/receiptUpload';
 import { formatDateIndo, formatNamaKeluarga, formatRupiah } from '../../lib/formatters';
 import { splitSentralisasiAmount } from '../../lib/ppkuRules';
 import {
@@ -70,6 +74,9 @@ export const TransactionImportModal: React.FC<Props> = ({ isOpen, onClose }) => 
   const [importValidOnly, setImportValidOnly] = useState(true);
   const [previewFilter, setPreviewFilter] = useState<'all' | 'valid' | 'error'>('all');
   const [uploadingRowKey, setUploadingRowKey] = useState<string | null>(null);
+  const [rowUploadErrors, setRowUploadErrors] = useState<
+    Record<string, { message: string; file: File; nonce: string; isPrepared: boolean }>
+  >({});
   const [isExecutingImport, setIsExecutingImport] = useState(false);
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [globalError, setGlobalError] = useState('');
@@ -84,6 +91,7 @@ export const TransactionImportModal: React.FC<Props> = ({ isOpen, onClose }) => 
       setParseResult(null);
       setGlobalError('');
       setPreviewFilter('all');
+      setRowUploadErrors({});
       setImportProgress(null);
       setIsExecutingImport(false);
       if (bodyRef.current) bodyRef.current.scrollTop = 0;
@@ -106,7 +114,10 @@ export const TransactionImportModal: React.FC<Props> = ({ isOpen, onClose }) => 
 
   const isItemInvalid = (item: ParsedExcelImportItem): boolean => {
     const missingReceipt =
-      item.kind === 'single' && Boolean(item.requires_receipt_upload) && !item.attachment_url;
+      item.kind === 'single' &&
+      Boolean(item.requires_receipt_upload) &&
+      !item.attachment_url &&
+      !item.drive_file_id;
     return item.errors.length > 0 || missingReceipt;
   };
 
@@ -240,14 +251,53 @@ export const TransactionImportModal: React.FC<Props> = ({ isOpen, onClose }) => 
     if (file) processSelectedFile(file);
   };
 
-  const handleAttachReceiptForRow = async (rowKey: string, file: File) => {
+  const handleAttachReceiptForRow = async (
+    rowKey: string,
+    file: File,
+    nonce = createUploadNonce(),
+    isPrepared = false
+  ) => {
+    const targetItem = parseResult?.items.find(
+      (it): it is Extract<ParsedExcelImportItem, { kind: 'single' }> =>
+        it.key === rowKey && it.kind === 'single'
+    );
+    if (!targetItem) return;
+
     setUploadingRowKey(rowKey);
-    const res = await uploadReceiptFile(file);
+    setRowUploadErrors((prev) => {
+      if (!prev[rowKey]) return prev;
+      const next = { ...prev };
+      delete next[rowKey];
+      return next;
+    });
+
+    const res = await prepareAndUploadReceiptToDrive({
+      file,
+      transactionId: targetItem.draft_id || `tx-imp-${Date.now()}`,
+      tanggal: targetItem.tanggal,
+      kasId: targetItem.kas_id,
+      previousDriveFileId: targetItem.drive_file_id || null,
+      uploadNonce: nonce,
+      isAlreadyPrepared: isPrepared,
+    });
+
     setUploadingRowKey(null);
-    if (res.error || !res.url) {
-      toast.error(`Gagal mengunggah nota: ${res.error?.message || 'Unknown error'}`);
+
+    if (!res.success || !res.driveFileId) {
+      const msg = res.error || 'Gagal mengunggah nota ke Google Drive.';
+      setRowUploadErrors((prev) => ({
+        ...prev,
+        [rowKey]: {
+          message: msg,
+          file: res.preparedFile || file,
+          nonce,
+          isPrepared: Boolean(res.preparedFile),
+        },
+      }));
+      toast.error(msg);
       return;
     }
+
     setParseResult((prev) => {
       if (!prev) return prev;
       return {
@@ -256,7 +306,9 @@ export const TransactionImportModal: React.FC<Props> = ({ isOpen, onClose }) => 
           if (item.key === rowKey && item.kind === 'single') {
             return {
               ...item,
-              attachment_url: res.url,
+              drive_file_id: res.driveFileId,
+              drive_file_name: res.fileName || file.name,
+              drive_mime_type: res.mimeType || null,
               requires_receipt_upload: false,
               warnings: item.warnings.filter((w) => !w.includes('wajib melampirkan bukti nota')),
             };
@@ -265,7 +317,7 @@ export const TransactionImportModal: React.FC<Props> = ({ isOpen, onClose }) => 
         }),
       };
     });
-    toast.success('Foto nota berhasil dilampirkan ke baris ini.');
+    toast.success('Bukti nota berhasil disimpan privat ke Google Drive.');
   };
 
   const handleExecuteImport = async () => {
@@ -338,6 +390,7 @@ export const TransactionImportModal: React.FC<Props> = ({ isOpen, onClose }) => 
 
           const res = await addTransaction(
             {
+              id: item.draft_id,
               tanggal: item.tanggal,
               tanggal_warta: item.tanggal_warta,
               kas_id: item.kas_id,
@@ -348,6 +401,9 @@ export const TransactionImportModal: React.FC<Props> = ({ isOpen, onClose }) => 
               description: item.description,
               receipt_no: item.receipt_no,
               attachment_url: item.attachment_url,
+              drive_file_id: item.drive_file_id || null,
+              drive_file_name: item.drive_file_name || null,
+              drive_mime_type: item.drive_mime_type || null,
               status: item.status,
               is_sentralisasi: item.type === 'income' ? item.is_sentralisasi : false,
               bpsk_rate: item.type === 'income' ? (item.is_sentralisasi ? 0.55 : 0) : undefined,
@@ -760,7 +816,9 @@ export const TransactionImportModal: React.FC<Props> = ({ isOpen, onClose }) => 
                         const missingReceipt =
                           item.kind === 'single' &&
                           Boolean(item.requires_receipt_upload) &&
-                          !item.attachment_url;
+                          !item.attachment_url &&
+                          !item.drive_file_id;
+                        const rowErr = rowUploadErrors[item.key];
 
                         return (
                           <tr
@@ -916,22 +974,52 @@ export const TransactionImportModal: React.FC<Props> = ({ isOpen, onClose }) => 
                                     </div>
                                   ))}
                                   {missingReceipt && (
-                                    <label className="mt-1 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 text-[11px] font-semibold cursor-pointer">
-                                      <Camera className="w-3.5 h-3.5" />
-                                      <span>
-                                        {uploadingRowKey === item.key ? 'Mengunggah...' : 'Unggah Nota'}
-                                      </span>
-                                      <input
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        disabled={uploadingRowKey === item.key}
-                                        onChange={(e) => {
-                                          const f = e.target.files?.[0];
-                                          if (f) handleAttachReceiptForRow(item.key, f);
-                                        }}
-                                      />
-                                    </label>
+                                    <div className="space-y-1.5 mt-1">
+                                      <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 text-[11px] font-semibold cursor-pointer">
+                                        {uploadingRowKey === item.key ? (
+                                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                          <Camera className="w-3.5 h-3.5" />
+                                        )}
+                                        <span>
+                                          {uploadingRowKey === item.key
+                                            ? 'Mengunggah...'
+                                            : 'Unggah Nota (Foto/PDF)'}
+                                        </span>
+                                        <input
+                                          type="file"
+                                          accept="image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf"
+                                          className="hidden"
+                                          disabled={uploadingRowKey === item.key}
+                                          onChange={(e) => {
+                                            const f = e.target.files?.[0];
+                                            e.target.value = '';
+                                            if (f) handleAttachReceiptForRow(item.key, f);
+                                          }}
+                                        />
+                                      </label>
+                                      {rowErr && (
+                                        <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-1.5 space-y-1">
+                                          <div>{rowErr.message}</div>
+                                          <button
+                                            type="button"
+                                            disabled={uploadingRowKey === item.key}
+                                            onClick={() =>
+                                              handleAttachReceiptForRow(
+                                                item.key,
+                                                rowErr.file,
+                                                rowErr.nonce,
+                                                rowErr.isPrepared
+                                              )
+                                            }
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-rose-300 font-semibold text-rose-700 hover:bg-rose-100 cursor-pointer"
+                                          >
+                                            <RefreshCw className="w-3 h-3" />
+                                            <span>Coba lagi</span>
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               )}
@@ -951,7 +1039,9 @@ export const TransactionImportModal: React.FC<Props> = ({ isOpen, onClose }) => 
                   const missingReceipt =
                     item.kind === 'single' &&
                     Boolean(item.requires_receipt_upload) &&
-                    !item.attachment_url;
+                    !item.attachment_url &&
+                    !item.drive_file_id;
+                  const rowErr = rowUploadErrors[item.key];
 
                   return (
                     <div
@@ -1010,20 +1100,52 @@ export const TransactionImportModal: React.FC<Props> = ({ isOpen, onClose }) => 
                             </div>
                           ))}
                           {missingReceipt && (
-                            <label className="mt-1 inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] rounded-xl bg-white border border-rose-300 text-rose-700 text-xs font-semibold cursor-pointer">
-                              <Camera className="w-3.5 h-3.5" />
-                              <span>{uploadingRowKey === item.key ? 'Mengunggah...' : 'Unggah Nota'}</span>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                disabled={uploadingRowKey === item.key}
-                                onChange={(e) => {
-                                  const f = e.target.files?.[0];
-                                  if (f) handleAttachReceiptForRow(item.key, f);
-                                }}
-                              />
-                            </label>
+                            <div className="space-y-1.5 mt-1">
+                              <label className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] rounded-xl bg-white border border-rose-300 text-rose-700 text-xs font-semibold cursor-pointer">
+                                {uploadingRowKey === item.key ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Camera className="w-3.5 h-3.5" />
+                                )}
+                                <span>
+                                  {uploadingRowKey === item.key
+                                    ? 'Mengunggah...'
+                                    : 'Unggah Nota (Foto/PDF)'}
+                                </span>
+                                <input
+                                  type="file"
+                                  accept="image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf"
+                                  className="hidden"
+                                  disabled={uploadingRowKey === item.key}
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    e.target.value = '';
+                                    if (f) handleAttachReceiptForRow(item.key, f);
+                                  }}
+                                />
+                              </label>
+                              {rowErr && (
+                                <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2 space-y-1">
+                                  <div>{rowErr.message}</div>
+                                  <button
+                                    type="button"
+                                    disabled={uploadingRowKey === item.key}
+                                    onClick={() =>
+                                      handleAttachReceiptForRow(
+                                        item.key,
+                                        rowErr.file,
+                                        rowErr.nonce,
+                                        rowErr.isPrepared
+                                      )
+                                    }
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-white border border-rose-300 font-semibold text-rose-700 hover:bg-rose-100 cursor-pointer"
+                                  >
+                                    <RefreshCw className="w-3 h-3" />
+                                    <span>Coba lagi</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           )}
                         </div>
                       )}

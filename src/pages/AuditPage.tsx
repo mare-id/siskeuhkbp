@@ -43,6 +43,9 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { formatRupiah, formatDateIndo, getTodayYmd } from '../lib/formatters';
 import { generateBeritaAcaraAuditPDF } from '../lib/exportUtils';
+import { AttachmentPreviewModal } from '../components/transactions/AttachmentPreviewModal';
+import { ReceiptViewButton } from '../components/transactions/ReceiptViewButton';
+import { canUserViewTransactionReceipt, hasTransactionReceipt } from '../lib/receiptAccess';
 import {
   AuditEngagement,
   AuditEngagementStatus,
@@ -103,6 +106,7 @@ export const AuditPage: React.FC = () => {
   const [txKasFilter, setTxKasFilter] = useState<string>('all');
   const [txStatusFilter, setTxStatusFilter] = useState<'all' | 'unverified' | 'verified' | 'flagged'>('all');
   const [txSearch, setTxSearch] = useState<string>('');
+  const [previewAttachmentUrl, setPreviewAttachmentUrl] = useState<string | null>(null);
   const [flaggingTx, setFlaggingTx] = useState<Transaction | null>(null);
   const [flaggingTitle, setFlaggingTitle] = useState<string>('');
   const [flaggingDesc, setFlaggingDesc] = useState<string>('');
@@ -1377,16 +1381,15 @@ export const AuditPage: React.FC = () => {
                           </span>
                         )}
 
-                        {tx.attachment_url ? (
-                          <a
-                            href={tx.attachment_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold text-[11px]"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                            <span>Lihat Nota</span>
-                          </a>
+                        {hasTransactionReceipt(tx) && canUserViewTransactionReceipt(currentUser, tx) ? (
+                          <ReceiptViewButton
+                            tx={tx}
+                            currentUser={currentUser}
+                            onPreviewImage={(url) => setPreviewAttachmentUrl(url)}
+                            label="Lihat Nota"
+                            showPdfExternalIcon
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold text-[11px] cursor-pointer"
+                          />
                         ) : (
                           <span className="text-[10px] text-slate-400 italic">Tanpa Foto</span>
                         )}
@@ -1514,16 +1517,15 @@ export const AuditPage: React.FC = () => {
                           </td>
 
                           <td className="p-3.5 align-top text-center whitespace-nowrap">
-                            {tx.attachment_url ? (
-                              <a
-                                href={tx.attachment_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold text-[11px] transition-colors"
-                              >
-                                <ExternalLink className="w-3 h-3" />
-                                <span>Lihat Nota</span>
-                              </a>
+                            {hasTransactionReceipt(tx) && canUserViewTransactionReceipt(currentUser, tx) ? (
+                              <ReceiptViewButton
+                                tx={tx}
+                                currentUser={currentUser}
+                                onPreviewImage={(url) => setPreviewAttachmentUrl(url)}
+                                label="Lihat Nota"
+                                showPdfExternalIcon
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold text-[11px] transition-colors cursor-pointer"
+                              />
                             ) : (
                               <span className="text-[10px] text-slate-400 italic">Tanpa Foto</span>
                             )}
@@ -3612,6 +3614,11 @@ export const AuditPage: React.FC = () => {
           </div>
         </div>
       )}
+      <AttachmentPreviewModal
+        isOpen={Boolean(previewAttachmentUrl)}
+        imageUrl={previewAttachmentUrl}
+        onClose={() => setPreviewAttachmentUrl(null)}
+      />
     </div>
   );
 };

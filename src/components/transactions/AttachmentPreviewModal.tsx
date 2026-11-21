@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
-import { X, ExternalLink, Download } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, ExternalLink, AlertCircle, Loader2 } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -19,6 +19,14 @@ export const AttachmentPreviewModal: React.FC<Props> = ({
   imageUrl,
   title = 'Pratinjau Bukti Lampiran Nota',
 }) => {
+  const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'error'>('loading');
+
+  useEffect(() => {
+    if (isOpen && imageUrl) {
+      setLoadState('loading');
+    }
+  }, [isOpen, imageUrl]);
+
   if (!isOpen || !imageUrl) return null;
 
   return (
@@ -54,13 +62,45 @@ export const AttachmentPreviewModal: React.FC<Props> = ({
         </div>
 
         {/* Content Image */}
-        <div className="p-4 overflow-auto flex items-center justify-center bg-slate-950/5 min-h-[240px] sm:min-h-[300px] flex-1">
-          <img
-            src={imageUrl}
-            alt="Bukti Lampiran"
-            className="max-h-[65dvh] sm:max-h-[70vh] w-auto object-contain rounded-lg shadow-xs"
-            referrerPolicy="no-referrer"
-          />
+        <div className="p-4 overflow-auto flex flex-col items-center justify-center bg-slate-950/5 min-h-[240px] sm:min-h-[300px] flex-1">
+          {loadState === 'loading' && (
+            <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
+              <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+              <span>Memuat file bukti...</span>
+            </div>
+          )}
+
+          {loadState === 'error' ? (
+            <div className="max-w-md w-full p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 space-y-2.5 text-center">
+              <div className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-rose-100 text-rose-600 mx-auto">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div className="font-semibold">Tidak dapat menampilkan pratinjau bukti</div>
+              <p className="text-rose-700 leading-relaxed">
+                Pastikan Anda memiliki hak akses untuk melihat bukti ini dan koneksi internet aktif. Jika baru masuk sebelum pembaruan, silakan keluar (Logout) lalu masuk kembali.
+              </p>
+              <a
+                href={imageUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-rose-300 text-rose-700 font-semibold hover:bg-rose-100 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Coba Buka di Tab Baru</span>
+              </a>
+            </div>
+          ) : (
+            <img
+              src={imageUrl}
+              alt="Bukti Lampiran"
+              onLoad={() => setLoadState('loaded')}
+              onError={() => setLoadState('error')}
+              className={`max-h-[65dvh] sm:max-h-[70vh] w-auto object-contain rounded-lg shadow-xs ${
+                loadState === 'loading' ? 'opacity-0 h-0' : 'opacity-100'
+              }`}
+              referrerPolicy="no-referrer"
+            />
+          )}
         </div>
 
         {/* Footer */}
